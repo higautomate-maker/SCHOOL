@@ -1,5 +1,9 @@
 import { database } from "@db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
+import {
+  repositoryBackend,
+  schedulePostgresShadowRead,
+} from "../runtime/repository-backend.ts";
 import type { FoundationAction } from "./validation";
 
 type SessionRow = { id: string; name: string; startsOn: string; endsOn: string; status: "planned" | "active" | "closed" };
@@ -18,6 +22,9 @@ export type FoundationState = {
 const defaultSettings: SettingRow = { shortName: "", email: "", phone: "", principalName: "", address: "", currencyCode: "INR", admissionPrefix: "HIG", receiptPrefix: "RCPT" };
 
 export async function getFoundation(tenantId: string): Promise<FoundationState> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts")).getPostgresFoundation(tenantId);
+  }
   await requireSchool(tenantId);
   const [sessionResult, classResult, subjectResult, setting] = await Promise.all([
     database.prepare("SELECT id, name, starts_on AS startsOn, ends_on AS endsOn, status FROM academic_sessions WHERE tenant_id = ? ORDER BY starts_on DESC").bind(tenantId).all<SessionRow>(),
@@ -30,10 +37,20 @@ export async function getFoundation(tenantId: string): Promise<FoundationState> 
   const checks = [["School profile", Boolean(settings.shortName && settings.email)], ["Academic session", sessionResult.results.some((session) => session.status === "active")], ["Classes & sections", classes.length > 0], ["Subjects", subjectResult.results.length > 0]] as const;
   const completed = checks.filter(([, done]) => done).map(([label]) => label);
   const remaining = checks.filter(([, done]) => !done).map(([label]) => label);
-  return { sessions: sessionResult.results, classes, subjects: subjectResult.results, settings, setup: { percent: completed.length * 25, completed, remaining } };
+  const foundation = { sessions: sessionResult.results, classes, subjects: subjectResult.results, settings, setup: { percent: completed.length * 25, completed, remaining } };
+  schedulePostgresShadowRead(
+    "foundation",
+    foundation,
+    async () => (await import("./postgres-repository.ts")).getPostgresFoundation(tenantId),
+  );
+  return foundation;
 }
 
 export async function applyFoundationAction(tenantId: string, action: FoundationAction, actor: ChatGPTUser): Promise<FoundationState> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts"))
+      .applyPostgresFoundationAction(tenantId, action, actor);
+  }
   await requireSchool(tenantId);
   const now = new Date().toISOString(); const actorId = await stableUserId(actor.email); await ensureUser(actorId, actor, now);
   let resourceType = "school_configuration"; let resourceId = tenantId; const auditAction = `foundation.${action.action}`;

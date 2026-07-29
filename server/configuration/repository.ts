@@ -1,5 +1,9 @@
 import { database } from "@db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
+import {
+  repositoryBackend,
+  schedulePostgresShadowRead,
+} from "../runtime/repository-backend.ts";
 import type { ConfigurationAction, GatewaySettings } from "./validation";
 
 export const defaultGatewaySettings: GatewaySettings = {
@@ -13,7 +17,15 @@ export const defaultGatewaySettings: GatewaySettings = {
   surchargeLabel: "Online payment surcharge",
 };
 
-export async function getConfiguration(tenantId: string) {
+export type ConfigurationState = {
+  gateway: GatewaySettings;
+  documents: Record<string, Record<string, unknown>>;
+};
+
+export async function getConfiguration(tenantId: string): Promise<ConfigurationState> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts")).getPostgresConfiguration(tenantId);
+  }
   await requireSchool(tenantId);
   const rows = await database.prepare("SELECT config_key AS configKey, payload_json AS payloadJson FROM school_configurations WHERE tenant_id = ?").bind(tenantId).all<{ configKey:string;payloadJson:string }>();
   const row=rows.results.find(item=>item.configKey==="payment_gateway");
@@ -23,10 +35,23 @@ export async function getConfiguration(tenantId: string) {
     catch { gateway = defaultGatewaySettings; }
   }
   const documents=Object.fromEntries(rows.results.filter(item=>item.configKey!=="payment_gateway").map(item=>{try{return [item.configKey,JSON.parse(item.payloadJson) as Record<string,string|number|boolean>];}catch{return [item.configKey,{}];}}));
-  return { gateway: { ...gateway, credentials: maskSecrets(gateway.credentials) }, documents };
+  const configuration = {
+    gateway: { ...gateway, credentials: maskSecrets(gateway.credentials) },
+    documents,
+  };
+  schedulePostgresShadowRead(
+    "configuration",
+    configuration,
+    async () => (await import("./postgres-repository.ts")).getPostgresConfiguration(tenantId),
+  );
+  return configuration;
 }
 
-export async function applyConfigurationAction(tenantId: string, action: ConfigurationAction, actor: ChatGPTUser) {
+export async function applyConfigurationAction(tenantId: string, action: ConfigurationAction, actor: ChatGPTUser): Promise<ConfigurationState> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts"))
+      .applyPostgresConfigurationAction(tenantId, action, actor);
+  }
   await requireSchool(tenantId);
   const now = new Date().toISOString();
   const actorId = await stableUserId(actor.email);

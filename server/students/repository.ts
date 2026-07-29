@@ -1,11 +1,19 @@
 import { database } from "@db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
+import {
+  repositoryBackend,
+  schedulePostgresShadowRead,
+} from "../runtime/repository-backend.ts";
 import type { CreateStudentInput } from "./validation";
 
 export type StudentRecord = CreateStudentInput & { id: string; fullName: string; status: "active" | "inactive" | "graduated"; createdAt: string };
 type StudentRow = Omit<StudentRecord, "fullName">;
 
 export async function listStudents(tenantId: string, sessionId?: string | null): Promise<StudentRecord[]> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts"))
+      .listPostgresStudents(tenantId, sessionId);
+  }
   await requireSchool(tenantId);
   const condition = sessionId ? " AND academic_session_id = ?" : "";
   const statement = database.prepare(`SELECT id, admission_number AS admissionNumber, roll_number AS rollNumber,
@@ -14,16 +22,31 @@ export async function listStudents(tenantId: string, sessionId?: string | null):
     guardian_name AS guardianName, guardian_phone AS guardianPhone, status, created_at AS createdAt
     FROM students WHERE tenant_id = ?${condition} ORDER BY created_at DESC LIMIT 500`);
   const result = await (sessionId ? statement.bind(tenantId, sessionId) : statement.bind(tenantId)).all<StudentRow>();
-  return result.results.map((student) => ({ ...student, fullName: `${student.firstName} ${student.lastName}`.trim() }));
+  const students = result.results.map((student) => ({ ...student, fullName: `${student.firstName} ${student.lastName}`.trim() }));
+  schedulePostgresShadowRead(
+    "students",
+    students,
+    async () => (await import("./postgres-repository.ts")).listPostgresStudents(tenantId, sessionId),
+  );
+  return students;
 }
 
-export async function findStudentReplay(key: string, actorEmail: string): Promise<StudentRecord | null> {
+export async function findStudentReplay(key: string, actorEmail: string, tenantId?: string): Promise<StudentRecord | null> {
+  if (repositoryBackend() === "postgres") {
+    if (!tenantId) throw new Error("tenantId is required for PostgreSQL replay lookup");
+    return (await import("./postgres-repository.ts"))
+      .findPostgresStudentReplay(tenantId, key, actorEmail);
+  }
   const row = await database.prepare(`SELECT response_json FROM idempotency_records WHERE key = ? AND actor_email = ? AND operation = 'student.create' AND expires_at > ?`)
     .bind(key, actorEmail, new Date().toISOString()).first<{ response_json: string }>();
   return row ? JSON.parse(row.response_json) as StudentRecord : null;
 }
 
 export async function createStudent(tenantId: string, input: CreateStudentInput, actor: ChatGPTUser, key: string): Promise<StudentRecord> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts"))
+      .createPostgresStudent(tenantId, input, actor, key);
+  }
   await requireSchool(tenantId);
   const campus = await database.prepare("SELECT id FROM campuses WHERE tenant_id = ? ORDER BY created_at LIMIT 1").bind(tenantId).first<{ id: string }>();
   if (!campus) throw new Error("School campus not found");

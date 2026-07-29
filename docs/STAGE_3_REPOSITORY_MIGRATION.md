@@ -1,6 +1,6 @@
 # Stage 3 PostgreSQL repository migration
 
-Status: in progress — sub-stage 1, platform school listing, is implemented and offline-verified.
+Status: in progress — platform listing plus the tenant repository slice are implemented; production cutover remains disabled pending acceptance.
 
 ## Implemented slice
 
@@ -45,7 +45,25 @@ tenant isolation, platform-read RLS, and Redis.
 
 ## Next slice
 
-Port tenant detail, configuration, foundation, and role reads. Each query must
-retain an explicit tenant predicate in addition to RLS. Mutations remain on the
-accepted SQLite adapter until their PostgreSQL transaction and idempotency
-contracts are active.
+The following complete read/write repository families now have PostgreSQL
+implementations behind the selector:
+
+- school detail and Company school actions;
+- school configuration and payment-gateway configuration;
+- academic foundation, settings, classes, sections, and subjects;
+- roles and role permissions;
+- student listing, admission, and idempotent replay;
+- cross-module workspace records and status changes.
+
+All PostgreSQL operations use transaction-scoped tenant context and retain
+explicit tenant predicates in addition to forced RLS. SQLite remains the default
+and fallback. Practical SQLite reads can schedule non-blocking PostgreSQL shadow
+comparisons; role listing is excluded because its existing contract may create
+the default School Admin role.
+
+The disposable integration gate now executes the repository implementations as
+a non-superuser, non-`BYPASSRLS` application role. It validates reads, writes,
+idempotent replay, rollback, and cross-tenant read/write isolation.
+
+Operations/attendance/fees and the platform school-creation repository remain on
+their prior migration status and are not part of this slice.

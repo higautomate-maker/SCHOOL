@@ -29,6 +29,28 @@ function docker(args, options = {}) {
   return result.stdout?.trim() ?? "";
 }
 
+function runRepositoryIntegration() {
+  const result = spawnSync(
+    process.execPath,
+    ["--experimental-strip-types", "scripts/test-postgres-repositories.ts"],
+    {
+      encoding: "utf8",
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        DATABASE_URL: "postgresql://hig_school_app:hig_school_app@127.0.0.1:55432/hig_school_test",
+        PG_SSL: "disable",
+        PG_POOL_MAX: "2",
+        HIG_REPOSITORY_BACKEND: "postgres",
+        HIG_POSTGRES_SHADOW_READS: "false",
+      },
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error("PostgreSQL repository integration checks failed");
+  }
+}
+
 let started = false;
 
 try {
@@ -57,7 +79,12 @@ try {
   docker([
     ...psql,
     "-c",
-    "CREATE ROLE hig_school_app NOLOGIN NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public TO hig_school_app; GRANT SELECT ON ALL TABLES IN SCHEMA public TO hig_school_app;",
+    "INSERT INTO tenants (id, name, slug, status, country_code) VALUES ('30000000-0000-4000-8000-000000000099', 'Isolation School', 'isolation-school', 'active', 'IN');",
+  ]);
+  docker([
+    ...psql,
+    "-c",
+    "CREATE ROLE hig_school_app LOGIN PASSWORD 'hig_school_app' NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public TO hig_school_app; GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO hig_school_app; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO hig_school_app;",
   ]);
 
   const visibleTenant = docker([
@@ -70,7 +97,7 @@ try {
   const isolatedTenant = docker([
     ...psql,
     "-Atc",
-    "BEGIN; SET LOCAL ROLE hig_school_app; SELECT set_config('app.tenant_id','30000000-0000-4000-8000-000000000099',true); SELECT count(*) FROM tenants; ROLLBACK;",
+    "BEGIN; SET LOCAL ROLE hig_school_app; SELECT set_config('app.tenant_id','30000000-0000-4000-8000-000000000098',true); SELECT count(*) FROM tenants; ROLLBACK;",
   ], { capture: true }).split("\n").filter((line) => /^\d+$/.test(line)).at(-1);
   if (isolatedTenant !== "0") throw new Error(`RLS exposed another tenant: ${isolatedTenant}`);
 
@@ -79,8 +106,9 @@ try {
     "-Atc",
     "BEGIN; SET LOCAL ROLE hig_school_app; SELECT set_config('app.platform_read','true',true); SELECT count(*) FROM tenants; ROLLBACK;",
   ], { capture: true }).split("\n").filter((line) => /^\d+$/.test(line)).at(-1);
-  if (platformTenant !== "1") throw new Error(`Platform reader could not list schools: ${platformTenant}`);
+  if (platformTenant !== "2") throw new Error(`Platform reader could not list schools: ${platformTenant}`);
 
+  runRepositoryIntegration();
   console.log("Disposable PostgreSQL migration, deterministic seed, tenant/platform RLS, and Redis checks passed.");
 } finally {
   if (started) {

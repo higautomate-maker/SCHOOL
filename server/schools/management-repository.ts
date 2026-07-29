@@ -1,5 +1,9 @@
 import { database, type DatabasePreparedStatement } from "@db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
+import {
+  repositoryBackend,
+  schedulePostgresShadowRead,
+} from "../runtime/repository-backend.ts";
 import type { SchoolAction } from "./management-validation";
 
 export type SchoolDetail = {
@@ -28,6 +32,19 @@ const labels: Record<string, string> = {
 };
 
 export async function getSchoolDetail(tenantId: string): Promise<SchoolDetail | null> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./management-postgres-repository.ts")).getPostgresSchoolDetail(tenantId);
+  }
+  const detail = await getSqliteSchoolDetail(tenantId);
+  schedulePostgresShadowRead(
+    "school detail",
+    detail,
+    async () => (await import("./management-postgres-repository.ts")).getPostgresSchoolDetail(tenantId),
+  );
+  return detail;
+}
+
+async function getSqliteSchoolDetail(tenantId: string): Promise<SchoolDetail | null> {
   const school = await database.prepare(`
     SELECT t.id, t.name, t.status, c.city, p.name AS plan, i.email AS admin_email,
       i.status AS invitation_status, i.expires_at AS invitation_expires_at
@@ -60,6 +77,10 @@ export async function getSchoolDetail(tenantId: string): Promise<SchoolDetail | 
 }
 
 export async function performSchoolAction(tenantId: string, action: SchoolAction, actor: ChatGPTUser, idempotencyKey: string): Promise<SchoolDetail> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./management-postgres-repository.ts"))
+      .performPostgresSchoolAction(tenantId, action, actor, idempotencyKey);
+  }
   const replay = await getReplay(idempotencyKey, actor.email);
   if (replay) return replay;
   const current = await getSchoolDetail(tenantId);

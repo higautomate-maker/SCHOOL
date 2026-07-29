@@ -1,19 +1,18 @@
 import { database } from "@db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
+import { repositoryBackend } from "../runtime/repository-backend.ts";
+import { permissionCatalogue } from "./catalogue.ts";
 import type { RoleAction } from "./validation";
 
-export const permissionCatalogue = [
-  ["students.view", "View students", "Students"], ["students.manage", "Manage students", "Students"],
-  ["attendance.view", "View attendance", "Attendance"], ["attendance.manage", "Manage attendance", "Attendance"],
-  ["fees.view", "View fees", "Finance"], ["fees.collect", "Collect fees", "Finance"], ["fees.export", "Export fees", "Finance"],
-  ["exams.view", "View examinations", "Academics"], ["exams.publish", "Publish results", "Academics"],
-  ["reports.view", "View reports", "Reporting"], ["settings.manage", "Manage settings", "Administration"], ["roles.manage", "Manage roles", "Administration"],
-] as const;
+export { permissionCatalogue };
 
 export type RoleRecord = { id: string; name: string; key: string; system: boolean; description: string; permissions: string[] };
 type RoleRow = { id: string; name: string; key: string; system: number; description: string; permissions: string | null };
 
 export async function listRoles(tenantId: string, actor: ChatGPTUser): Promise<RoleRecord[]> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts")).listPostgresRoles(tenantId, actor);
+  }
   await ensureDefaultRole(tenantId, actor);
   const result = await database.prepare(`
     SELECT r.id, r.name, r.key, r.system, r.description, GROUP_CONCAT(rp.permission) AS permissions
@@ -25,6 +24,10 @@ export async function listRoles(tenantId: string, actor: ChatGPTUser): Promise<R
 }
 
 export async function applyRoleAction(tenantId: string, action: RoleAction, actor: ChatGPTUser): Promise<RoleRecord[]> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts"))
+      .applyPostgresRoleAction(tenantId, action, actor);
+  }
   const school = await database.prepare("SELECT id FROM tenants WHERE id = ? AND status != 'archived'").bind(tenantId).first<{ id: string }>();
   if (!school) throw new Error("School not found");
   const actorId = await stableUserId(actor.email);
