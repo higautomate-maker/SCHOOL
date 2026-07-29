@@ -1,0 +1,83 @@
+{
+  "capturedAt": "2026-07-29",
+  "stage": 0,
+  "basePath": "/api/v1",
+  "contracts": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "status": 200,
+      "responseKeys": ["status", "service", "region", "timestamp"]
+    },
+    {
+      "method": "GET",
+      "path": "/readiness",
+      "status": 200,
+      "responseKeys": ["status", "checks", "timestamp"],
+      "checks": ["application", "tenantGuard"]
+    },
+    {
+      "method": "POST",
+      "path": "/demo/login",
+      "successStatus": 200,
+      "failureStatus": 401,
+      "responseKeys": ["user", "token", "destination"],
+      "knownStage5Removal": true
+    },
+    {
+      "method": "GET",
+      "path": "/demo/session",
+      "authenticatedStatus": 200,
+      "unauthenticatedStatus": 401,
+      "responseKeys": ["authenticated", "user", "destination"],
+      "knownStage5Removal": true
+    },
+    {
+      "method": "GET",
+      "path": "/demo/state",
+      "authenticatedStatus": 200,
+      "unauthenticatedStatus": 401,
+      "responseKeys": [
+        "version",
+        "updatedAt",
+        "user",
+        "school",
+        "modules",
+        "foundation",
+        "students",
+        "operations",
+        "workspace",
+        "records",
+        "notifications",
+        "driver",
+        "audit"
+      ],
+      "knownStage5Removal": true
+    },
+    {
+      "method": "POST",
+      "path": "/demo/action",
+      "authenticatedStatus": 200,
+      "unauthorizedStatus": 403,
+      "knownStage5Removal": true
+    },
+    {
+      "method": "GET|POST",
+      "path": "/schools",
+      "currentAuthentication": "trusted identity headers",
+      "knownSecurityGap": "platform permission is not enforced"
+    },
+    {
+      "method": "GET|PATCH",
+      "path": "/schools/:schoolId",
+      "currentAuthentication": "trusted identity headers",
+      "knownSecurityGap": "platform permission is not enforced"
+    },
+    {
+      "method": "GET|POST",
+      "path": "/schools/:schoolId/{configuration,foundation,operations,roles,students,workspace}",
+      "currentAuthentication": "trusted identity headers",
+      "knownSecurityGap": "tenant membership, Company entitlement, School permission, and resource assignment are not enforced"
+    }
+  ]
+}

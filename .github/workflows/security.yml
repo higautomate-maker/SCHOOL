@@ -1,0 +1,32 @@
+name: Security and supply chain
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 2 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run security:secrets
+      - run: npm run security:licenses
+      - run: npm audit --audit-level=high
+      - run: npm --silent run sbom > sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-cyclonedx-sbom
+          path: sbom.cdx.json
+          if-no-files-found: error

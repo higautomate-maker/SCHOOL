@@ -1,0 +1,6 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { workspaceActionSchema } from "../server/workspace/validation.ts";
+test("accepts a complete cross-module record",()=>{assert.equal(workspaceActionSchema.safeParse({action:"create_record",moduleKey:"Human Resource",workflow:"Leave requests",title:"Approve casual leave",description:"Two-day request",recordDate:"2026-07-22",dueDate:"2026-07-24",amountPaise:null,assignee:"HR Manager",priority:"normal"}).success,true);});
+test("accepts controlled status transitions and rejects unknown modules",()=>{assert.equal(workspaceActionSchema.safeParse({action:"update_status",recordId:"5f25ec84-7d99-48db-91b6-8825c10ceee9",status:"completed"}).success,true);assert.equal(workspaceActionSchema.safeParse({action:"create_record",moduleKey:"Unknown",workflow:"Anything",title:"Bad",recordDate:"2026-07-22"}).success,false);});
+test("accepts every current Super Admin workspace family",()=>{for(const moduleKey of ["QR Code Attendance","Reports & Analytics","Settings & Billing","Apps Center","Comms Wallet"]){assert.equal(workspaceActionSchema.safeParse({action:"create_record",moduleKey,workflow:"Dashboard Setup",title:`${moduleKey} record`,recordDate:"2026-07-22"}).success,true);}});

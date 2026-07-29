@@ -1,0 +1,18 @@
+services:
+  hig-school:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: hig-school
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HIG_DEMO_DB_PATH: /data/hig-school-demo.sqlite
+    ports:
+      - "3000:3000"
+    volumes:
+      - hig-school-data:/data
+
+volumes:
+  hig-school-data:
