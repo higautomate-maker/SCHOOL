@@ -49,7 +49,6 @@ export const tenants = pgTable("tenants", {
 }, (table) => [
   uniqueIndex("tenants_slug_uq").on(table.slug),
   uniqueIndex("tenants_domain_uq").on(table.customDomain),
-  unique("tenants_tenant_id_uq").on(table.id, table.id),
 ]);
 
 export const campuses = pgTable("campuses", {

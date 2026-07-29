@@ -30,6 +30,8 @@ test("platform school reader uses bounded pagination and transaction-scoped RLS"
 
   assert.match(repository, /Math\.min\(Math\.max\(options\.limit \?\? 50, 1\), 100\)/);
   assert.match(repository, /LIMIT \$\{limit \+ 1\}/);
+  assert.match(repository, /\(t\.created_at, t\.id\) < \(/);
+  assert.match(repository, /toString\("base64url"\)/);
   assert.match(repository, /withPlatformReadDatabase/);
   assert.match(runtime, /set_config\('app\.platform_read', 'true', true\)/);
   for (const table of ["tenants", "campuses", "subscriptions", "school_invitations", "students"]) {

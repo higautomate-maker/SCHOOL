@@ -21,6 +21,11 @@ test("PostgreSQL baseline uses native durable types", () => {
   assert.doesNotMatch(baseline, /payload_json|metadata_json|response_json/);
 });
 
+test("PostgreSQL baseline has no duplicate-column tenant unique constraint", () => {
+  assert.doesNotMatch(baseline, /tenants_tenant_id_uq/);
+  assert.doesNotMatch(baseline, /UNIQUE\("id","id"\)/);
+});
+
 test("every tenant-owned table has forced RLS and an isolation policy", () => {
   const tables = [
     "tenants", "campuses", "academic_sessions", "school_classes", "class_sections",

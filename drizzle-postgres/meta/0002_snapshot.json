@@ -1,6 +1,6 @@
 {
-  "id": "af3669b4-555e-48e9-a919-ef13beacaac9",
-  "prevId": "2041f795-91c8-4521-a575-5c565eb72af6",
+  "id": "f55eec8d-eb77-4e4e-90ed-e05420aa3345",
+  "prevId": "6aaa5308-0319-4791-b3ed-391d24c8bc33",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3255,16 +3255,7 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "tenants_tenant_id_uq": {
-          "name": "tenants_tenant_id_uq",
-          "columns": [
-            "id",
-            "id"
-          ],
-          "nullsNotDistinct": false
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

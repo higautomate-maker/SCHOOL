@@ -17,6 +17,16 @@ export type SchoolSummary = {
   invitation: "Pending" | "Accepted";
 };
 
+export type SchoolListOptions = {
+  limit?: number;
+  cursor?: string;
+};
+
+export type SchoolPage = {
+  schools: SchoolSummary[];
+  nextCursor: string | null;
+};
+
 type SchoolRow = {
   id: string; name: string; city: string | null; plan: string | null;
   status: string; period_ends_at: string | null; invitation_status: string | null; student_count: number | null;
@@ -25,14 +35,21 @@ type SchoolRow = {
 const moduleKeys = ["student_information", "fees_finance", "attendance", "examinations", "communication"];
 
 export async function listSchools(): Promise<SchoolSummary[]> {
+  return (await listSchoolPage()).schools;
+}
+
+export async function listSchoolPage(options: SchoolListOptions = {}): Promise<SchoolPage> {
   if (repositoryBackend() === "postgres") {
-    return (await import("./postgres-repository")).listPostgresSchools().then((page) => page.schools);
+    return (await import("./postgres-repository")).listPostgresSchools(options);
   }
   const schools = await listLegacySchools();
   if (postgresShadowReadsEnabled()) {
     void comparePostgresSchoolRead(schools);
   }
-  return schools;
+  return {
+    schools: schools.slice(0, options.limit ?? schools.length),
+    nextCursor: null,
+  };
 }
 
 async function listLegacySchools(): Promise<SchoolSummary[]> {

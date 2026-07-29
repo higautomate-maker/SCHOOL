@@ -310,8 +310,7 @@ CREATE TABLE "tenants" (
 	"country_code" text DEFAULT 'IN' NOT NULL,
 	"custom_domain" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "tenants_tenant_id_uq" UNIQUE("id","id")
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "users" (

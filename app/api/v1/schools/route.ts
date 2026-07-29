@@ -1,14 +1,29 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
-import { createSchool, findIdempotentResponse, listSchools } from "../../../../server/schools/repository";
+import { createSchool, findIdempotentResponse, listSchoolPage } from "../../../../server/schools/repository";
 import { createSchoolSchema } from "../../../../server/schools/validation";
 import { validIdempotencyKey } from "../../../../server/http/idempotency";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request?: Request) {
   const actor = await getChatGPTUser();
   if (!actor) return Response.json({ error: "Authentication required" }, { status: 401 });
-  return Response.json({ schools: await listSchools(), actor: { displayName: actor.displayName, email: actor.email } });
+  const url = request ? new URL(request.url) : null;
+  const requestedLimit = Number(url?.searchParams.get("limit") ?? 50);
+  const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+  const cursor = url?.searchParams.get("cursor") || undefined;
+  try {
+    const page = await listSchoolPage({ limit, cursor });
+    return Response.json({
+      ...page,
+      actor: { displayName: actor.displayName, email: actor.email },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Invalid school pagination cursor") {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
+    throw error;
+  }
 }
 
 export async function POST(request: Request) {

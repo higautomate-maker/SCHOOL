@@ -1,6 +1,6 @@
 # Stage 2 PostgreSQL foundation
 
-Status: implementation complete; live PostgreSQL and `pg` driver verification pending local tooling/network availability.
+Status: implementation complete; `pg` 8.16.3 is installed and the Node PostgreSQL runtime is wired. The disposable Docker gate remains the required live-database acceptance check.
 
 ## Outcome
 
@@ -68,9 +68,7 @@ An enabled module never grants user access by itself. The application must still
 
 `server/runtime/postgres.ts` validates `DATABASE_URL`, a per-task pool maximum of 1–20 connections (default 10), timeouts, and TLS mode.
 
-It also provides `withTenantTransaction`, which always starts a transaction, uses parameterized transaction-local tenant context, commits or rolls back, and releases the pooled client.
-
-The concrete `pg.Pool` adapter is not checked in yet because npm registry access is unavailable in this environment and `pg` is not already in the lockfile. Adding an unlocked or fake driver would make `npm ci` unreliable. Once registry access is available, install pinned `pg` and `@types/pg`, wire the validated options into `pg.Pool`, and run the container gate below.
+It provides a bounded singleton `pg.Pool`, Drizzle's Node PostgreSQL adapter, tenant-scoped transactions, and platform read-only transactions. Every scoped operation sets its RLS context with transaction-local `set_config`, then commits or rolls back and releases its pooled client.
 
 ## Migration and verification
 
@@ -81,6 +79,6 @@ The concrete `pg.Pool` adapter is not checked in yet because npm registry access
 - Offline contracts: `tests/postgres-foundation.test.ts`
 - Container gate: `scripts/test-integration-infra.mjs`
 
-The container gate creates a fresh PostgreSQL 17 database, applies both migrations, applies the seed twice, creates a non-superuser application role, proves the selected tenant is visible, proves a different tenant is invisible, and checks Redis.
+The container gate creates a fresh PostgreSQL 17 database, applies all ordered PostgreSQL migrations, applies the seed twice, creates a non-superuser application role, proves the selected tenant is visible, proves a different tenant is invisible, proves the platform reader can list tenants, and checks Redis.
 
-Local Docker is not installed in the current workstation environment, so this gate is enforced in CI and remains a local acceptance dependency.
+Run `npm run test:integration:infra` on a Docker-enabled host. The Codex sandbox cannot access the workstation Docker socket, so this gate is also enforced in CI.

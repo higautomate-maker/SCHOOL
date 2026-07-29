@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { withPlatformReadDatabase } from "../runtime/postgres.ts";
-import type { SchoolSummary } from "./repository.ts";
+import type { SchoolListOptions, SchoolPage, SchoolSummary } from "./repository.ts";
 
 type SchoolRow = {
   id: string;
@@ -8,23 +8,17 @@ type SchoolRow = {
   city: string | null;
   plan: string | null;
   status: string;
+  createdAt: Date | string;
   periodEndsAt: Date | string | null;
   invitationStatus: string | null;
   studentCount: number | string | null;
 };
 
-export type SchoolPage = {
-  schools: SchoolSummary[];
-  nextCursor: string | null;
-};
-
-export async function listPostgresSchools(options: {
-  limit?: number;
-  beforeCreatedAt?: string;
-} = {}): Promise<SchoolPage> {
+export async function listPostgresSchools(options: SchoolListOptions = {}): Promise<SchoolPage> {
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
-  const cursor = options.beforeCreatedAt
-    ? sql`AND t.created_at < ${options.beforeCreatedAt}::timestamptz`
+  const decodedCursor = options.cursor ? decodeCursor(options.cursor) : null;
+  const cursor = decodedCursor
+    ? sql`AND (t.created_at, t.id) < (${decodedCursor.createdAt}::timestamptz, ${decodedCursor.id}::uuid)`
     : sql``;
 
   return withPlatformReadDatabase(async (database) => {
@@ -35,6 +29,7 @@ export async function listPostgresSchools(options: {
         c.city,
         p.name AS plan,
         t.status,
+        t.created_at AS "createdAt",
         s.period_ends_at AS "periodEndsAt",
         invitation.status AS "invitationStatus",
         student_totals.student_count AS "studentCount"
@@ -70,23 +65,37 @@ export async function listPostgresSchools(options: {
     return {
       schools: pageRows.map(toSummary),
       nextCursor: hasMore && pageRows.length
-        ? await createdAtCursor(database, pageRows.at(-1)!.id)
+        ? encodeCursor(pageRows.at(-1)!)
         : null,
     };
   });
 }
 
-async function createdAtCursor(
-  database: Parameters<Parameters<typeof withPlatformReadDatabase>[0]>[0],
-  tenantId: string,
-): Promise<string | null> {
-  const result = await database.execute<{ createdAt: Date | string }>(sql`
-    SELECT created_at AS "createdAt"
-    FROM tenants
-    WHERE id = ${tenantId}
-  `);
-  const value = result.rows[0]?.createdAt;
-  return value ? new Date(value).toISOString() : null;
+function encodeCursor(row: Pick<SchoolRow, "createdAt" | "id">): string {
+  return Buffer.from(JSON.stringify({
+    createdAt: new Date(row.createdAt).toISOString(),
+    id: row.id,
+  })).toString("base64url");
+}
+
+function decodeCursor(cursor: string): { createdAt: string; id: string } {
+  try {
+    const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as {
+      createdAt?: unknown;
+      id?: unknown;
+    };
+    if (
+      typeof value.createdAt !== "string"
+      || !Number.isFinite(Date.parse(value.createdAt))
+      || typeof value.id !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.id)
+    ) {
+      throw new Error("Malformed cursor");
+    }
+    return { createdAt: new Date(value.createdAt).toISOString(), id: value.id };
+  } catch {
+    throw new Error("Invalid school pagination cursor");
+  }
 }
 
 function toSummary(row: SchoolRow): SchoolSummary {
