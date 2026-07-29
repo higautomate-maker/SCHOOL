@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1785339976064,
+      "tag": "0000_messy_blade",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785339982158,
+      "tag": "0001_tenant_rls",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785345717976,
+      "tag": "0002_platform_read_rls",
+      "breakpoints": true
+    }
+  ]
+}

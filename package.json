@@ -9,16 +9,22 @@
   "scripts": {
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
+    "build:hostinger": "HIG_RUNTIME=node WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run test:unit",
     "test:unit": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:integration:infra": "node scripts/test-integration-infra.mjs",
+    "test:integration:hostinger": "node scripts/test-hostinger-container.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build",
     "security:secrets": "node scripts/check-secrets.mjs",
     "security:licenses": "node scripts/check-licenses.mjs",
     "sbom": "npm sbom --sbom-format cyclonedx",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "db:pg:generate": "drizzle-kit generate --config drizzle.postgres.config.ts",
+    "db:pg:check": "node --experimental-strip-types --test tests/postgres-foundation.test.ts",
+    "check:hostinger-bundle": "node scripts/check-hostinger-bundle.mjs"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
@@ -26,6 +32,7 @@
     "@vitejs/plugin-react": "6.0.2",
     "drizzle-orm": "0.45.2",
     "next": "16.2.6",
+    "pg": "8.16.3",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "tailwindcss": "4.2.1",
@@ -36,6 +43,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260702.1",
     "@types/node": "22.19.19",
+    "@types/pg": "8.20.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-rsc": "0.5.26",

@@ -1,5 +1,6 @@
-import { env } from "cloudflare:workers";
+import { database } from "@db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
+import { postgresShadowReadsEnabled, repositoryBackend } from "../runtime/repository-backend";
 import type { CreateSchoolInput } from "./validation";
 
 export type SchoolSummary = {
@@ -24,7 +25,18 @@ type SchoolRow = {
 const moduleKeys = ["student_information", "fees_finance", "attendance", "examinations", "communication"];
 
 export async function listSchools(): Promise<SchoolSummary[]> {
-  const result = await env.DB.prepare(`
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository")).listPostgresSchools().then((page) => page.schools);
+  }
+  const schools = await listLegacySchools();
+  if (postgresShadowReadsEnabled()) {
+    void comparePostgresSchoolRead(schools);
+  }
+  return schools;
+}
+
+async function listLegacySchools(): Promise<SchoolSummary[]> {
+  const result = await database.prepare(`
     SELECT t.id, t.name, c.city, p.name AS plan, t.status, s.period_ends_at,
       MAX(i.status) AS invitation_status,
       (SELECT COUNT(*) FROM students st WHERE st.tenant_id = t.id AND st.status = 'active') AS student_count
@@ -42,8 +54,27 @@ export async function listSchools(): Promise<SchoolSummary[]> {
   return result.results.map(toSummary);
 }
 
+async function comparePostgresSchoolRead(legacy: SchoolSummary[]): Promise<void> {
+  try {
+    const postgres = (await import("./postgres-repository")).listPostgresSchools();
+    const page = await postgres;
+    const legacyIds = legacy.map((school) => school.tenantId).sort();
+    const postgresIds = page.schools.map((school) => school.tenantId).sort();
+    if (JSON.stringify(legacyIds) !== JSON.stringify(postgresIds)) {
+      console.warn("PostgreSQL school shadow-read mismatch", {
+        legacyCount: legacyIds.length,
+        postgresCount: postgresIds.length,
+      });
+    }
+  } catch (error) {
+    console.warn("PostgreSQL school shadow-read failed", {
+      message: error instanceof Error ? error.message : "unknown error",
+    });
+  }
+}
+
 export async function findIdempotentResponse(key: string, actorEmail: string): Promise<SchoolSummary | null> {
-  const row = await env.DB.prepare(`
+  const row = await database.prepare(`
     SELECT response_json FROM idempotency_records
     WHERE key = ? AND actor_email = ? AND operation = 'school.create' AND expires_at > ?
   `).bind(key, actorEmail, new Date().toISOString()).first<{ response_json: string }>();
@@ -82,31 +113,31 @@ export async function createSchool(input: CreateSchoolInput, actor: ChatGPTUser,
   };
 
   const statements = [
-    env.DB.prepare(`INSERT INTO plans (id, name, monthly_price_paise, annual_price_paise, active, created_at, updated_at)
+    database.prepare(`INSERT INTO plans (id, name, monthly_price_paise, annual_price_paise, active, created_at, updated_at)
       VALUES (?, ?, ?, ?, 1, ?, ?) ON CONFLICT(id) DO NOTHING`).bind(planId, input.plan, planPrice(input.plan), planPrice(input.plan) * 10, nowIso, nowIso),
-    env.DB.prepare(`INSERT INTO users (id, email, full_name, status, mfa_enabled, created_at, updated_at)
+    database.prepare(`INSERT INTO users (id, email, full_name, status, mfa_enabled, created_at, updated_at)
       VALUES (?, ?, ?, 'active', 1, ?, ?) ON CONFLICT(email) DO UPDATE SET full_name = excluded.full_name, updated_at = excluded.updated_at`).bind(actorId, actor.email.toLowerCase(), actor.fullName ?? actor.displayName, nowIso, nowIso),
-    env.DB.prepare(`INSERT INTO users (id, email, full_name, status, mfa_enabled, created_at, updated_at)
+    database.prepare(`INSERT INTO users (id, email, full_name, status, mfa_enabled, created_at, updated_at)
       VALUES (?, ?, ?, 'invited', 0, ?, ?) ON CONFLICT(email) DO UPDATE SET updated_at = excluded.updated_at`).bind(adminId, input.adminEmail, adminName, nowIso, nowIso),
-    env.DB.prepare(`INSERT INTO tenants (id, name, slug, status, country_code, created_at, updated_at)
+    database.prepare(`INSERT INTO tenants (id, name, slug, status, country_code, created_at, updated_at)
       VALUES (?, ?, ?, 'trial', 'IN', ?, ?)`).bind(tenantId, input.name, slug, nowIso, nowIso),
-    env.DB.prepare(`INSERT INTO campuses (id, tenant_id, name, code, city, created_at, updated_at)
+    database.prepare(`INSERT INTO campuses (id, tenant_id, name, code, city, created_at, updated_at)
       VALUES (?, ?, 'Main Campus', 'MAIN', ?, ?, ?)`).bind(campusId, tenantId, input.city, nowIso, nowIso),
-    env.DB.prepare(`INSERT INTO subscriptions (id, tenant_id, plan_id, status, period_ends_at, created_at, updated_at)
+    database.prepare(`INSERT INTO subscriptions (id, tenant_id, plan_id, status, period_ends_at, created_at, updated_at)
       VALUES (?, ?, ?, 'trial', ?, ?, ?)`).bind(subscriptionId, tenantId, planId, periodEndsAt, nowIso, nowIso),
-    env.DB.prepare(`INSERT INTO memberships (tenant_id, user_id, role_key, campus_id, created_at)
+    database.prepare(`INSERT INTO memberships (tenant_id, user_id, role_key, campus_id, created_at)
       VALUES (?, ?, 'school_admin', ?, ?)`).bind(tenantId, adminId, campusId, nowIso),
-    ...moduleKeys.map((moduleKey) => env.DB.prepare(`INSERT INTO module_policies (tenant_id, module_key, enabled, source, updated_at, updated_by)
+    ...moduleKeys.map((moduleKey) => database.prepare(`INSERT INTO module_policies (tenant_id, module_key, enabled, source, updated_at, updated_by)
       VALUES (?, ?, 1, 'plan', ?, ?)`).bind(tenantId, moduleKey, nowIso, actorId)),
-    env.DB.prepare(`INSERT INTO school_invitations (id, tenant_id, email, role_key, token_hash, status, expires_at, invited_by, created_at, updated_at)
+    database.prepare(`INSERT INTO school_invitations (id, tenant_id, email, role_key, token_hash, status, expires_at, invited_by, created_at, updated_at)
       VALUES (?, ?, ?, 'school_admin', ?, 'pending', ?, ?, ?, ?)`).bind(invitationId, tenantId, input.adminEmail, tokenHash, expiresAt, actorId, nowIso, nowIso),
-    env.DB.prepare(`INSERT INTO audit_events (id, tenant_id, actor_id, action, resource_type, resource_id, reason, metadata_json, occurred_at)
+    database.prepare(`INSERT INTO audit_events (id, tenant_id, actor_id, action, resource_type, resource_id, reason, metadata_json, occurred_at)
       VALUES (?, ?, ?, 'school.create', 'tenant', ?, 'Platform onboarding', ?, ?)`).bind(crypto.randomUUID(), tenantId, actorId, tenantId, JSON.stringify({ plan: input.plan, city: input.city, adminEmail: input.adminEmail }), nowIso),
-    env.DB.prepare(`INSERT INTO idempotency_records (key, actor_email, operation, response_json, created_at, expires_at)
+    database.prepare(`INSERT INTO idempotency_records (key, actor_email, operation, response_json, created_at, expires_at)
       VALUES (?, ?, 'school.create', ?, ?, ?)`).bind(idempotencyKey, actor.email.toLowerCase(), JSON.stringify(school), nowIso, idempotencyExpiresAt),
   ];
 
-  await env.DB.batch(statements);
+  await database.batch(statements);
   return school;
 }
 

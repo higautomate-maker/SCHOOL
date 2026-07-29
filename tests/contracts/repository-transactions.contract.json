@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "operations": [
+    {
+      "id": "school.create",
+      "repository": "server/schools/repository.ts",
+      "atomicWrites": ["tenant", "campus", "subscription", "membership", "module_entitlements", "invitation", "audit_event", "idempotency_record"],
+      "idempotencyRequired": true,
+      "rowLockRequired": false
+    },
+    {
+      "id": "school.manage",
+      "repository": "server/schools/management-repository.ts",
+      "atomicWrites": ["school_change", "audit_event", "idempotency_record"],
+      "idempotencyRequired": true,
+      "rowLockRequired": false
+    },
+    {
+      "id": "student.create",
+      "repository": "server/students/repository.ts",
+      "atomicWrites": ["student", "audit_event", "idempotency_record"],
+      "idempotencyRequired": true,
+      "rowLockRequired": false
+    },
+    {
+      "id": "attendance.mark",
+      "repository": "server/operations/repository.ts",
+      "atomicWrites": ["attendance", "audit_event", "outbox_event"],
+      "idempotencyRequired": true,
+      "rowLockRequired": false
+    },
+    {
+      "id": "fee.invoice.create",
+      "repository": "server/operations/repository.ts",
+      "atomicWrites": ["fee_invoice", "audit_event", "outbox_event"],
+      "idempotencyRequired": true,
+      "rowLockRequired": false
+    },
+    {
+      "id": "fee.payment.collect",
+      "repository": "server/operations/repository.ts",
+      "atomicWrites": ["fee_payment", "fee_invoice_balance", "audit_event", "outbox_event", "idempotency_record"],
+      "idempotencyRequired": true,
+      "rowLockRequired": true
+    },
+    {
+      "id": "workspace.action",
+      "repository": "server/workspace/repository.ts",
+      "atomicWrites": ["workspace_record", "audit_event", "outbox_event"],
+      "idempotencyRequired": true,
+      "rowLockRequired": false
+    }
+  ]
+}

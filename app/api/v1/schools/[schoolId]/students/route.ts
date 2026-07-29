@@ -1,6 +1,7 @@
 import { getChatGPTUser } from "../../../../../chatgpt-auth";
 import { createStudent, findStudentReplay, listStudents } from "../../../../../../server/students/repository";
 import { createStudentSchema } from "../../../../../../server/students/validation";
+import { validIdempotencyKey } from "../../../../../../server/http/idempotency";
 
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ schoolId: string }> };
@@ -18,7 +19,7 @@ export async function POST(request: Request, context: Context) {
   const actor = await getChatGPTUser();
   if (!actor) return Response.json({ error: "Authentication required" }, { status: 401 });
   const key = request.headers.get("idempotency-key");
-  if (!key || key.length < 16 || key.length > 120) return Response.json({ error: "A valid Idempotency-Key header is required" }, { status: 400 });
+  if (!validIdempotencyKey(key)) return Response.json({ error: "A valid Idempotency-Key header is required" }, { status: 400 });
   const replay = await findStudentReplay(key, actor.email.toLowerCase());
   if (replay) return Response.json({ student: replay, replayed: true });
   const parsed = createStudentSchema.safeParse(await request.json().catch(() => null));

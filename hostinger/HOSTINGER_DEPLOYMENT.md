@@ -1,37 +1,129 @@
 # Hostinger deployment — Hig School
 
-## Required Hostinger plan
+## Supported Hostinger service
 
-Use a Hostinger VPS with Docker or a Hostinger plan that supports persistent Node.js processes. Traditional PHP-only shared hosting cannot run this Next/Vinext server or its synchronized APIs.
+Use a Hostinger VPS with Docker and the Docker Compose plugin. PHP-only shared hosting cannot run this server.
 
-## Demo deployment
+The Hostinger image is a dedicated Node target:
 
-1. Upload the extracted project to the VPS.
-2. Install Docker and the Docker Compose plugin.
-3. From the project directory run:
+- `HIG_RUNTIME=node` excludes the Cloudflare Vite plugin and resolves the database contract to Node SQLite.
+- `HIG_DEMO_DB_PATH=/data/hig-school-demo.sqlite` stores synchronized demo state on the persistent volume.
+- `HIG_SQLITE_MIGRATIONS_PATH=/app/drizzle` initializes the normalized school API tables.
+- The Cloudflare D1 implementation remains isolated in `db/adapters/cloudflare-d1.ts` and is not present in the Hostinger production bundle.
+
+SQLite is supported here for the single-server sales demonstration. Use the Stage 2 PostgreSQL adapter before storing production school data or scaling to multiple application containers.
+
+## Upload package
+
+1. Upload `hig-school-hostinger-node-fixed-v3.zip` to the VPS.
+2. Extract it into a dedicated directory:
 
    ```bash
-   docker compose -f hostinger/docker-compose.yml up -d --build
+   mkdir -p /opt/hig-school
+   unzip hig-school-hostinger-node-fixed-v3.zip -d /opt/hig-school
+   cd /opt/hig-school
    ```
 
-4. Add the domain in Hostinger and reverse-proxy it to port `3000`. An Nginx example is included in `hostinger/nginx.conf.example`.
-5. Enable SSL in hPanel or Certbot.
-6. Open `https://your-domain.example/login`.
+3. Confirm these files exist:
 
-The connected demonstration state is stored in SQLite at `/data/hig-school-demo.sqlite`. Docker Compose mounts the named `hig-school-data` volume, so attendance, homework, fees, module policies, requests, GPS updates and notifications survive container rebuilds and restarts.
+   ```bash
+   test -f Dockerfile
+   test -f hostinger/docker-compose.yml
+   test -f package-lock.json
+   test -d drizzle
+   ```
 
-## Production data
+## Build and start
 
-The durable SQLite state is appropriate for a single-server sales demonstration. Before storing real school records, replace the snapshot store with normalized managed PostgreSQL or MySQL repositories. Do not use the demo passwords for real users.
+```bash
+docker compose -f hostinger/docker-compose.yml build --no-cache
+docker compose -f hostinger/docker-compose.yml up -d
+docker compose -f hostinger/docker-compose.yml ps
+```
 
-Production launch also requires:
+Wait until `hig-school` reports `healthy`.
 
-- Managed identity provider or secure password hashing.
-- MFA for Company and School administrators.
-- HTTPS-only secure sessions and session rotation.
-- Database backups and point-in-time recovery.
-- Rate limiting, email/SMS provider configuration and audit retention.
-- Android and iOS signing keys, privacy disclosures and store review.
+Do not use `--force`, `--legacy-peer-deps`, or edit the lockfile on the server. The image uses `npm ci` and the checked-in lockfile.
+
+## Verify the deployment
+
+From the VPS:
+
+```bash
+curl -fsS http://127.0.0.1:3000/api/v1/health
+curl -fsSI http://127.0.0.1:3000/login
+docker inspect --format '{{.State.Health.Status}}' hig-school
+docker logs --tail 100 hig-school
+```
+
+Expected health response includes:
+
+```json
+{"status":"ok","service":"hig-school"}
+```
+
+The container status must be `healthy`, and the logs must not contain `ERR_UNSUPPORTED_ESM_URL_SCHEME` or `cloudflare:`.
+
+## Verify persistent data
+
+1. Sign in as the School demo account.
+2. Add a notice, student, attendance entry, or other demo record.
+3. Restart the container:
+
+   ```bash
+   docker restart hig-school
+   ```
+
+4. Wait for it to become healthy and sign in again. The record must still exist.
+
+The named volume `hig-school-data` owns `/data`. Normal container rebuilds and restarts preserve it. Do not run `docker compose down -v` unless you intentionally want to delete all demo data.
+
+Back up the demo database with:
+
+```bash
+docker cp hig-school:/data/hig-school-demo.sqlite ./hig-school-demo-backup.sqlite
+```
+
+## Domain and TLS
+
+Point the Hostinger domain to the VPS and reverse-proxy HTTPS traffic to `127.0.0.1:3000`. A starting Nginx configuration is provided in `hostinger/nginx.conf.example`.
+
+Enable TLS in hPanel or Certbot, then open:
+
+```text
+https://your-domain.example/login
+```
+
+## Updates
+
+```bash
+cd /opt/hig-school
+docker compose -f hostinger/docker-compose.yml build --no-cache
+docker compose -f hostinger/docker-compose.yml up -d
+docker compose -f hostinger/docker-compose.yml ps
+```
+
+The persistent volume is reused automatically.
+
+## Local/CI acceptance command
+
+On any machine with Docker:
+
+```bash
+npm ci
+npm run test:integration:hostinger
+```
+
+This command builds the image, starts it on a temporary port and volume, waits for Docker health, requests the health and login pages, writes a record, restarts the container, and verifies that the record survived.
+
+CI also performs:
+
+```bash
+npm run build:hostinger
+npm run check:hostinger-bundle
+```
+
+The second command fails if any `cloudflare:` runtime reference is found in `dist`.
 
 ## Mobile API URL
 
@@ -42,3 +134,7 @@ flutter build apk --dart-define=API_BASE_URL=https://school.example.com
 flutter build appbundle --dart-define=API_BASE_URL=https://school.example.com
 flutter build ios --dart-define=API_BASE_URL=https://school.example.com
 ```
+
+## Production-data warning
+
+The included credentials and SQLite data are demonstration-only. Production launch still requires Auth.js/identity hardening, MFA, rate limits, managed PostgreSQL, backups/PITR, secrets management, audit retention, and signed mobile releases.

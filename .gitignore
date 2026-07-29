@@ -48,3 +48,4 @@ next-env.d.ts
 /release/
 *.zip
 *.tar.gz
+/hig-school-hostinger-node-fixed*/

@@ -47,15 +47,19 @@ The authoritative application source remains:
 
 - The representative API response shapes are frozen in `docs/baseline/API_CONTRACTS.json`.
 - Existing characterization tests verify complete sample data, attendance propagation to Student/Parent, Company module-policy propagation to School, and role restrictions.
-- Visual reference routes to recapture after a runnable local server is available:
-  - `/login`
-  - `/company`
-  - `/school/dashboard`
-  - `/mobile-preview/staff`
-  - `/mobile-preview/student`
-  - `/mobile-preview/driver`
+- Visual references captured from the live local demo:
 
-The Codex filesystem sandbox blocked listening on a localhost port (`EPERM`), and the previously open local tab no longer had a running server. Therefore new PNG captures could not be produced in this execution. This limitation does not affect the source checks or API characterization tests.
+| Surface | File | Result |
+|---|---|---|
+| Login selector | `docs/baseline/screenshots/01-login.jpg` | Rendered; six demo selectors visible |
+| Company dashboard | `docs/baseline/screenshots/02-company-dashboard.jpg` | Rendered; no browser console errors |
+| School dashboard | `docs/baseline/screenshots/03-school-dashboard.jpg` | Rendered; no browser console errors |
+| Teacher app | `docs/baseline/screenshots/04-teacher-app-loading-failure.jpg` | Failed baseline: remains on “Connecting securely to Hig School…” |
+| Parent app | `docs/baseline/screenshots/05-parent-app-loading-failure.jpg` | Failed baseline: remains on “Connecting securely to Hig School…” |
+| Student app | `docs/baseline/screenshots/06-student-app-loading-failure.jpg` | Failed baseline: remains on “Connecting securely to Hig School…” |
+| Transporter app | `docs/baseline/screenshots/07-transporter-app-loading-failure.jpg` | Failed baseline: remains on “Connecting securely to Hig School…” |
+
+The mobile preview failure occurs after each role-specific login succeeds and navigates to the expected `/mobile-preview/*` route. No browser console error is emitted. Treat this as a frozen baseline defect for characterization and correction; do not describe the current mobile previews as functional.
 
 ## Known critical risks retained for later authorized stages
 

@@ -1,6 +1,7 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { createSchool, findIdempotentResponse, listSchools } from "../../../../server/schools/repository";
 import { createSchoolSchema } from "../../../../server/schools/validation";
+import { validIdempotencyKey } from "../../../../server/http/idempotency";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
   const actor = await getChatGPTUser();
   if (!actor) return Response.json({ error: "Authentication required" }, { status: 401 });
   const idempotencyKey = request.headers.get("idempotency-key");
-  if (!idempotencyKey || idempotencyKey.length < 16 || idempotencyKey.length > 120) {
+  if (!validIdempotencyKey(idempotencyKey)) {
     return Response.json({ error: "A valid Idempotency-Key header is required" }, { status: 400 });
   }
 

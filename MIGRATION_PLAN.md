@@ -1,6 +1,6 @@
 # Hig School production migration plan
 
-Status: **Approved on 29 July 2026 — Stage 0 authorized and in progress**  
+Status: **Approved on 29 July 2026 — Stages 0–1 completed; Stage 2 implementation in progress (schema, migration, RLS, seed, and offline contracts complete; driver/container gates pending)**
 Audit date: 29 July 2026  
 Target: AWS `ap-south-1`, standard Next.js App Router on Node.js 22, PostgreSQL, Redis, S3, SQS
 

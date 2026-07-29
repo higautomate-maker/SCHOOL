@@ -21,7 +21,8 @@
     ],
     "types": ["@cloudflare/workers-types"],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@db-runtime": ["./db/adapters/node-sqlite.ts"]
     }
   },
   "include": [
@@ -42,6 +43,7 @@
     "dist",
     "outputs",
     "release",
-    "work"
+    "work",
+    "hig-school-hostinger-node-fixed*"
   ]
 }
