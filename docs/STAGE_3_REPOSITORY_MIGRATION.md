@@ -1,6 +1,7 @@
 # Stage 3 PostgreSQL repository migration
 
-Status: in progress — platform listing plus the tenant repository slice are implemented; production cutover remains disabled pending acceptance.
+Status: complete and accepted at commit `bcd2ba4`; production cutover remains
+disabled while later PostgreSQL slices are validated.
 
 ## Implemented slice
 
@@ -65,5 +66,5 @@ The disposable integration gate now executes the repository implementations as
 a non-superuser, non-`BYPASSRLS` application role. It validates reads, writes,
 idempotent replay, rollback, and cross-tenant read/write isolation.
 
-Operations/attendance/fees and the platform school-creation repository remain on
-their prior migration status and are not part of this slice.
+Operations/attendance/fees and platform school creation are implemented in the
+next migration slice documented in `STAGE_4_FINANCIAL_OPERATIONS.md`.

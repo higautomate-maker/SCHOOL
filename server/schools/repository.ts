@@ -91,6 +91,10 @@ async function comparePostgresSchoolRead(legacy: SchoolSummary[]): Promise<void>
 }
 
 export async function findIdempotentResponse(key: string, actorEmail: string): Promise<SchoolSummary | null> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts"))
+      .findPostgresSchoolCreationReplay(key, actorEmail);
+  }
   const row = await database.prepare(`
     SELECT response_json FROM idempotency_records
     WHERE key = ? AND actor_email = ? AND operation = 'school.create' AND expires_at > ?
@@ -99,6 +103,10 @@ export async function findIdempotentResponse(key: string, actorEmail: string): P
 }
 
 export async function createSchool(input: CreateSchoolInput, actor: ChatGPTUser, idempotencyKey: string): Promise<SchoolSummary> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts"))
+      .createPostgresSchool(input, actor, idempotencyKey);
+  }
   const now = new Date();
   const nowIso = now.toISOString();
   const tenantId = crypto.randomUUID();

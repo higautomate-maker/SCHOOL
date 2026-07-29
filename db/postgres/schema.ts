@@ -253,6 +253,7 @@ export const idempotencyRecords = pgTable("idempotency_records", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 }, (table) => [
   primaryKey({ columns: [table.tenantId, table.key] }),
+  uniqueIndex("idempotency_key_uq").on(table.key),
   index("idempotency_expiry_idx").on(table.expiresAt),
 ]);
 

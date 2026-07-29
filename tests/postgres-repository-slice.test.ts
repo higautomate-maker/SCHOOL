@@ -9,6 +9,7 @@ const repositoryPairs = [
   ["server/access/repository.ts", "server/access/postgres-repository.ts"],
   ["server/students/repository.ts", "server/students/postgres-repository.ts"],
   ["server/workspace/repository.ts", "server/workspace/postgres-repository.ts"],
+  ["server/operations/repository.ts", "server/operations/postgres-repository.ts"],
 ] as const;
 
 function read(path: string): string {
@@ -44,6 +45,7 @@ test("practical SQLite reads schedule PostgreSQL shadow comparisons", () => {
     "server/foundation/repository.ts",
     "server/students/repository.ts",
     "server/workspace/repository.ts",
+    "server/operations/repository.ts",
   ]) {
     assert.match(read(path), /schedulePostgresShadowRead\(/, path);
   }
@@ -60,11 +62,51 @@ test("live repository gate covers replay, rollback, and cross-tenant isolation",
   assert.match(integration, /intentional rollback/);
   assert.match(integration, /Cross-tenant write must fail/);
   assert.match(integration, /readCount: 0, writeCount: 0/);
+  assert.match(integration, /stage4-attendance-create/);
+  assert.match(integration, /stage4-payment-concurrent-a/);
+  assert.match(integration, /stage4-school-create/);
+  assert.match(integration, /stage4-school-rollback/);
   assert.match(
     management,
     /\$1::uuid, \$2::uuid, \$3::text, 'tenant', \$4::text/,
   );
   assert.doesNotMatch(management, /'tenant', \$1::text/);
+});
+
+test("financial operations use exact paise, row locking, replay, and outbox writes", () => {
+  const operations = read("server/operations/postgres-repository.ts");
+  assert.match(operations, /FOR UPDATE/);
+  assert.match(operations, /\$5::bigint/);
+  assert.match(operations, /attendance_date::text AS "attendanceDate"/);
+  assert.match(operations, /due_date::text AS "dueDate"/);
+  assert.match(operations, /paid_on::date::text AS "paidOn"/);
+  assert.match(operations, /Number\.isSafeInteger/);
+  assert.match(operations, /INSERT INTO outbox_events/);
+  assert.match(operations, /INSERT INTO idempotency_records/);
+  assert.match(operations, /pg_advisory_xact_lock/);
+});
+
+test("platform school creation uses only its dedicated transaction context", () => {
+  const schools = read("server/schools/postgres-repository.ts");
+  const runtime = read("server/runtime/postgres.ts");
+  const rls = read("drizzle-postgres/0003_milky_juggernaut.sql");
+  assert.match(schools, /withPlatformSchoolCreationDatabase/);
+  assert.match(schools, /pg_advisory_xact_lock/);
+  assert.match(schools, /findPostgresSchoolCreationReplay/);
+  assert.match(runtime, /set_config\('app\.platform_create', 'true', true\)/);
+  for (const table of [
+    "tenants",
+    "campuses",
+    "subscriptions",
+    "memberships",
+    "module_policies",
+    "school_invitations",
+    "audit_events",
+    "idempotency_records",
+  ]) {
+    assert.match(rls, new RegExp(`${table}_platform_create`));
+  }
+  assert.match(rls, /idempotency_key_uq/);
 });
 
 test("production repository backend remains SQLite by default", () => {

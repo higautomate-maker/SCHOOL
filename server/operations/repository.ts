@@ -1,5 +1,9 @@
 import { database } from "@db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
+import {
+  repositoryBackend,
+  schedulePostgresShadowRead,
+} from "../runtime/repository-backend.ts";
 import type { OperationAction } from "./validation";
 
 type AttendanceRow = { id:string; studentId:string; studentName:string; className:string; sectionName:string; attendanceDate:string; status:"present"|"absent"|"late"|"excused"; note:string };
@@ -8,6 +12,9 @@ type PaymentRow = { id:string; invoiceId:string; studentName:string; amountPaise
 export type OperationsState = { attendance:AttendanceRow[]; invoices:InvoiceRow[]; payments:PaymentRow[]; metrics:{present:number;absent:number;late:number;attendanceMarked:number;invoicedPaise:number;collectedPaise:number;outstandingPaise:number} };
 
 export async function getOperations(tenantId:string, sessionId?:string|null):Promise<OperationsState>{
+  if(repositoryBackend()==="postgres"){
+    return (await import("./postgres-repository.ts")).getPostgresOperations(tenantId,sessionId);
+  }
   await requireSchool(tenantId); const session=sessionId??(await activeSession(tenantId))?.id;
   if(!session)return emptyState();
   const [attendance,invoices,payments]=await Promise.all([
@@ -16,10 +23,15 @@ export async function getOperations(tenantId:string, sessionId?:string|null):Pro
     database.prepare(`SELECT p.id, p.invoice_id AS invoiceId, TRIM(s.first_name || ' ' || s.last_name) AS studentName, p.amount_paise AS amountPaise, p.method, p.reference, p.paid_on AS paidOn FROM fee_payments p JOIN students s ON s.id=p.student_id JOIN fee_invoices i ON i.id=p.invoice_id WHERE p.tenant_id=? AND i.academic_session_id=? ORDER BY p.paid_on DESC, p.created_at DESC LIMIT 200`).bind(tenantId,session).all<PaymentRow>(),
   ]);
   const today=new Date().toISOString().slice(0,10), todays=attendance.results.filter(a=>a.attendanceDate===today), invoiced=invoices.results.reduce((n,i)=>n+i.amountPaise,0), collected=invoices.results.reduce((n,i)=>n+i.paidPaise,0);
-  return {attendance:attendance.results,invoices:invoices.results,payments:payments.results,metrics:{present:todays.filter(a=>a.status==="present").length,absent:todays.filter(a=>a.status==="absent").length,late:todays.filter(a=>a.status==="late").length,attendanceMarked:todays.length,invoicedPaise:invoiced,collectedPaise:collected,outstandingPaise:invoiced-collected}};
+  const state={attendance:attendance.results,invoices:invoices.results,payments:payments.results,metrics:{present:todays.filter(a=>a.status==="present").length,absent:todays.filter(a=>a.status==="absent").length,late:todays.filter(a=>a.status==="late").length,attendanceMarked:todays.length,invoicedPaise:invoiced,collectedPaise:collected,outstandingPaise:invoiced-collected}};
+  schedulePostgresShadowRead("operations",state,async()=>(await import("./postgres-repository.ts")).getPostgresOperations(tenantId,sessionId));
+  return state;
 }
 
-export async function applyOperation(tenantId:string, action:OperationAction, actor:ChatGPTUser):Promise<OperationsState>{
+export async function applyOperation(tenantId:string, action:OperationAction, actor:ChatGPTUser, idempotencyKey=crypto.randomUUID()):Promise<OperationsState>{
+  if(repositoryBackend()==="postgres"){
+    return (await import("./postgres-repository.ts")).applyPostgresOperation(tenantId,action,actor,idempotencyKey);
+  }
   await requireSchool(tenantId); const session=await activeSession(tenantId); if(!session)throw new Error("Create and activate an academic session first");
   const now=new Date().toISOString(), actorId=await stableUserId(actor.email); await ensureUser(actorId,actor,now);
   let resourceType="operation", resourceId="";

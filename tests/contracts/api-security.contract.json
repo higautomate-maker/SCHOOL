@@ -128,7 +128,7 @@
       "tenantRequired": true,
       "entitlementRequired": true,
       "resourceScope": "tenant_and_assignment",
-      "idempotency": "planned"
+      "idempotency": "implemented"
     },
     {
       "id": "school.roles.view",

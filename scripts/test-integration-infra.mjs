@@ -76,6 +76,24 @@ try {
   const seed = readFileSync("db/postgres/seed-demo.sql", "utf8");
   docker(psql, { input: seed });
   docker(psql, { input: seed });
+  docker(psql, {
+    input: `
+      CREATE OR REPLACE FUNCTION stage4_fail_school_idempotency()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        IF NEW.operation = 'school.create' AND NEW.key = 'stage4-school-rollback' THEN
+          RAISE EXCEPTION 'intentional school onboarding rollback';
+        END IF;
+        RETURN NEW;
+      END
+      $$;
+      CREATE TRIGGER stage4_school_idempotency_failure
+      BEFORE INSERT ON idempotency_records
+      FOR EACH ROW EXECUTE FUNCTION stage4_fail_school_idempotency();
+    `,
+  });
   docker([
     ...psql,
     "-c",
