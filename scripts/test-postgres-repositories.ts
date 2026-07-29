@@ -153,6 +153,10 @@ try {
     "stage3-student-create",
   );
   assert.equal(student.fullName, "Aarav Mehta");
+  assert.equal(typeof student.dateOfBirth, "string");
+  assert.equal(typeof student.admissionDate, "string");
+  assert.equal(student.dateOfBirth, studentInput.dateOfBirth);
+  assert.equal(student.admissionDate, studentInput.admissionDate);
   assert.deepEqual(
     await findPostgresStudentReplay(
       tenantId,

@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
 import type { StudentRecord } from "./repository.ts";
 import {
+  calendarDateString,
   ensurePostgresActor,
   isPostgresUniqueViolation,
   requirePostgresSchool,
@@ -11,7 +12,12 @@ import {
 import { withTenantDatabase } from "../runtime/postgres.ts";
 import type { CreateStudentInput } from "./validation.ts";
 
-type StudentRow = Omit<StudentRecord, "fullName" | "createdAt"> & {
+type StudentRow = Omit<
+  StudentRecord,
+  "fullName" | "dateOfBirth" | "admissionDate" | "createdAt"
+> & {
+  dateOfBirth: Date | string;
+  admissionDate: Date | string;
   createdAt: Date | string;
 };
 type ReplayRow = { response: unknown };
@@ -202,6 +208,8 @@ FROM students`;
 function toStudentRecord(row: StudentRow): StudentRecord {
   return {
     ...row,
+    dateOfBirth: calendarDateString(row.dateOfBirth),
+    admissionDate: calendarDateString(row.admissionDate),
     createdAt: timestampString(row.createdAt),
     fullName: `${row.firstName} ${row.lastName}`.trim(),
   };
@@ -224,5 +232,8 @@ async function readReplay(
      LIMIT 1`,
     [tenantId, key, actorEmail.toLowerCase()],
   );
-  return result.rows[0]?.response as StudentRecord | undefined ?? null;
+  const response = result.rows[0]?.response;
+  return response
+    ? toStudentRecord(response as StudentRow)
+    : null;
 }

@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
 import type { FoundationState } from "./repository.ts";
 import {
+  calendarDateString,
   ensurePostgresActor,
   isPostgresUniqueViolation,
   requirePostgresSchool,
@@ -12,8 +13,8 @@ import type { FoundationAction } from "./validation.ts";
 type SessionRow = {
   id: string;
   name: string;
-  startsOn: string;
-  endsOn: string;
+  startsOn: Date | string;
+  endsOn: Date | string;
   status: "planned" | "active" | "closed";
 };
 type ClassRow = {
@@ -299,7 +300,11 @@ async function readFoundation(
   const remaining = checks.filter(([, done]) => !done).map(([label]) => label);
 
   return {
-    sessions: sessionResult.rows,
+    sessions: sessionResult.rows.map((session) => ({
+      ...session,
+      startsOn: calendarDateString(session.startsOn),
+      endsOn: calendarDateString(session.endsOn),
+    })),
     classes,
     subjects: subjectResult.rows,
     settings,

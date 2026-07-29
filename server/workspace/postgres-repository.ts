@@ -5,6 +5,7 @@ import type {
   WorkspaceState,
 } from "./repository.ts";
 import {
+  calendarDateString,
   ensurePostgresActor,
   requirePostgresSchool,
   timestampString,
@@ -12,7 +13,12 @@ import {
 import { withTenantDatabase } from "../runtime/postgres.ts";
 import type { WorkspaceAction } from "./validation.ts";
 
-type ModuleRow = Omit<ModuleRecord, "amountPaise" | "createdAt" | "updatedAt"> & {
+type ModuleRow = Omit<
+  ModuleRecord,
+  "recordDate" | "dueDate" | "amountPaise" | "createdAt" | "updatedAt"
+> & {
+  recordDate: Date | string;
+  dueDate: Date | string | null;
   amountPaise: string | number | null;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -186,6 +192,8 @@ async function readWorkspace(
 
   const records: ModuleRecord[] = recordResult.rows.map((record) => ({
     ...record,
+    recordDate: calendarDateString(record.recordDate),
+    dueDate: record.dueDate ? calendarDateString(record.dueDate) : null,
     amountPaise: record.amountPaise === null ? null : Number(record.amountPaise),
     createdAt: timestampString(record.createdAt),
     updatedAt: timestampString(record.updatedAt),

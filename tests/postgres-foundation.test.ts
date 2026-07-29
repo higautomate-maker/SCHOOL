@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { calendarDateString } from "../server/runtime/postgres-repository.ts";
 import {
   postgresPoolOptions,
   readPostgresEnvironment,
@@ -24,6 +25,11 @@ test("PostgreSQL baseline uses native durable types", () => {
 test("PostgreSQL baseline has no duplicate-column tenant unique constraint", () => {
   assert.doesNotMatch(baseline, /tenants_tenant_id_uq/);
   assert.doesNotMatch(baseline, /UNIQUE\("id","id"\)/);
+});
+
+test("PostgreSQL calendar dates preserve the SQLite YYYY-MM-DD contract", () => {
+  assert.equal(calendarDateString("2012-05-12"), "2012-05-12");
+  assert.equal(calendarDateString(new Date(2012, 4, 12)), "2012-05-12");
 });
 
 test("every tenant-owned table has forced RLS and an isolation policy", () => {

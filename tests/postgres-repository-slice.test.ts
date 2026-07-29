@@ -51,10 +51,20 @@ test("practical SQLite reads schedule PostgreSQL shadow comparisons", () => {
 
 test("live repository gate covers replay, rollback, and cross-tenant isolation", () => {
   const integration = read("scripts/test-postgres-repositories.ts");
+  const management = read("server/schools/management-postgres-repository.ts");
+  assert.match(integration, /performPostgresSchoolAction/);
+  assert.match(integration, /action: "set_module"/);
+  assert.match(integration, /typeof student\.dateOfBirth, "string"/);
+  assert.match(integration, /typeof student\.admissionDate, "string"/);
   assert.match(integration, /findPostgresStudentReplay/);
   assert.match(integration, /intentional rollback/);
   assert.match(integration, /Cross-tenant write must fail/);
   assert.match(integration, /readCount: 0, writeCount: 0/);
+  assert.match(
+    management,
+    /\$1::uuid, \$2::uuid, \$3::text, 'tenant', \$4::text/,
+  );
+  assert.doesNotMatch(management, /'tenant', \$1::text/);
 });
 
 test("production repository backend remains SQLite by default", () => {

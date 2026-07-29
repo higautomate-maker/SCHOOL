@@ -116,10 +116,16 @@ export function performPostgresSchoolAction(
          id, tenant_id, actor_id, action, resource_type, resource_id,
          reason, metadata, occurred_at
        ) VALUES (
-         gen_random_uuid(), $1, $2, $3, 'tenant', $1::text,
-         'Platform administration', $4::jsonb, now()
+         gen_random_uuid(), $1::uuid, $2::uuid, $3::text, 'tenant', $4::text,
+         'Platform administration', $5::jsonb, now()
        )`,
-      [tenantId, actorId, auditAction, JSON.stringify(metadata)],
+      [
+        tenantId,
+        actorId,
+        auditAction,
+        tenantId,
+        JSON.stringify(metadata),
+      ],
     );
 
     const updated = await readSchoolDetail(client, tenantId);
