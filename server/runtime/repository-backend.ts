@@ -14,6 +14,45 @@ export function postgresShadowReadsEnabled(
   return environment.HIG_POSTGRES_SHADOW_READS === "true";
 }
 
+export type PostgresShadowMetric = {
+  comparisons: number;
+  mismatches: number;
+  failures: number;
+};
+
+const shadowMetrics = new Map<string, PostgresShadowMetric>();
+
+export function recordPostgresShadowComparison(
+  label: string,
+  outcome: "match" | "mismatch" | "failure",
+): void {
+  const metric = shadowMetrics.get(label) ?? {
+    comparisons: 0,
+    mismatches: 0,
+    failures: 0,
+  };
+  metric.comparisons += 1;
+  if (outcome === "mismatch") metric.mismatches += 1;
+  if (outcome === "failure") metric.failures += 1;
+  shadowMetrics.set(label, metric);
+  if (outcome !== "match") {
+    console.warn("PostgreSQL shadow-read comparison", {
+      repository: label,
+      outcome,
+    });
+  }
+}
+
+export function postgresShadowComparisonMetrics(): Record<string, PostgresShadowMetric> {
+  return Object.fromEntries(
+    [...shadowMetrics.entries()].map(([label, metric]) => [label, { ...metric }]),
+  );
+}
+
+export function resetPostgresShadowComparisonMetrics(): void {
+  shadowMetrics.clear();
+}
+
 export function schedulePostgresShadowRead<Result>(
   label: string,
   sqliteResult: Result,
@@ -22,11 +61,11 @@ export function schedulePostgresShadowRead<Result>(
   if (!postgresShadowReadsEnabled()) return;
   void postgresRead().then((postgresResult) => {
     if (JSON.stringify(postgresResult) !== JSON.stringify(sqliteResult)) {
-      console.warn(`PostgreSQL ${label} shadow-read mismatch`);
+      recordPostgresShadowComparison(label, "mismatch");
+    } else {
+      recordPostgresShadowComparison(label, "match");
     }
-  }).catch((error: unknown) => {
-    console.warn(`PostgreSQL ${label} shadow-read failed`, {
-      message: error instanceof Error ? error.message : "unknown error",
-    });
+  }).catch(() => {
+    recordPostgresShadowComparison(label, "failure");
   });
 }

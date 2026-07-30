@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  postgresShadowComparisonMetrics,
   postgresShadowReadsEnabled,
+  recordPostgresShadowComparison,
+  resetPostgresShadowComparisonMetrics,
   repositoryBackend,
 } from "../server/runtime/repository-backend.ts";
 
@@ -47,5 +50,16 @@ test("legacy school reader supports shadow comparison and explicit cutover", () 
   );
   assert.match(source, /repositoryBackend\(\) === "postgres"/);
   assert.match(source, /postgresShadowReadsEnabled\(\)/);
-  assert.match(source, /PostgreSQL school shadow-read mismatch/);
+  assert.match(source, /recordPostgresShadowComparison\("schools"/);
+});
+
+test("shadow comparison metrics count outcomes without retaining compared data", () => {
+  resetPostgresShadowComparisonMetrics();
+  recordPostgresShadowComparison("students", "match");
+  recordPostgresShadowComparison("students", "mismatch");
+  recordPostgresShadowComparison("students", "failure");
+  assert.deepEqual(postgresShadowComparisonMetrics(), {
+    students: { comparisons: 3, mismatches: 1, failures: 1 },
+  });
+  resetPostgresShadowComparisonMetrics();
 });

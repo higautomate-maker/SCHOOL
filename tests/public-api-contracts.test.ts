@@ -6,12 +6,20 @@ import { GET as demoSession } from "../app/api/v1/demo/session/route.ts";
 import { GET as demoState } from "../app/api/v1/demo/state/route.ts";
 import { GET as health } from "../app/api/v1/health/route.ts";
 import { GET as readiness } from "../app/api/v1/readiness/route.ts";
+import {
+  evaluateReadiness,
+  publicReadinessBody,
+} from "../server/runtime/readiness.ts";
+import {
+  sanitizedConfigurationError,
+  validateProductionEnvironment,
+} from "../server/runtime/production-environment.ts";
 
 test("health endpoint preserves its public response shape", async () => {
   const response = await health();
   const body = await response.json() as Record<string, unknown>;
   assert.equal(response.status, 200);
-  assert.deepEqual(Object.keys(body).sort(), ["region", "service", "status", "timestamp"]);
+  assert.deepEqual(Object.keys(body).sort(), ["service", "status", "timestamp"]);
   assert.equal(body.status, "ok");
   assert.equal(body.service, "hig-school");
   assert.ok(!Number.isNaN(Date.parse(String(body.timestamp))));
@@ -47,5 +55,46 @@ test("demo login rejects invalid credentials without disclosing an account", asy
   assert.deepEqual(await response.json(), { error: "Incorrect demo email or password" });
 });
 
-test.todo("readiness verifies PostgreSQL, Redis, queue, and key-provider dependencies");
-test.todo("production health/readiness responses disclose no deployment-sensitive detail");
+const productionEnvironment = {
+  HIG_REPOSITORY_BACKEND: "postgres",
+  DATABASE_URL: "postgresql://service:database-password@db.internal:5432/hig",
+  PG_SSL: "require",
+  PG_POOL_MAX: "8",
+  PG_IDLE_TIMEOUT_MS: "10000",
+  PG_CONNECTION_TIMEOUT_MS: "5000",
+  APP_URL: "https://school.example.com",
+  SESSION_SECRET: "session-secret-with-at-least-thirty-two-characters",
+  REDIS_URL: "rediss://:redis-password@redis.internal:6379",
+  HIG_QUEUE_MODE: "redis",
+  HIG_KEY_PROVIDER: "environment",
+  HIG_ENCRYPTION_KEY: "encryption-key-with-at-least-thirty-two-characters",
+};
+
+test("readiness verifies PostgreSQL, migration state, Redis, queue, and key-provider configuration", async () => {
+  const calls: string[] = [];
+  const result = await evaluateReadiness(productionEnvironment, {
+    postgres: async () => { calls.push("postgres"); },
+    migrations: async () => { calls.push("migrations"); },
+    redis: async () => { calls.push("redis"); },
+  });
+  assert.deepEqual(result, { ready: true });
+  assert.deepEqual(calls, ["postgres", "migrations", "redis"]);
+  assert.equal(validateProductionEnvironment(productionEnvironment)?.queueMode, "redis");
+});
+
+test("production health/readiness errors disclose no deployment-sensitive detail", async () => {
+  const result = await evaluateReadiness(productionEnvironment, {
+    postgres: async () => {
+      throw new Error(`could not connect to ${productionEnvironment.DATABASE_URL}`);
+    },
+  });
+  const body = publicReadinessBody(result.ready);
+  const serialized = JSON.stringify(body);
+  assert.equal(result.internalReason, "postgres");
+  assert.doesNotMatch(serialized, /database-password|db\.internal|DATABASE_URL/);
+  assert.deepEqual(Object.keys(body.checks).sort(), ["application", "tenantGuard"]);
+  assert.equal(
+    sanitizedConfigurationError(new Error(productionEnvironment.REDIS_URL)),
+    "Production configuration is invalid",
+  );
+});

@@ -1,3 +1,12 @@
+import {
+  evaluateReadiness,
+  publicReadinessBody,
+} from "../../../../server/runtime/readiness.ts";
+
 export async function GET() {
-  return Response.json({ status: "ready", checks: { application: "ok", tenantGuard: "ok" }, timestamp: new Date().toISOString() });
+  const result = await evaluateReadiness();
+  return Response.json(
+    publicReadinessBody(result.ready),
+    { status: result.ready ? 200 : 503 },
+  );
 }

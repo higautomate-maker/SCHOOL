@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 
 const suffix = `${process.pid}-${Date.now()}`;
@@ -7,6 +8,15 @@ const container = `hig-school-hostinger-${suffix}`;
 const volume = `hig-school-hostinger-data-${suffix}`;
 const readinessTimeoutMs = 90_000;
 const pollIntervalMs = 1_500;
+const timings = {};
+
+async function measured(label, operation) {
+  const started = performance.now();
+  const result = await operation();
+  timings[label] = Math.round((performance.now() - started) * 100) / 100;
+  console.log(`Stage 5 timing ${label}: ${timings[label]} ms`);
+  return result;
+}
 
 function docker(args, options = {}) {
   const result = spawnSync("docker", args, {
@@ -128,58 +138,68 @@ let volumeCreated = false;
 let containerCreated = false;
 
 try {
-  docker(["build", "--tag", image, "."]);
+  await measured("hostingerImageBuild", async () => docker(["build", "--tag", image, "."]));
   docker(["volume", "create", volume]);
   volumeCreated = true;
   const hostPort = await selectAvailableHostPort();
-  docker([
-    "run", "--detach",
-    "--name", container,
-    "--mount", `source=${volume},target=/data`,
-    "--publish", `127.0.0.1:${hostPort}:3000`,
-    image,
-  ]);
-  containerCreated = true;
-  const origin = `http://127.0.0.1:${hostPort}`;
-
-  await waitForDockerHealth();
-  await waitForHttpHealth(origin);
-
-  const login = await expectOk(`${origin}/login`);
-  if (!(await login.text()).includes("Hig School")) throw new Error("Login page did not contain the Hig School identity.");
+  let origin;
+  await measured("hostingerContainerStartup", async () => {
+    docker([
+      "run", "--detach",
+      "--name", container,
+      "--mount", `source=${volume},target=/data`,
+      "--publish", `127.0.0.1:${hostPort}:3000`,
+      image,
+    ]);
+    containerCreated = true;
+    origin = `http://127.0.0.1:${hostPort}`;
+    await waitForDockerHealth();
+    await waitForHttpHealth(origin);
+  });
 
   const persistenceTitle = `Container persistence ${suffix}`;
-  await expectOk(`${origin}/api/v1/demo/action`, {
-    method: "POST",
-    headers: {
-      authorization: "Bearer demo_school_2026",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "create_record",
-      moduleKey: "Communicate",
-      workflow: "Notice Board",
-      title: persistenceTitle,
-      description: "Created by the Hostinger container integration test.",
-      recordDate: "2026-07-29",
-      dueDate: null,
-      amountPaise: null,
-      assignee: "All users",
-      priority: "normal",
-    }),
+  await measured("hostingerSmokeTests", async () => {
+    const login = await expectOk(`${origin}/login`);
+    if (!(await login.text()).includes("Hig School")) throw new Error("Login page did not contain the Hig School identity.");
+    await expectOk(`${origin}/api/v1/demo/action`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer demo_school_2026",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "create_record",
+        moduleKey: "Communicate",
+        workflow: "Notice Board",
+        title: persistenceTitle,
+        description: "Created by the Hostinger container integration test.",
+        recordDate: "2026-07-29",
+        dueDate: null,
+        amountPaise: null,
+        assignee: "All users",
+        priority: "normal",
+      }),
+    });
   });
 
-  docker(["restart", container]);
-  await waitForDockerHealth();
-  await waitForHttpHealth(origin);
-  const state = await expectOk(`${origin}/api/v1/demo/state`, {
-    headers: { authorization: "Bearer demo_school_2026" },
+  await measured("hostingerRestartPersistence", async () => {
+    docker(["restart", container]);
+    await waitForDockerHealth();
+    await waitForHttpHealth(origin);
+    const state = await expectOk(`${origin}/api/v1/demo/state`, {
+      headers: { authorization: "Bearer demo_school_2026" },
+    });
+    const stateBody = await state.json();
+    if (!stateBody.records?.some((record) => record.title === persistenceTitle)) {
+      throw new Error("Demo mutation did not survive the container restart.");
+    }
   });
-  const stateBody = await state.json();
-  if (!stateBody.records?.some((record) => record.title === persistenceTitle)) {
-    throw new Error("Demo mutation did not survive the container restart.");
-  }
 
+  writeFileSync(
+    "/tmp/hig-stage5-hostinger-timings.json",
+    `${JSON.stringify(timings, null, 2)}\n`,
+    { mode: 0o600 },
+  );
   console.log("Hostinger image, health, login, and restart-persistence checks passed.");
 } catch (error) {
   printDiagnostics();

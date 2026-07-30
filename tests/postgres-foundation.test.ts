@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { readdirSync } from "node:fs";
 import { calendarDateString } from "../server/runtime/postgres-repository.ts";
 import {
   postgresPoolOptions,
@@ -8,6 +9,14 @@ import {
   type TenantTransactionClient,
   withTenantTransaction,
 } from "../server/runtime/postgres.ts";
+import { POSTGRES_MIGRATION_NAMES } from "../server/runtime/postgres-migrations.ts";
+
+test("runtime migration manifest matches every ordered PostgreSQL migration", () => {
+  const disk = readdirSync(new URL("../drizzle-postgres", import.meta.url))
+    .filter((name) => name.endsWith(".sql"))
+    .sort();
+  assert.deepEqual([...POSTGRES_MIGRATION_NAMES], disk);
+});
 
 const baseline = readFileSync(new URL("../drizzle-postgres/0000_messy_blade.sql", import.meta.url), "utf8");
 const rls = readFileSync(new URL("../drizzle-postgres/0001_tenant_rls.sql", import.meta.url), "utf8");

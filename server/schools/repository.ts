@@ -1,6 +1,10 @@
 import { database } from "@db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
-import { postgresShadowReadsEnabled, repositoryBackend } from "../runtime/repository-backend";
+import {
+  postgresShadowReadsEnabled,
+  recordPostgresShadowComparison,
+  repositoryBackend,
+} from "../runtime/repository-backend";
 import type { CreateSchoolInput } from "./validation";
 
 export type SchoolSummary = {
@@ -78,15 +82,12 @@ async function comparePostgresSchoolRead(legacy: SchoolSummary[]): Promise<void>
     const legacyIds = legacy.map((school) => school.tenantId).sort();
     const postgresIds = page.schools.map((school) => school.tenantId).sort();
     if (JSON.stringify(legacyIds) !== JSON.stringify(postgresIds)) {
-      console.warn("PostgreSQL school shadow-read mismatch", {
-        legacyCount: legacyIds.length,
-        postgresCount: postgresIds.length,
-      });
+      recordPostgresShadowComparison("schools", "mismatch");
+    } else {
+      recordPostgresShadowComparison("schools", "match");
     }
-  } catch (error) {
-    console.warn("PostgreSQL school shadow-read failed", {
-      message: error instanceof Error ? error.message : "unknown error",
-    });
+  } catch {
+    recordPostgresShadowComparison("schools", "failure");
   }
 }
 
