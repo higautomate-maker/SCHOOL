@@ -1,0 +1,11 @@
+services:
+  app:
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.higschoolstaging.rule: "Host(`staging-school.higaai.com`)"
+      traefik.http.routers.higschoolstaging.entrypoints: "websecure"
+      traefik.http.routers.higschoolstaging.tls: "true"
+      traefik.http.routers.higschoolstaging.tls.certresolver: "letsencrypt"
+      traefik.http.routers.higschoolstaging.service: "higschoolstaging"
+      traefik.http.services.higschoolstaging.loadbalancer.server.port: "3000"
+      traefik.http.services.higschoolstaging.loadbalancer.server.scheme: "http"
