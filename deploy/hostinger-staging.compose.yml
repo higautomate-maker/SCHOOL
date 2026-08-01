@@ -1,0 +1,53 @@
+name: staging-school
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: runner
+    image: hig-school-staging-app:${STAGING_IMAGE_TAG:-local}
+    env_file:
+      - ../.env.staging
+    ports:
+      - "127.0.0.1:${STAGING_HOST_PORT:-3100}:3000"
+    volumes:
+      - staging_school_data:/data/staging-school
+      - staging_school_logs:/logs/staging-school
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 9
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  operator:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: staging-operator
+    image: hig-school-staging-operator:${STAGING_IMAGE_TAG:-local}
+    env_file:
+      - ../.env.staging
+    volumes:
+      - staging_school_backups:/backups/staging-school
+    profiles:
+      - operator
+
+volumes:
+  staging_school_data:
+    name: staging_school_data
+  staging_school_logs:
+    name: staging_school_logs
+  staging_school_backups:
+    name: staging_school_backups

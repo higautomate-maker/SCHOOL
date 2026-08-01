@@ -149,6 +149,8 @@ try {
       "--name", container,
       "--mount", `source=${volume},target=/data`,
       "--publish", `127.0.0.1:${hostPort}:3000`,
+      "--env", "HIG_DEPLOYMENT_ENV=sales-demo",
+      "--env", "HIG_SALES_DEMO=true",
       image,
     ]);
     containerCreated = true;

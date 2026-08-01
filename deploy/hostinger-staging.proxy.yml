@@ -1,0 +1,21 @@
+services:
+  app:
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.staging-school.rule: "Host(`staging-school.higaai.com`)"
+      traefik.http.routers.staging-school.entrypoints: "websecure"
+      traefik.http.routers.staging-school.tls: "true"
+      traefik.http.routers.staging-school.tls.certresolver: "letsencrypt"
+      traefik.http.routers.staging-school.service: "staging-school"
+      traefik.http.routers.staging-school.middlewares: "staging-school-operator-only,staging-school-identity"
+      traefik.http.services.staging-school.loadbalancer.server.port: "3000"
+      traefik.http.middlewares.staging-school-operator-only.ipallowlist.sourcerange: "${STAGING_OPERATOR_IP:?Set STAGING_OPERATOR_IP}/32"
+      traefik.http.middlewares.staging-school-identity.headers.customrequestheaders.oai-authenticated-user-email: "staging.platform@higschool.test"
+      traefik.http.middlewares.staging-school-identity.headers.customrequestheaders.oai-authenticated-user-full-name: "Stage%206%20Platform"
+      traefik.http.middlewares.staging-school-identity.headers.customrequestheaders.oai-authenticated-user-full-name-encoding: "percent-encoded-utf-8"
+      traefik.http.routers.staging-school-internal.rule: "Host(`staging-school.higaai.com`) && ClientIP(`${STAGING_OPERATOR_SUBNET:?Set STAGING_OPERATOR_SUBNET}`)"
+      traefik.http.routers.staging-school-internal.entrypoints: "websecure"
+      traefik.http.routers.staging-school-internal.tls: "true"
+      traefik.http.routers.staging-school-internal.tls.certresolver: "letsencrypt"
+      traefik.http.routers.staging-school-internal.service: "staging-school"
+      traefik.http.routers.staging-school-internal.priority: "200"

@@ -9,6 +9,10 @@ ENV HIG_RUNTIME=node
 RUN npm run build:hostinger
 RUN npm run check:hostinger-bundle
 
+FROM builder AS staging-operator
+RUN apk add --no-cache postgresql16-client
+CMD ["npm", "run", "staging:validate"]
+
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production

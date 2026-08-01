@@ -91,41 +91,43 @@ try {
     schoolReplays: "1",
   });
 
-  await assert.rejects(
-    () => createPostgresSchool(
-      {
-        name: "HIG Greenfield Rollback School",
-        city: "Noida",
-        plan: "Starter",
-        adminEmail: "greenfield.rollback@higschool.test",
-      },
-      actor,
-      "greenfield-school-rollback",
-    ),
-    /intentional greenfield onboarding rollback/,
-  );
-  const rolledBack = await withPlatformReadDatabase(
-    async (_database, client) => client.query<{
-      tenants: string;
-      users: string;
-      plans: string;
-    }>(
-      `SELECT
-         (SELECT count(*)::text FROM tenants WHERE name = $1::text) AS tenants,
-         (SELECT count(*)::text FROM users WHERE email = $2::text) AS users,
-         (SELECT count(*)::text FROM plans WHERE name = $3::text) AS plans`,
-      [
-        "HIG Greenfield Rollback School",
-        "greenfield.rollback@higschool.test",
-        "Starter",
-      ],
-    ),
-  );
-  assert.deepEqual(rolledBack.rows[0], {
-    tenants: "0",
-    users: "0",
-    plans: "0",
-  });
+  if (process.env.HIG_GREENFIELD_ROLLBACK_TRIGGER_READY === "true") {
+    await assert.rejects(
+      () => createPostgresSchool(
+        {
+          name: "HIG Greenfield Rollback School",
+          city: "Noida",
+          plan: "Starter",
+          adminEmail: "greenfield.rollback@higschool.test",
+        },
+        actor,
+        "greenfield-school-rollback",
+      ),
+      /intentional greenfield onboarding rollback/,
+    );
+    const rolledBack = await withPlatformReadDatabase(
+      async (_database, client) => client.query<{
+        tenants: string;
+        users: string;
+        plans: string;
+      }>(
+        `SELECT
+           (SELECT count(*)::text FROM tenants WHERE name = $1::text) AS tenants,
+           (SELECT count(*)::text FROM users WHERE email = $2::text) AS users,
+           (SELECT count(*)::text FROM plans WHERE name = $3::text) AS plans`,
+        [
+          "HIG Greenfield Rollback School",
+          "greenfield.rollback@higschool.test",
+          "Starter",
+        ],
+      ),
+    );
+    assert.deepEqual(rolledBack.rows[0], {
+      tenants: "0",
+      users: "0",
+      plans: "0",
+    });
+  }
 
   const configuration = await applyPostgresConfigurationAction(
     school.tenantId,
@@ -413,17 +415,17 @@ try {
   assert.equal(state.invoices.length, 1);
   assert.equal(state.payments.length, 1);
 
-  const otherTenant = crypto.randomUUID();
-  await withPlatformReadDatabase(async (_database, client) => {
-    await client.query(
-      `SELECT set_config('app.platform_create', 'true', true)`,
-    );
-    await client.query(
-      `INSERT INTO tenants (id, name, slug, status, country_code)
-       VALUES ($1::uuid, 'Greenfield Isolation School', $2::text, 'active', 'IN')`,
-      [otherTenant, `greenfield-isolation-${otherTenant.slice(0, 6)}`],
-    );
-  });
+  const isolationSchool = await createPostgresSchool(
+    {
+      name: "HIG Greenfield Isolation School",
+      city: "Jaipur",
+      plan: "Starter",
+      adminEmail: "greenfield.isolation@higschool.test",
+    },
+    actor,
+    "greenfield-isolation-school-create",
+  );
+  const otherTenant = isolationSchool.tenantId;
   const isolation = await withTenantDatabase(
     otherTenant,
     async (_database, client) => {

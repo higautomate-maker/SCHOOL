@@ -69,6 +69,7 @@ function runGreenfieldIntegration(databaseUrl) {
       PG_POOL_MAX: "2",
       HIG_REPOSITORY_BACKEND: "postgres",
       HIG_POSTGRES_SHADOW_READS: "false",
+      HIG_GREENFIELD_ROLLBACK_TRIGGER_READY: "true",
     },
     "Greenfield PostgreSQL integration checks failed",
   );

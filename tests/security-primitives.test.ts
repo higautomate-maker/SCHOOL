@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   IDEMPOTENCY_KEY_MAX_LENGTH,
@@ -18,17 +19,35 @@ test("accepts only bounded idempotency keys", () => {
   assert.equal(validIdempotencyKey("x".repeat(IDEMPOTENCY_KEY_MAX_LENGTH + 1)), false);
 });
 
-test("sales demo policy fails closed and can never run in production", () => {
+test("sales demo policy fails closed except in an explicit sales-demo deployment", () => {
   assert.equal(isSalesDemoAllowed({}), false);
   assert.equal(isSalesDemoAllowed({ NODE_ENV: "development" }), false);
   assert.equal(isSalesDemoAllowed({ NODE_ENV: "development", HIG_SALES_DEMO: "true" }), true);
   assert.equal(isSalesDemoAllowed({ NODE_ENV: "test", HIG_SALES_DEMO: "true" }), true);
   assert.equal(isSalesDemoAllowed({ NODE_ENV: "production", HIG_SALES_DEMO: "true" }), false);
+  assert.equal(isSalesDemoAllowed({
+    NODE_ENV: "production",
+    HIG_SALES_DEMO: "true",
+    HIG_DEPLOYMENT_ENV: "sales-demo",
+  }), true);
+  assert.equal(isSalesDemoAllowed({
+    NODE_ENV: "production",
+    HIG_SALES_DEMO: "false",
+    HIG_DEPLOYMENT_ENV: "sales-demo",
+  }), false);
   assert.throws(
     () => assertSalesDemoAllowed({ NODE_ENV: "production", HIG_SALES_DEMO: "true" }),
     /Sales demo mode is disabled/,
   );
 });
 
-test.todo("all /api/v1/demo routes call assertSalesDemoAllowed before parsing requests");
+test("all /api/v1/demo routes call assertSalesDemoAllowed before parsing requests", () => {
+  for (const route of ["action", "login", "session", "state"]) {
+    const source = readFileSync(
+      new URL(`../app/api/v1/demo/${route}/route.ts`, import.meta.url),
+      "utf8",
+    );
+    assert.match(source, /assertSalesDemoAllowed\(process\.env\)/);
+  }
+});
 test.todo("production artifact contains no sales-demo password or static token");

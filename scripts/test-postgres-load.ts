@@ -11,13 +11,16 @@ import {
   getPostgresOperations,
 } from "../server/operations/postgres-repository.ts";
 
-const tenantId = "30000000-0000-4000-8000-000000000001";
+const tenantId = process.env.HIG_LOAD_TENANT_ID
+  ?? "30000000-0000-4000-8000-000000000001";
 const actor = {
   displayName: "Stage 5 Load",
   email: "stage5.load@higschool.test",
   fullName: "Stage 5 Load",
 };
 const concurrency = 4;
+const runId = crypto.randomUUID();
+const startedAt = performance.now();
 
 async function boundedMap<Result>(
   tasks: Array<() => Promise<Result>>,
@@ -62,24 +65,26 @@ try {
         note: "Stage 5 bounded load",
       },
       actor,
-      `stage5-load-attendance-${index + 1}`,
+      `stage5-load-${runId}-attendance-${index + 1}`,
     )));
 
+  const invoiceFeeType = `Stage 5 Load Invoice ${runId}`;
   const created = await applyPostgresOperation(
     tenantId,
     {
       action: "create_invoice",
       studentId: student.id,
-      feeType: "Stage 5 Load Invoice",
+      feeType: invoiceFeeType,
       amountPaise: 1_000,
       dueDate: "2026-09-01",
     },
     actor,
-    "stage5-load-invoice",
+    `stage5-load-${runId}-invoice`,
   );
-  const invoice = created.invoices.find((record) => record.feeType === "Stage 5 Load Invoice");
+  const invoice = created.invoices.find((record) => record.feeType === invoiceFeeType);
   assert.ok(invoice);
 
+  const paymentReplayKey = `stage5-load-${runId}-payment-replay`;
   const repeated = await Promise.all(Array.from({ length: concurrency }, () =>
     applyPostgresOperation(
       tenantId,
@@ -91,7 +96,7 @@ try {
         reference: "STAGE5-REPLAY",
       },
       actor,
-      "stage5-load-payment-replay",
+      paymentReplayKey,
     )));
   for (const state of repeated.slice(1)) assert.deepEqual(state, repeated[0]);
 
@@ -105,20 +110,21 @@ try {
     400,
   );
 
+  const protectedFeeType = `Stage 5 Concurrent Protection ${runId}`;
   const protectedInvoiceState = await applyPostgresOperation(
     tenantId,
     {
       action: "create_invoice",
       studentId: student.id,
-      feeType: "Stage 5 Concurrent Protection",
+      feeType: protectedFeeType,
       amountPaise: 500,
       dueDate: "2026-09-02",
     },
     actor,
-    "stage5-load-protected-invoice",
+    `stage5-load-${runId}-protected-invoice`,
   );
   const protectedInvoice = protectedInvoiceState.invoices.find(
-    (record) => record.feeType === "Stage 5 Concurrent Protection",
+    (record) => record.feeType === protectedFeeType,
   );
   assert.ok(protectedInvoice);
   const protectedPayments = await Promise.allSettled([
@@ -132,7 +138,7 @@ try {
         reference: "STAGE5-PROTECTED-A",
       },
       actor,
-      "stage5-load-protected-payment-a",
+      `stage5-load-${runId}-protected-payment-a`,
     ),
     applyPostgresOperation(
       tenantId,
@@ -144,7 +150,7 @@ try {
         reference: "STAGE5-PROTECTED-B",
       },
       actor,
-      "stage5-load-protected-payment-b",
+      `stage5-load-${runId}-protected-payment-b`,
     ),
   ]);
   assert.equal(protectedPayments.filter((result) => result.status === "fulfilled").length, 1);
@@ -163,13 +169,33 @@ try {
       `SELECT
          (SELECT count(*)::int FROM fee_payments WHERE tenant_id = $1::uuid AND invoice_id = $2::uuid) AS payments,
          (SELECT count(*)::int FROM idempotency_records WHERE tenant_id = $1::uuid AND key = $3::text) AS records`,
-      [tenantId, invoice.id, "stage5-load-payment-replay"],
+      [tenantId, invoice.id, paymentReplayKey],
     );
     return result.rows[0];
   });
   assert.deepEqual(databaseCounts, { payments: 1, records: 1 });
   assert.equal(pool.waitingCount, 0);
   assert.ok(pool.totalCount <= 4, `Pool exceeded configured bound: ${pool.totalCount}`);
+  const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
+  console.log(JSON.stringify({
+    concurrency,
+    readRequests: 24,
+    attendanceWrites: concurrency,
+    duplicatePaymentRequests: concurrency,
+    concurrentOverpaymentAttempts: 2,
+    expectedProtectedSuccesses: 1,
+    expectedProtectedFailures: 1,
+    durationMs,
+    approximateThroughputPerSecond: Math.round(
+      ((24 + concurrency + concurrency + 2) / durationMs) * 100_000,
+    ) / 100,
+    pool: {
+      configuredMaximum: 4,
+      total: pool.totalCount,
+      idle: pool.idleCount,
+      waiting: pool.waitingCount,
+    },
+  }));
   console.log("Bounded PostgreSQL load, pool, replay, and payment-concurrency checks passed.");
 } finally {
   await pool.end();
