@@ -6,4 +6,5 @@ export const POSTGRES_MIGRATION_NAMES = [
   "0002_platform_read_rls.sql",
   "0003_milky_juggernaut.sql",
   "0004_auth_hardening.sql",
+  "0005_notifications_queues.sql",
 ] as const;
