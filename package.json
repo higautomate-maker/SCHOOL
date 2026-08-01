@@ -46,7 +46,8 @@
     "check:hostinger-bundle": "node scripts/check-hostinger-bundle.mjs",
     "auth:bootstrap-platform-admin": "node --experimental-strip-types scripts/bootstrap-platform-admin.ts",
     "stage8:test": "node --experimental-strip-types --test tests/stage8-*.test.ts",
-    "stage8:worker": "node --experimental-strip-types scripts/stage8-worker.ts"
+    "stage8:worker": "node --experimental-strip-types scripts/stage8-worker.ts",
+    "stage8:worker:health": "node --experimental-strip-types scripts/stage8-worker-health.ts"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.49.0",

@@ -1,8 +1,13 @@
-import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
+import { hostname } from "node:os";
 import { ZodError } from "zod";
+import {
+  dispatchNotificationDeliveries,
+  expandNotificationDeliveryPlans,
+} from "./adapters.ts";
 import { routeNotificationEvent } from "./contracts.ts";
 import { readNotificationEnvironment, type NotificationEnvironment } from "./environment.ts";
+import { writeNotificationWorkerHeartbeat } from "./heartbeat.ts";
 import {
   claimOutboxBatch,
   completeOutboxEvent,
@@ -84,23 +89,37 @@ export async function runNotificationWorker(options: {
   }
   const workerId = options.workerId ?? buildWorkerId();
   const dependencies = options.dependencies ?? defaultDependencies;
+  const heartbeat = async (
+    status: "starting" | "ready" | "degraded" | "stopped",
+    processed: number,
+    code: string | null,
+  ) => writeNotificationWorkerHeartbeat(config.HIG_QUEUE_HEARTBEAT_PATH, {
+    workerId,
+    status,
+    processed,
+    code,
+  });
   const stopWake = () => {
     void closeNotificationRedisClients();
   };
   options.signal?.addEventListener("abort", stopWake, { once: true });
+  await heartbeat("starting", 0, null);
 
   try {
     while (!options.signal?.aborted) {
       try {
         const processed = await processNotificationBatch(config, workerId, dependencies);
+        await heartbeat("ready", processed, null);
         if (processed > 0) continue;
         await waitForNotificationWake(config.HIG_QUEUE_POLL_INTERVAL_MS, environment);
       } catch (error) {
         if (options.signal?.aborted) break;
+        const code = notificationFailureCode(error);
+        await heartbeat("degraded", 0, code).catch(() => undefined);
         console.error(JSON.stringify({
           service: "hig-school-notification-worker",
           status: "iteration_failed",
-          code: notificationFailureCode(error),
+          code,
         }));
         await abortableDelay(config.HIG_QUEUE_POLL_INTERVAL_MS, options.signal);
       }
@@ -108,6 +127,7 @@ export async function runNotificationWorker(options: {
   } finally {
     options.signal?.removeEventListener("abort", stopWake);
     await closeNotificationRedisClients();
+    await heartbeat("stopped", 0, null).catch(() => undefined);
   }
 }
 
@@ -117,8 +137,10 @@ async function processClaimedEvent(
   dependencies: NotificationWorkerDependencies,
 ): Promise<void> {
   try {
-    const plans = routeNotificationEvent(claimed.event);
-    await dependencies.completeEvent(claimed, plans);
+    const basePlans = routeNotificationEvent(claimed.event);
+    const plans = expandNotificationDeliveryPlans(basePlans);
+    const outcomes = await dispatchNotificationDeliveries(claimed.event, plans, config);
+    await dependencies.completeEvent(claimed, outcomes);
   } catch (error) {
     const delayMs = retryDelay(
       claimed.attempts,

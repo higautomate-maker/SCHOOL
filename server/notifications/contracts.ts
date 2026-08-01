@@ -48,9 +48,18 @@ export type NotificationEvent = {
 export type DeliveryPlan = {
   recipientType: NotificationRecipientType;
   recipientId: string | null;
-  channel: "in_app";
+  channel: NotificationChannel;
   templateKey: string;
   payload: Record<string, unknown>;
+};
+
+export type DeliveryOutcome = {
+  plan: DeliveryPlan;
+  provider: string;
+  status: "delivered" | "skipped";
+  errorCode: string | null;
+  providerMessageId: string | null;
+  metadata: Record<string, unknown>;
 };
 
 export function normalizeOutboxEvent(row: unknown): NotificationEvent {

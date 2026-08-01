@@ -31,6 +31,36 @@ services:
         max-size: 10m
         max-file: "5"
 
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: notification-worker
+    image: hig-school-staging-worker:${STAGING_IMAGE_TAG:-local}
+    env_file:
+      - ../.env.staging
+    environment:
+      HIG_QUEUE_WORKER_ENABLED: "true"
+      HIG_QUEUE_HEARTBEAT_PATH: /logs/staging-school/notification-worker-heartbeat.json
+    volumes:
+      - staging_school_logs:/logs/staging-school
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - npm
+        - run
+        - stage8:worker:health
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
   operator:
     build:
       context: ..

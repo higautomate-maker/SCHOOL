@@ -3,7 +3,7 @@ import { getPostgresPool } from "../runtime/postgres.ts";
 import {
   normalizeOutboxEvent,
   notificationTopics,
-  type DeliveryPlan,
+  type DeliveryOutcome,
   type NotificationEvent,
 } from "./contracts.ts";
 
@@ -89,7 +89,7 @@ export async function claimOutboxBatch(
 
 export async function completeOutboxEvent(
   claimed: ClaimedOutboxEvent,
-  plans: readonly DeliveryPlan[],
+  outcomes: readonly DeliveryOutcome[],
 ): Promise<number> {
   return withQueueTransaction(async (client) => {
     const lease = await client.query<{ id: string }>(
@@ -104,27 +104,32 @@ export async function completeOutboxEvent(
     if (!lease.rows[0]) throw new Error("notification_queue_lease_lost");
 
     let created = 0;
-    for (const plan of plans) {
+    for (const outcome of outcomes) {
       const delivery = await client.query<{ id: string }>(
         `INSERT INTO notification_deliveries (
            tenant_id, outbox_event_id, recipient_type, recipient_id,
            channel, template_key, payload, status, attempts,
-           available_at, delivered_at, created_at, updated_at
+           available_at, delivered_at, last_error, provider_message_id,
+           created_at, updated_at
          ) VALUES (
            $1::uuid, $2::uuid, $3::text, $4::uuid,
-           $5::text, $6::text, $7::jsonb, 'delivered', 1,
-           now(), now(), now(), now()
+           $5::text, $6::text, $7::jsonb, $8::text, 1,
+           now(), CASE WHEN $8::text = 'delivered' THEN now() ELSE NULL END,
+           $9::text, $10::text, now(), now()
          )
          ON CONFLICT DO NOTHING
          RETURNING id`,
         [
           claimed.event.tenantId,
           claimed.event.eventId,
-          plan.recipientType,
-          plan.recipientId,
-          plan.channel,
-          plan.templateKey,
-          JSON.stringify(plan.payload),
+          outcome.plan.recipientType,
+          outcome.plan.recipientId,
+          outcome.plan.channel,
+          outcome.plan.templateKey,
+          JSON.stringify(outcome.plan.payload),
+          outcome.status,
+          outcome.errorCode,
+          outcome.providerMessageId,
         ],
       );
       const deliveryId = delivery.rows[0]?.id;
@@ -133,16 +138,22 @@ export async function completeOutboxEvent(
       await client.query(
         `INSERT INTO notification_delivery_attempts (
            tenant_id, delivery_id, attempt_number, channel, provider,
-           status, started_at, completed_at, metadata
+           status, error_code, provider_message_id,
+           started_at, completed_at, metadata
          ) VALUES (
-           $1::uuid, $2::uuid, 1, $3::text, 'internal',
-           'delivered', now(), now(), $4::jsonb
+           $1::uuid, $2::uuid, 1, $3::text, $4::text,
+           $5::text, $6::text, $7::text,
+           now(), now(), $8::jsonb
          )`,
         [
           claimed.event.tenantId,
           deliveryId,
-          plan.channel,
-          JSON.stringify({ durable: true }),
+          outcome.plan.channel,
+          outcome.provider,
+          outcome.status,
+          outcome.errorCode,
+          outcome.providerMessageId,
+          JSON.stringify(outcome.metadata),
         ],
       );
     }
