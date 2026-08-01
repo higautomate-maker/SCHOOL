@@ -1,8 +1,11 @@
 import { addDemoNotification, demoAccountFromRequest, demoOperations, demoWorkspace, getDemoState, touchDemoState } from "../../../../../server/demo-store.ts";
+import { assertSalesDemoAllowed } from "../../../../../server/runtime/demo-mode.ts";
 
 const writeRoles = new Set(["company", "school_admin", "staff", "parent", "driver"]);
 
 export async function POST(request: Request) {
+  try { assertSalesDemoAllowed(process.env); }
+  catch { return Response.json({ error: "Not found" }, { status: 404 }); }
   const account = demoAccountFromRequest(request);
   if (!account) return Response.json({ error: "Authentication required" }, { status: 401 });
   if (!writeRoles.has(account.role)) return Response.json({ error: "This demo role is read-only" }, { status: 403 });

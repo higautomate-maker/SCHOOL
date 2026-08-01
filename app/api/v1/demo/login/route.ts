@@ -1,6 +1,9 @@
 import { demoAccounts } from "../../../../../server/demo-store.ts";
+import { assertSalesDemoAllowed } from "../../../../../server/runtime/demo-mode.ts";
 
 export async function POST(request: Request) {
+  try { assertSalesDemoAllowed(process.env); }
+  catch { return Response.json({ error: "Not found" }, { status: 404 }); }
   const body = await request.json().catch(() => null) as { email?: string; password?: string } | null;
   const email = body?.email?.trim().toLowerCase() ?? "";
   const account = demoAccounts.find((item) => item.email === email && item.password === body?.password);

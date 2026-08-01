@@ -1,6 +1,9 @@
 import { demoAccountFromRequest, demoOperations, demoWorkspace, getDemoState } from "../../../../../server/demo-store.ts";
+import { assertSalesDemoAllowed } from "../../../../../server/runtime/demo-mode.ts";
 
 export async function GET(request: Request) {
+  try { assertSalesDemoAllowed(process.env); }
+  catch { return Response.json({ error: "Not found" }, { status: 404 }); }
   const account = demoAccountFromRequest(request);
   if (!account) return Response.json({ error: "Authentication required" }, { status: 401 });
   const state = getDemoState();
