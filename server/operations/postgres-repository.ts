@@ -10,6 +10,7 @@ import {
   timestampString,
 } from "../runtime/postgres-repository.ts";
 import { withTenantDatabase } from "../runtime/postgres.ts";
+import { wakeNotificationWorker } from "../notifications/redis-wake.ts";
 
 type AttendanceRow = {
   id: string;
@@ -84,7 +85,7 @@ export async function applyPostgresOperation(
   idempotencyKey: string,
 ): Promise<OperationsState> {
   try {
-    return await withTenantDatabase(tenantId, async (_database, client) => {
+    const committed = await withTenantDatabase(tenantId, async (_database, client) => {
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
         [`${tenantId}:${idempotencyKey}`],
@@ -97,7 +98,7 @@ export async function applyPostgresOperation(
         actor.email,
         operation,
       );
-      if (replay) return replay;
+      if (replay) return { state: replay, outboxEventId: null };
 
       await requirePostgresSchool(client, tenantId);
       const sessionId = await activeSessionId(client, tenantId);
@@ -106,6 +107,7 @@ export async function applyPostgresOperation(
 
       let resourceType: "attendance" | "fee_invoice" | "fee_payment";
       let resourceId: string;
+      let notificationPayload: Record<string, unknown>;
       if (action.action === "mark_attendance") {
         await requireStudent(client, tenantId, action.studentId);
         const result = await client.query<{ id: string }>(
@@ -135,6 +137,7 @@ export async function applyPostgresOperation(
         );
         resourceType = "attendance";
         resourceId = requireReturnedId(result.rows[0], "Attendance");
+        notificationPayload = { ...action, studentId: action.studentId };
       } else if (action.action === "create_invoice") {
         await requireStudent(client, tenantId, action.studentId);
         const result = await client.query<{ id: string }>(
@@ -159,6 +162,7 @@ export async function applyPostgresOperation(
         );
         resourceType = "fee_invoice";
         resourceId = requireReturnedId(result.rows[0], "Fee invoice");
+        notificationPayload = { ...action, studentId: action.studentId };
       } else {
         const invoiceResult = await client.query<InvoiceBalanceRow>(
           `SELECT
@@ -202,6 +206,11 @@ export async function applyPostgresOperation(
         resourceType = "fee_payment";
         resourceId = requireReturnedId(paymentResult.rows[0], "Fee payment");
         const nextPaidPaise = paidPaise + action.amountPaise;
+        notificationPayload = {
+          ...action,
+          studentId: invoice.studentId,
+          balancePaise: amountPaise - nextPaidPaise,
+        };
         await client.query(
           `UPDATE fee_invoices
            SET paid_paise = $1::bigint,
@@ -227,13 +236,13 @@ export async function applyPostgresOperation(
         resourceId,
         action,
       );
-      await insertOutbox(
+      const outboxEventId = await insertOutbox(
         client,
         tenantId,
         operation,
         resourceType,
         resourceId,
-        action,
+        notificationPayload,
       );
       const state = await readOperations(client, tenantId, sessionId);
       await client.query(
@@ -253,8 +262,12 @@ export async function applyPostgresOperation(
           JSON.stringify(state),
         ],
       );
-      return state;
+      return { state, outboxEventId };
     });
+    if (committed.outboxEventId) {
+      void wakeNotificationWorker().catch(() => undefined);
+    }
+    return committed.state;
   } catch (error) {
     if (isPostgresUniqueViolation(error)) {
       const replay = await findPostgresOperationReplay(
@@ -458,18 +471,20 @@ async function insertOutbox(
   topic: string,
   aggregateType: string,
   aggregateId: string,
-  action: OperationAction,
-): Promise<void> {
-  await client.query(
+  payload: Record<string, unknown>,
+): Promise<string> {
+  const result = await client.query<{ id: string }>(
     `INSERT INTO outbox_events (
        id, tenant_id, topic, aggregate_type, aggregate_id,
        payload, status, attempts, available_at, created_at, updated_at
      ) VALUES (
        gen_random_uuid(), $1::uuid, $2::text, $3::text, $4::text,
        $5::jsonb, 'pending', 0, now(), now(), now()
-     )`,
-    [tenantId, topic, aggregateType, aggregateId, JSON.stringify(action)],
+     )
+     RETURNING id`,
+    [tenantId, topic, aggregateType, aggregateId, JSON.stringify(payload)],
   );
+  return requireReturnedId(result.rows[0], "Outbox event");
 }
 
 function operationName(action: OperationAction["action"]): string {
