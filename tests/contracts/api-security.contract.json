@@ -58,6 +58,30 @@
       "idempotency": "implemented"
     },
     {
+      "id": "platform.schools.access.view",
+      "file": "app/api/v1/schools/[schoolId]/access/route.ts",
+      "method": "GET",
+      "scope": "platform",
+      "permission": "platform.schools.view",
+      "module": null,
+      "tenantRequired": false,
+      "entitlementRequired": false,
+      "resourceScope": "requested_school_access_policy",
+      "idempotency": "not_applicable"
+    },
+    {
+      "id": "platform.schools.access.manage",
+      "file": "app/api/v1/schools/[schoolId]/access/route.ts",
+      "method": "PATCH",
+      "scope": "platform",
+      "permission": "platform.schools.manage",
+      "module": null,
+      "tenantRequired": false,
+      "entitlementRequired": false,
+      "resourceScope": "requested_school_access_policy",
+      "idempotency": "implemented"
+    },
+    {
       "id": "school.configuration.view",
       "file": "app/api/v1/schools/[schoolId]/configuration/route.ts",
       "method": "GET",

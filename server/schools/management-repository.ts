@@ -7,6 +7,7 @@ import {
 import type { SchoolAction } from "./management-validation";
 import { deliverInvitation } from "../auth/email.ts";
 import { randomToken as authRandomToken,sha256 as authTokenHash } from "../auth/crypto.ts";
+import { schoolModuleCatalogue } from "../access/catalogue.ts";
 
 export type SchoolDetail = {
   tenantId: string;
@@ -25,13 +26,6 @@ type DetailRow = { id: string; name: string; status: string; city: string | null
 type ModuleRow = { module_key: string; enabled: number };
 type AuditRow = { id: string; action: string; occurred_at: string; metadata_json: string };
 
-const labels: Record<string, string> = {
-  student_information: "Student Information",
-  fees_finance: "Fees & Finance",
-  attendance: "Attendance",
-  examinations: "Examinations",
-  communication: "Communication",
-};
 
 export async function getSchoolDetail(tenantId: string): Promise<SchoolDetail | null> {
   if (repositoryBackend() === "postgres") {
@@ -73,7 +67,7 @@ async function getSqliteSchoolDetail(tenantId: string): Promise<SchoolDetail | n
     adminEmail: school.admin_email,
     invitationStatus: school.invitation_status,
     invitationExpiresAt: school.invitation_expires_at,
-    modules: modules.results.map((module) => ({ key: module.module_key, label: labels[module.module_key] ?? module.module_key, enabled: Boolean(module.enabled) })),
+    modules: buildModulePolicies(modules.results),
     audit: audit.results.map((event) => ({ id: event.id, action: event.action, occurredAt: event.occurred_at, metadata: safeJson(event.metadata_json) })),
   };
 }
@@ -108,7 +102,13 @@ export async function performSchoolAction(tenantId: string, action: SchoolAction
     metadata = { from: current.plan, to: action.plan };
     auditAction = "subscription.plan_change";
   } else if (action.action === "set_module") {
-    statements.push(database.prepare(`UPDATE module_policies SET enabled = ?, source = 'override', updated_at = ?, updated_by = ? WHERE tenant_id = ? AND module_key = ?`).bind(action.enabled ? 1 : 0, nowIso, actorId, tenantId, action.moduleKey));
+    statements.push(database.prepare(`INSERT INTO module_policies (tenant_id, module_key, enabled, source, updated_at, updated_by)
+      VALUES (?, ?, ?, 'override', ?, ?)
+      ON CONFLICT(tenant_id, module_key) DO UPDATE SET
+        enabled = excluded.enabled,
+        source = 'override',
+        updated_at = excluded.updated_at,
+        updated_by = excluded.updated_by`).bind(tenantId, action.moduleKey, action.enabled ? 1 : 0, nowIso, actorId));
     metadata = { moduleKey: action.moduleKey, enabled: action.enabled };
     auditAction = "module.policy_change";
   } else if (action.action === "resend_invitation") {
@@ -139,6 +139,15 @@ export async function performSchoolAction(tenantId: string, action: SchoolAction
 async function getReplay(key: string, actorEmail: string): Promise<SchoolDetail | null> {
   const row = await database.prepare(`SELECT response_json FROM idempotency_records WHERE key = ? AND actor_email = ? AND operation = 'school.manage' AND expires_at > ?`).bind(key, actorEmail.toLowerCase(), new Date().toISOString()).first<{ response_json: string }>();
   return row ? JSON.parse(row.response_json) as SchoolDetail : null;
+}
+
+function buildModulePolicies(rows: readonly ModuleRow[]): SchoolDetail["modules"] {
+  const policies = new Map(rows.map((row) => [row.module_key, Boolean(row.enabled)] as const));
+  return schoolModuleCatalogue.map((moduleDefinition) => ({
+    key: moduleDefinition.key,
+    label: moduleDefinition.label,
+    enabled: policies.get(moduleDefinition.key) ?? false,
+  }));
 }
 
 function safeJson(value: string): Record<string, unknown> {

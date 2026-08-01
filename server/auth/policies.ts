@@ -2,6 +2,8 @@ export type RoutePolicy = { scope: "platform" | "tenant"; permission: string; mo
 export const policies = {
   schoolsList: { scope: "platform", permission: "platform.schools.view", module: null },
   schoolsManage: { scope: "platform", permission: "platform.schools.manage", module: null },
+  companyAccessView: { scope: "platform", permission: "platform.schools.view", module: null },
+  companyAccessManage: { scope: "platform", permission: "platform.schools.manage", module: null },
   configurationView: { scope: "tenant", permission: "settings.view", module: "settings_billing" },
   configurationManage: { scope: "tenant", permission: "settings.manage", module: "settings_billing", stepUp: true },
   foundationView: { scope: "tenant", permission: "academics.view", module: "academics" },

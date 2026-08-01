@@ -11,6 +11,7 @@ import type { SchoolDetail } from "./management-repository.ts";
 import type { SchoolAction } from "./management-validation.ts";
 import { deliverInvitation } from "../auth/email.ts";
 import { randomToken as authRandomToken,sha256 as authTokenHash } from "../auth/crypto.ts";
+import { schoolModuleCatalogue } from "../access/catalogue.ts";
 
 type DetailRow = {
   id: string;
@@ -31,13 +32,6 @@ type AuditRow = {
 };
 type ReplayRow = { response: unknown };
 
-const labels: Record<string, string> = {
-  student_information: "Student Information",
-  fees_finance: "Fees & Finance",
-  attendance: "Attendance",
-  examinations: "Examinations",
-  communication: "Communication",
-};
 
 export function getPostgresSchoolDetail(tenantId: string): Promise<SchoolDetail | null> {
   return withTenantDatabase(
@@ -76,14 +70,19 @@ export function performPostgresSchoolAction(
       auditAction = "subscription.plan_change";
     } else if (action.action === "set_module") {
       await client.query(
-        `UPDATE module_policies
-         SET enabled = $1,
-             source = 'override',
-             updated_at = now(),
-             updated_by = $2
-         WHERE tenant_id = $3
-           AND module_key = $4`,
-        [action.enabled, actorId, tenantId, action.moduleKey],
+        `INSERT INTO module_policies (
+           tenant_id, module_key, enabled, source, configuration,
+           updated_at, updated_by
+         ) VALUES (
+           $1::uuid, $2::text, $3::boolean, 'override', '{}'::jsonb,
+           now(), $4::uuid
+         )
+         ON CONFLICT (tenant_id, module_key) DO UPDATE SET
+           enabled = EXCLUDED.enabled,
+           source = 'override',
+           updated_at = now(),
+           updated_by = EXCLUDED.updated_by`,
+        [tenantId, action.moduleKey, action.enabled, actorId],
       );
       metadata = { moduleKey: action.moduleKey, enabled: action.enabled };
       auditAction = "module.policy_change";
@@ -222,11 +221,7 @@ async function readSchoolDetail(
     invitationExpiresAt: school.invitationExpiresAt
       ? timestampString(school.invitationExpiresAt)
       : null,
-    modules: moduleResult.rows.map((module) => ({
-      key: module.moduleKey,
-      label: labels[module.moduleKey] ?? module.moduleKey,
-      enabled: module.enabled,
-    })),
+    modules: buildModulePolicies(moduleResult.rows),
     audit: auditResult.rows.map((event) => ({
       id: event.id,
       action: event.action,
@@ -234,6 +229,15 @@ async function readSchoolDetail(
       metadata: jsonObject(event.metadata),
     })),
   };
+}
+
+function buildModulePolicies(rows: readonly ModuleRow[]): SchoolDetail["modules"] {
+  const policies = new Map(rows.map((row) => [row.moduleKey, row.enabled] as const));
+  return schoolModuleCatalogue.map((moduleDefinition) => ({
+    key: moduleDefinition.key,
+    label: moduleDefinition.label,
+    enabled: policies.get(moduleDefinition.key) ?? false,
+  }));
 }
 
 async function readReplay(
