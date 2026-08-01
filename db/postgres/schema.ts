@@ -33,6 +33,10 @@ export const recordStatus = pgEnum("record_status", ["draft", "open", "in_progre
 export const subjectType = pgEnum("subject_type", ["core", "elective", "cocurricular"]);
 export const outboxStatus = pgEnum("outbox_status", ["pending", "processing", "published", "failed"]);
 export const membershipStatus = pgEnum("membership_status", ["invited", "active", "suspended", "revoked"]);
+export const notificationRecipientType = pgEnum("notification_recipient_type", ["user", "staff", "student", "parent", "driver", "audience"]);
+export const notificationChannel = pgEnum("notification_channel", ["in_app", "email", "sms", "push", "capture"]);
+export const notificationDeliveryStatus = pgEnum("notification_delivery_status", ["pending", "processing", "delivered", "failed", "skipped", "dead_letter"]);
+export const notificationAttemptStatus = pgEnum("notification_attempt_status", ["started", "delivered", "failed", "skipped"]);
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -465,9 +469,96 @@ export const outboxEvents = pgTable("outbox_events", {
   availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
   publishedAt: timestamp("published_at", { withTimezone: true }),
   lastError: text("last_error"),
+  processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  workerId: text("worker_id"),
   ...timestamps,
 }, (table) => [
   index("outbox_dispatch_idx").on(table.status, table.availableAt),
+  index("outbox_lease_recovery_idx").on(table.status, table.leaseExpiresAt),
   index("outbox_tenant_aggregate_idx").on(table.tenantId, table.aggregateType, table.aggregateId),
   check("outbox_attempts_ck", sql`${table.attempts} >= 0`),
+]);
+
+
+export const notificationDeliveries = pgTable("notification_deliveries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  outboxEventId: uuid("outbox_event_id").notNull().references(() => outboxEvents.id),
+  recipientType: text("recipient_type").notNull(),
+  recipientId: uuid("recipient_id"),
+  channel: text("channel").notNull(),
+  destinationHash: text("destination_hash"),
+  templateKey: text("template_key").notNull(),
+  payload: jsonb("payload").notNull().default({}),
+  status: text("status").notNull().default("pending"),
+  attempts: bigint("attempts", { mode: "number" }).notNull().default(0),
+  availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  failedAt: timestamp("failed_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  providerMessageId: text("provider_message_id"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("notification_deliveries_tenant_id_uq").on(table.tenantId, table.id),
+  index("notification_deliveries_dispatch_idx").on(table.status, table.availableAt),
+  index("notification_deliveries_tenant_recipient_idx").on(table.tenantId, table.recipientType, table.recipientId, table.createdAt),
+  index("notification_deliveries_outbox_idx").on(table.tenantId, table.outboxEventId),
+  check("notification_deliveries_attempts_ck", sql`${table.attempts} >= 0`),
+]);
+
+export const notificationReads = pgTable("notification_reads", {
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  deliveryId: uuid("delivery_id").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ name: "notification_reads_pk", columns: [table.tenantId, table.deliveryId, table.userId] }),
+  index("notification_reads_user_idx").on(table.tenantId, table.userId, table.readAt),
+  foreignKey({
+    name: "notification_reads_tenant_delivery_fk",
+    columns: [table.tenantId, table.deliveryId],
+    foreignColumns: [notificationDeliveries.tenantId, notificationDeliveries.id],
+  }),
+]);
+
+export const notificationDeliveryAttempts = pgTable("notification_delivery_attempts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  deliveryId: uuid("delivery_id").notNull().references(() => notificationDeliveries.id),
+  attemptNumber: bigint("attempt_number", { mode: "number" }).notNull(),
+  channel: text("channel").notNull(),
+  provider: text("provider").notNull(),
+  status: text("status").notNull(),
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  providerMessageId: text("provider_message_id"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  metadata: jsonb("metadata").notNull().default({}),
+}, (table) => [
+  unique("notification_delivery_attempts_tenant_delivery_attempt_uq").on(table.tenantId, table.deliveryId, table.attemptNumber),
+  index("notification_delivery_attempts_delivery_idx").on(table.tenantId, table.deliveryId, table.attemptNumber),
+  index("notification_delivery_attempts_status_idx").on(table.status, table.startedAt),
+  check("notification_delivery_attempts_number_ck", sql`${table.attemptNumber} > 0`),
+]);
+
+export const notificationDeadLetters = pgTable("notification_dead_letters", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  outboxEventId: uuid("outbox_event_id").references(() => outboxEvents.id),
+  deliveryId: uuid("delivery_id").references(() => notificationDeliveries.id),
+  topic: text("topic").notNull(),
+  channel: text("channel"),
+  payload: jsonb("payload").notNull().default({}),
+  attempts: bigint("attempts", { mode: "number" }).notNull().default(0),
+  failureReason: text("failure_reason").notNull(),
+  failedAt: timestamp("failed_at", { withTimezone: true }).notNull().defaultNow(),
+  replayedAt: timestamp("replayed_at", { withTimezone: true }),
+  replayedBy: uuid("replayed_by"),
+}, (table) => [
+  index("notification_dead_letters_failed_idx").on(table.failedAt),
+  check("notification_dead_letters_attempts_ck", sql`${table.attempts} >= 0`),
+  check("notification_dead_letters_reference_ck", sql`${table.outboxEventId} IS NOT NULL OR ${table.deliveryId} IS NOT NULL`),
 ]);

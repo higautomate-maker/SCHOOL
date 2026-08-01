@@ -12,6 +12,8 @@ export const policies = {
   studentsManage: { scope: "tenant", permission: "students.manage", module: "student_information" },
   operationsView: { scope: "tenant", permission: "operations.view", module: null },
   operationsManage: { scope: "tenant", permission: "operations.manage", module: null },
+  notificationsView: { scope: "tenant", permission: "operations.view", module: "communication" },
+  notificationsRead: { scope: "tenant", permission: "operations.view", module: "communication" },
   workspaceView: { scope: "tenant", permission: "workspace.view", module: null },
   workspaceManage: { scope: "tenant", permission: "workspace.manage", module: null },
 } as const satisfies Record<string, RoutePolicy>;

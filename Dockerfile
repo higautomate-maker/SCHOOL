@@ -13,6 +13,15 @@ FROM builder AS staging-operator
 RUN apk add --no-cache postgresql16-client
 CMD ["npm", "run", "staging:validate"]
 
+FROM builder AS notification-worker
+ENV NODE_ENV=production
+ENV HIG_RUNTIME=node
+ENV HIG_QUEUE_WORKER_ENABLED=true
+ENV HIG_QUEUE_HEARTBEAT_PATH=/tmp/hig-school-notification-worker-heartbeat.json
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=6 \
+  CMD ["npm", "run", "stage8:worker:health"]
+CMD ["npm", "run", "stage8:worker"]
+
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production

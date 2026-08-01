@@ -202,6 +202,30 @@
       "entitlementRequired": true,
       "resourceScope": "tenant_and_assignment",
       "idempotency": "planned"
+    },
+    {
+      "id": "school.notifications.list",
+      "file": "app/api/v1/schools/[schoolId]/notifications/route.ts",
+      "method": "GET",
+      "scope": "tenant",
+      "permission": "operations.view",
+      "module": "communication",
+      "tenantRequired": true,
+      "entitlementRequired": true,
+      "resourceScope": "tenant_and_user",
+      "idempotency": "not_applicable"
+    },
+    {
+      "id": "school.notifications.read",
+      "file": "app/api/v1/schools/[schoolId]/notifications/[notificationId]/read/route.ts",
+      "method": "POST",
+      "scope": "tenant",
+      "permission": "operations.view",
+      "module": "communication",
+      "tenantRequired": true,
+      "entitlementRequired": true,
+      "resourceScope": "tenant_and_user",
+      "idempotency": "implemented"
     }
   ]
 }
