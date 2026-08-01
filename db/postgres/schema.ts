@@ -500,10 +500,27 @@ export const notificationDeliveries = pgTable("notification_deliveries", {
   providerMessageId: text("provider_message_id"),
   ...timestamps,
 }, (table) => [
+  uniqueIndex("notification_deliveries_tenant_id_uq").on(table.tenantId, table.id),
   index("notification_deliveries_dispatch_idx").on(table.status, table.availableAt),
   index("notification_deliveries_tenant_recipient_idx").on(table.tenantId, table.recipientType, table.recipientId, table.createdAt),
   index("notification_deliveries_outbox_idx").on(table.tenantId, table.outboxEventId),
   check("notification_deliveries_attempts_ck", sql`${table.attempts} >= 0`),
+]);
+
+export const notificationReads = pgTable("notification_reads", {
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  deliveryId: uuid("delivery_id").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  primaryKey({ name: "notification_reads_pk", columns: [table.tenantId, table.deliveryId, table.userId] }),
+  index("notification_reads_user_idx").on(table.tenantId, table.userId, table.readAt),
+  foreignKey({
+    name: "notification_reads_tenant_delivery_fk",
+    columns: [table.tenantId, table.deliveryId],
+    foreignColumns: [notificationDeliveries.tenantId, notificationDeliveries.id],
+  }),
 ]);
 
 export const notificationDeliveryAttempts = pgTable("notification_delivery_attempts", {

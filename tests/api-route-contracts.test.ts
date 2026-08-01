@@ -29,6 +29,8 @@ const productionRouteFiles = [
   "app/api/v1/schools/[schoolId]/configuration/route.ts",
   "app/api/v1/schools/[schoolId]/foundation/route.ts",
   "app/api/v1/schools/[schoolId]/operations/route.ts",
+  "app/api/v1/schools/[schoolId]/notifications/route.ts",
+  "app/api/v1/schools/[schoolId]/notifications/[notificationId]/read/route.ts",
   "app/api/v1/schools/[schoolId]/roles/route.ts",
   "app/api/v1/schools/[schoolId]/students/route.ts",
   "app/api/v1/schools/[schoolId]/workspace/route.ts",
