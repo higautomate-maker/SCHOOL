@@ -52,12 +52,34 @@ function runRepositoryIntegration() {
         PG_POOL_MAX: "2",
         HIG_REPOSITORY_BACKEND: "postgres",
         HIG_POSTGRES_SHADOW_READS: "false",
+        NODE_ENV: "test",
+        HIG_EMAIL_ADAPTER: "capture",
+        APP_URL: "https://repository.integration.test",
       },
     },
   );
   if (result.status !== 0) {
     throw new Error("PostgreSQL repository integration checks failed");
   }
+}
+
+function runAuthenticationIntegration() {
+  runNpm(
+    "test:integration:auth",
+    {
+      DATABASE_URL: "postgresql://hig_school_app:hig_school_app@127.0.0.1:55432/hig_school_test",
+      PG_SSL: "disable",
+      PG_POOL_MAX: "2",
+      REDIS_URL: "redis://127.0.0.1:56379",
+      HIG_REDIS_NAMESPACE: `stage7-auth-${process.pid}:`,
+      HIG_REPOSITORY_BACKEND: "postgres",
+      HIG_POSTGRES_SHADOW_READS: "false",
+      NODE_ENV: "test",
+      HIG_EMAIL_ADAPTER: "capture",
+      APP_URL: "https://auth.integration.test",
+    },
+    "PostgreSQL authentication integration checks failed",
+  );
 }
 
 function runGreenfieldIntegration(databaseUrl) {
@@ -70,6 +92,9 @@ function runGreenfieldIntegration(databaseUrl) {
       HIG_REPOSITORY_BACKEND: "postgres",
       HIG_POSTGRES_SHADOW_READS: "false",
       HIG_GREENFIELD_ROLLBACK_TRIGGER_READY: "true",
+      NODE_ENV: "test",
+      HIG_EMAIL_ADAPTER: "capture",
+      APP_URL: "https://greenfield.integration.test",
     },
     "Greenfield PostgreSQL integration checks failed",
   );
@@ -194,6 +219,7 @@ try {
   if (platformTenant !== "2") throw new Error(`Platform reader could not list schools: ${platformTenant}`);
 
   measured("repositorySmokeTests", runRepositoryIntegration);
+  measured("authenticationIntegration", runAuthenticationIntegration);
 
   measured("productionReadiness", () => runNpm(
     "test:readiness:production",

@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import styles from "./preview.module.css";
+import { DemoLogoutButton } from "../../components/demo-logout-button";
 
 type DemoState = {
   version: number;
@@ -183,7 +184,7 @@ export default function MobilePreviewPage() {
 }
 
 function AppHeader({ roleLabel, notificationCount, onNotify }: { roleLabel: string; notificationCount: number; onNotify: (message: string) => void }) {
-  return <header className={styles.header}><button aria-label="Open app menu" onClick={() => onNotify("All modules are available on this home screen")}>☰</button><div><i>H</i><span><b>Hig School</b><small>{roleLabel} app</small></span></div><nav><button aria-label="Search" onClick={() => onNotify("Search is ready for students, records and learning content")}>⌕</button><button aria-label={`Notifications ${notificationCount}`} onClick={() => onNotify(`${notificationCount} synchronized school notifications are available below`)}>♢{notificationCount > 0 && <em>{notificationCount > 9 ? "9+" : notificationCount}</em>}</button><a href="/login?logout=1" aria-label="Sign out">↗</a></nav></header>;
+  return <header className={styles.header}><button aria-label="Open app menu" onClick={() => onNotify("All modules are available on this home screen")}>☰</button><div><i>H</i><span><b>Hig School</b><small>{roleLabel} app</small></span></div><nav><button aria-label="Search" onClick={() => onNotify("Search is ready for students, records and learning content")}>⌕</button><button aria-label={`Notifications ${notificationCount}`} onClick={() => onNotify(`${notificationCount} synchronized school notifications are available below`)}>♢{notificationCount > 0 && <em>{notificationCount > 9 ? "9+" : notificationCount}</em>}</button><DemoLogoutButton label="↗"/></nav></header>;
 }
 
 function ModuleGroup({ title, modules, onOpen }: { title: string; modules: AppModule[]; onOpen: (module: AppModule) => void }) {
@@ -247,7 +248,7 @@ function ProgressCards({ title }: { title: string }) { return <><StatusHero labe
 function AssessmentCard({ title, isStaff, onAction }: { title: string; isStaff: boolean; onAction: () => void }) { return <><StatusHero label="Term performance" value="84%" note="Up 4% from previous term" /><ListCard title={title} items={[["Mathematics Unit Test","42 / 50","A · Excellent"],["Science Practical","18 / 20","A+ · Outstanding"],["English Assessment","39 / 50","B+ · Very good"]]} empty="No assessment records." />{isStaff && <button className={styles.primaryAction} onClick={onAction}>Save marks draft</button>}</>; }
 function TransportCard({ state }: { state: DemoState }) { return <><section className={styles.map}><div /><i>BUS</i><p><b>{state.driver.route}</b><span>{state.driver.vehicle} · {state.driver.speedKph} km/h</span></p></section><ListCard title="Trip details" items={[["Next stop","Dwarka Sector 10","4 minutes"],["Driver","Ramesh Kumar","Verified"],["Live location",`${state.driver.latitude.toFixed(4)}, ${state.driver.longitude.toFixed(4)}`,new Date(state.driver.updatedAt).toLocaleTimeString("en-IN")]]} empty="No trip." /></>; }
 function ActionCard({ title, value, button, onClick }: { title: string; value: string; button: string; onClick: () => void }) { return <article className={styles.actionCard}><span>{title}</span><b>{value}</b><p>Updated from the connected School ERP.</p><button onClick={onClick}>{button}</button></article>; }
-function ProfileCard({ state }: { state: DemoState }) { return <section className={styles.profile}><i>{state.user.name.split(/\s+/).map((part)=>part[0]).join("").slice(0,2)}</i><h2>{state.user.name}</h2><p>{state.user.role.replace("_"," ")} · {state.school.name}</p><dl><div><dt>Email</dt><dd>demo@northfield.edu</dd></div><div><dt>School session</dt><dd>2026–27</dd></div><div><dt>Data sync</dt><dd>Live · v{state.version}</dd></div></dl><a href="/login?logout=1">Sign out</a></section>; }
+function ProfileCard({ state }: { state: DemoState }) { return <section className={styles.profile}><i>{state.user.name.split(/\s+/).map((part)=>part[0]).join("").slice(0,2)}</i><h2>{state.user.name}</h2><p>{state.user.role.replace("_"," ")} · {state.school.name}</p><dl><div><dt>Email</dt><dd>demo@northfield.edu</dd></div><div><dt>School session</dt><dd>2026–27</dd></div><div><dt>Data sync</dt><dd>Live · v{state.version}</dd></div></dl><DemoLogoutButton/></section>; }
 
 function BottomNav({ active, onActive }: { active: string; onActive: (item: string) => void }) {
   const items = [["Home","⌂"],["Timetable","▦"],["Notices","◖"],["Profile","♙"]];

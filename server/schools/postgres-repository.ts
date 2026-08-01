@@ -12,6 +12,9 @@ import {
 } from "../runtime/postgres.ts";
 import type { SchoolListOptions, SchoolPage, SchoolSummary } from "./repository.ts";
 import type { CreateSchoolInput } from "./validation.ts";
+import { deliverInvitation } from "../auth/email.ts";
+import { randomToken as authRandomToken, sha256 as authTokenHash } from "../auth/crypto.ts";
+import { permissionCatalogue } from "../access/catalogue.ts";
 
 type SchoolRow = {
   id: string;
@@ -29,8 +32,11 @@ const moduleKeys = [
   "student_information",
   "fees_finance",
   "attendance",
+  "academics",
   "examinations",
   "communication",
+  "settings_billing",
+  "access_control",
 ] as const;
 
 export async function listPostgresSchools(options: SchoolListOptions = {}): Promise<SchoolPage> {
@@ -122,13 +128,13 @@ export async function createPostgresSchool(
       const planId = await findOrCreatePlan(client, input.plan);
       const tenantId = crypto.randomUUID();
       const campusId = crypto.randomUUID();
+      const adminRoleId = crypto.randomUUID();
       const slugBase = input.name.toLowerCase().normalize("NFKD")
         .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48)
         || "school";
       const slug = `${slugBase}-${tenantId.slice(0, 6)}`;
-      const tokenHash = await sha256Hex(
-        `${crypto.randomUUID()}:${input.adminEmail}:${tenantId}`,
-      );
+      const rawInvitationToken = authRandomToken();
+      const tokenHash = authTokenHash(rawInvitationToken);
 
       await client.query(
         `INSERT INTO tenants (
@@ -157,10 +163,23 @@ export async function createPostgresSchool(
         [tenantId, planId],
       );
       await client.query(
+        `INSERT INTO roles (id, tenant_id, name, key, system, description, created_by)
+         VALUES ($1::uuid, $2::uuid, 'School Admin', 'school_admin', true,
+                 'Full tenant administration', $3::uuid)`,
+        [adminRoleId, tenantId, actorId],
+      );
+      for (const [permission] of permissionCatalogue) {
+        await client.query(
+          `INSERT INTO role_permissions (tenant_id, role_id, permission)
+           VALUES ($1::uuid, $2::uuid, $3::text)`,
+          [tenantId, adminRoleId, permission],
+        );
+      }
+      await client.query(
         `INSERT INTO memberships (
-           tenant_id, user_id, role_key, campus_id, created_at
+           tenant_id, user_id, role_key, campus_id, status, created_at, updated_at
          ) VALUES (
-           $1::uuid, $2::uuid, 'school_admin', $3::uuid, now()
+           $1::uuid, $2::uuid, 'school_admin', $3::uuid, 'invited', now(), now()
          )`,
         [tenantId, adminId, campusId],
       );
@@ -185,6 +204,7 @@ export async function createPostgresSchool(
          )`,
         [tenantId, input.adminEmail, tokenHash, actorId],
       );
+      await deliverInvitation(input.adminEmail, rawInvitationToken);
       await client.query(
         `INSERT INTO audit_events (
            id, tenant_id, actor_id, action, resource_type, resource_id,

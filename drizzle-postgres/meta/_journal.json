@@ -29,6 +29,13 @@
       "when": 1785350277420,
       "tag": "0003_milky_juggernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785561000000,
+      "tag": "0004_auth_hardening",
+      "breakpoints": true
     }
   ]
 }

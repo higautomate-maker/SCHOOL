@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestamps = {
@@ -43,7 +44,7 @@ export const subjects = sqliteTable("subjects", {
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(), email: text("email").notNull(), fullName: text("full_name").notNull(), status: text("status", { enum: ["invited", "active", "locked", "disabled"] }).notNull(), mfaEnabled: integer("mfa_enabled", { mode: "boolean" }).notNull().default(false), ...timestamps,
-}, (table) => [uniqueIndex("users_email_uq").on(table.email)]);
+}, (table) => [uniqueIndex("users_email_uq").on(sql`lower(${table.email})`)]);
 
 export const schoolSettings = sqliteTable("school_settings", {
   tenantId: text("tenant_id").primaryKey().references(() => tenants.id),
@@ -59,8 +60,24 @@ export const schoolConfigurations = sqliteTable("school_configurations", {
 }, (table) => [primaryKey({ columns: [table.tenantId, table.configKey] })]);
 
 export const memberships = sqliteTable("memberships", {
-  tenantId: text("tenant_id").notNull().references(() => tenants.id), userId: text("user_id").notNull().references(() => users.id), roleKey: text("role_key").notNull(), campusId: text("campus_id").references(() => campuses.id), createdAt: text("created_at").notNull(),
+  tenantId: text("tenant_id").notNull().references(() => tenants.id), userId: text("user_id").notNull().references(() => users.id), roleKey: text("role_key").notNull(), campusId: text("campus_id").references(() => campuses.id), status: text("status", { enum: ["invited", "active", "suspended", "revoked"] }).notNull().default("active"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull().default("1970-01-01T00:00:00.000Z"),
 }, (table) => [primaryKey({ columns: [table.tenantId, table.userId, table.roleKey] }), index("memberships_user_idx").on(table.userId)]);
+
+export const authCredentials = sqliteTable("auth_credentials", {
+  userId: text("user_id").primaryKey().references(() => users.id), passwordHash: text("password_hash").notNull(), credentialVersion: integer("credential_version").notNull().default(1), mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(false), passwordChangedAt: text("password_changed_at").notNull(), disabledAt: text("disabled_at"), ...timestamps,
+});
+
+export const authSessions = sqliteTable("auth_sessions", {
+  id: text("id").primaryKey(), tokenHash: text("token_hash").notNull(), userId: text("user_id").notNull().references(() => users.id), activeTenantId: text("active_tenant_id").references(() => tenants.id), credentialVersion: integer("credential_version").notNull(), csrfHash: text("csrf_hash").notNull(), issuedAt: text("issued_at").notNull(), lastSeenAt: text("last_seen_at").notNull(), idleExpiresAt: text("idle_expires_at").notNull(), absoluteExpiresAt: text("absolute_expires_at").notNull(), revokedAt: text("revoked_at"), revokeReason: text("revoke_reason"), ipHash: text("ip_hash"), userAgentHash: text("user_agent_hash"),
+}, (table) => [uniqueIndex("auth_sessions_token_hash_uq").on(table.tokenHash), index("auth_sessions_user_idx").on(table.userId), index("auth_sessions_expiry_idx").on(table.idleExpiresAt, table.absoluteExpiresAt)]);
+
+export const passwordResetTokens = sqliteTable("password_reset_tokens", {
+  id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => users.id), tokenHash: text("token_hash").notNull(), expiresAt: text("expires_at").notNull(), consumedAt: text("consumed_at"), requestedAt: text("requested_at").notNull(), ipHash: text("ip_hash"),
+}, (table) => [uniqueIndex("password_reset_token_hash_uq").on(table.tokenHash), index("password_reset_expiry_idx").on(table.expiresAt)]);
+
+export const platformRoleAssignments = sqliteTable("platform_role_assignments", {
+  userId: text("user_id").notNull().references(() => users.id), roleKey: text("role_key").notNull(), createdAt: text("created_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.userId, table.roleKey] })]);
 
 export const plans = sqliteTable("plans", {
   id: text("id").primaryKey(), name: text("name").notNull(), monthlyPricePaise: integer("monthly_price_paise").notNull(), annualPricePaise: integer("annual_price_paise").notNull(), active: integer("active", { mode: "boolean" }).notNull().default(true), ...timestamps,

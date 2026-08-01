@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { createServer } from "node:net";
+import { randomBytes } from "node:crypto";
 
 const suffix = `${process.pid}-${Date.now()}`;
 const image = `hig-school-hostinger-test:${suffix}`;
@@ -9,6 +10,8 @@ const volume = `hig-school-hostinger-data-${suffix}`;
 const readinessTimeoutMs = 90_000;
 const pollIntervalMs = 1_500;
 const timings = {};
+const demoToken=randomBytes(32).toString("base64url");
+const demoAccounts=JSON.stringify([{email:"school-admin@demo.invalid",password:randomBytes(24).toString("base64url"),role:"school_admin",name:"Hostinger Demo",token:demoToken,destination:"/school/dashboard"}]);
 
 async function measured(label, operation) {
   const started = performance.now();
@@ -151,6 +154,7 @@ try {
       "--publish", `127.0.0.1:${hostPort}:3000`,
       "--env", "HIG_DEPLOYMENT_ENV=sales-demo",
       "--env", "HIG_SALES_DEMO=true",
+      "--env", `HIG_DEMO_ACCOUNTS_JSON=${demoAccounts}`,
       image,
     ]);
     containerCreated = true;
@@ -166,7 +170,7 @@ try {
     await expectOk(`${origin}/api/v1/demo/action`, {
       method: "POST",
       headers: {
-        authorization: "Bearer demo_school_2026",
+        authorization: `Bearer ${demoToken}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -189,7 +193,7 @@ try {
     await waitForDockerHealth();
     await waitForHttpHealth(origin);
     const state = await expectOk(`${origin}/api/v1/demo/state`, {
-      headers: { authorization: "Bearer demo_school_2026" },
+      headers: { authorization: `Bearer ${demoToken}` },
     });
     const stateBody = await state.json();
     if (!stateBody.records?.some((record) => record.title === persistenceTitle)) {

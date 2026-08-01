@@ -9,6 +9,8 @@ import {
 import { withTenantDatabase } from "../runtime/postgres.ts";
 import type { SchoolDetail } from "./management-repository.ts";
 import type { SchoolAction } from "./management-validation.ts";
+import { deliverInvitation } from "../auth/email.ts";
+import { randomToken as authRandomToken,sha256 as authTokenHash } from "../auth/crypto.ts";
 
 type DetailRow = {
   id: string;
@@ -87,7 +89,8 @@ export function performPostgresSchoolAction(
       auditAction = "module.policy_change";
     } else if (action.action === "resend_invitation") {
       const expiresAt = new Date(Date.now() + 7 * 86_400_000);
-      const tokenHash = await sha256Hex(`${crypto.randomUUID()}:${tenantId}:${expiresAt.toISOString()}`);
+      const rawInvitationToken = authRandomToken();
+      const tokenHash = authTokenHash(rawInvitationToken);
       await client.query(
         `UPDATE school_invitations
          SET token_hash = $1,
@@ -97,6 +100,8 @@ export function performPostgresSchoolAction(
          WHERE tenant_id = $3`,
         [tokenHash, expiresAt, tenantId],
       );
+      if(!current.adminEmail)throw new Error("Invitation recipient is missing");
+      await deliverInvitation(current.adminEmail,rawInvitationToken);
       metadata = { invitationStatus: "pending", expiresAt: expiresAt.toISOString() };
       auditAction = "invitation.resent";
     } else {

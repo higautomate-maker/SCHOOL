@@ -3,6 +3,7 @@ import test from "node:test";
 import { POST as applyAction } from "../app/api/v1/demo/action/route.ts";
 import { GET as readState } from "../app/api/v1/demo/state/route.ts";
 import { releaseDemoStateMemoryCache } from "../server/demo-store.ts";
+import { demoToken } from "./demo-environment.ts";
 
 function request(path: string, token: string, body?: Record<string, unknown>) {
   return new Request(`http://localhost${path}`, {
@@ -13,7 +14,7 @@ function request(path: string, token: string, body?: Record<string, unknown>) {
 }
 
 test("school demo opens with complete cross-module sample data", async () => {
-  const state = await (await readState(request("/api/v1/demo/state", "demo_school_2026"))).json() as {
+  const state = await (await readState(request("/api/v1/demo/state", demoToken("school_admin")))).json() as {
     students: unknown[];
     modules: Array<{ enabled: boolean }>;
     operations: { attendance: unknown[]; invoices: unknown[]; payments: unknown[] };
@@ -31,11 +32,11 @@ test("school demo opens with complete cross-module sample data", async () => {
 });
 
 test("teacher attendance update is visible to the student client", async () => {
-  const stateBefore = await (await readState(request("/api/v1/demo/state", "demo_student_2026"))).json() as { students: Array<{ id: string; fullName: string }>; version: number };
+  const stateBefore = await (await readState(request("/api/v1/demo/state", demoToken("student")))).json() as { students: Array<{ id: string; fullName: string }>; version: number };
   const aarav = stateBefore.students.find((student) => student.fullName === "Aarav Sharma");
   assert.ok(aarav);
 
-  const actionResponse = await applyAction(request("/api/v1/demo/action", "demo_staff_2026", {
+  const actionResponse = await applyAction(request("/api/v1/demo/action", demoToken("staff"), {
     action: "mark_attendance",
     studentId: aarav.id,
     attendanceDate: "2026-07-26",
@@ -44,16 +45,16 @@ test("teacher attendance update is visible to the student client", async () => {
   }));
   assert.equal(actionResponse.status, 200);
 
-  const stateAfter = await (await readState(request("/api/v1/demo/state", "demo_student_2026"))).json() as { version: number; operations: { attendance: Array<{ studentId: string; status: string }> } };
+  const stateAfter = await (await readState(request("/api/v1/demo/state", demoToken("student")))).json() as { version: number; operations: { attendance: Array<{ studentId: string; status: string }> } };
   assert.ok(stateAfter.version > stateBefore.version);
   assert.equal(stateAfter.operations.attendance.find((entry) => entry.studentId === aarav.id)?.status, "late");
 });
 
 test("attendance persists after memory reload and creates a parent notification", async () => {
-  const before = await (await readState(request("/api/v1/demo/state", "demo_staff_2026"))).json() as { students: Array<{ id: string; fullName: string }> };
+  const before = await (await readState(request("/api/v1/demo/state", demoToken("staff")))).json() as { students: Array<{ id: string; fullName: string }> };
   const aarav = before.students.find((student) => student.fullName === "Aarav Sharma");
   assert.ok(aarav);
-  const response = await applyAction(request("/api/v1/demo/action", "demo_staff_2026", {
+  const response = await applyAction(request("/api/v1/demo/action", demoToken("staff"), {
     action: "mark_attendance",
     studentId: aarav.id,
     attendanceDate: "2026-07-26",
@@ -63,7 +64,7 @@ test("attendance persists after memory reload and creates a parent notification"
   assert.equal(response.status, 200);
 
   releaseDemoStateMemoryCache();
-  const parentState = await (await readState(request("/api/v1/demo/state", "demo_parent_2026"))).json() as {
+  const parentState = await (await readState(request("/api/v1/demo/state", demoToken("parent")))).json() as {
     operations: { attendance: Array<{ studentId: string; status: string }> };
     notifications: Array<{ studentId: string; title: string; message: string }>;
   };
@@ -72,19 +73,19 @@ test("attendance persists after memory reload and creates a parent notification"
 });
 
 test("company module policy is visible to the school client", async () => {
-  const response = await applyAction(request("/api/v1/demo/action", "demo_company_2026", {
+  const response = await applyAction(request("/api/v1/demo/action", demoToken("company"), {
     action: "set_module",
     moduleKey: "hostel",
     enabled: false,
   }));
   assert.equal(response.status, 200);
 
-  const state = await (await readState(request("/api/v1/demo/state", "demo_school_2026"))).json() as { modules: Array<{ key: string; enabled: boolean }> };
+  const state = await (await readState(request("/api/v1/demo/state", demoToken("school_admin")))).json() as { modules: Array<{ key: string; enabled: boolean }> };
   assert.equal(state.modules.find((module) => module.key === "hostel")?.enabled, false);
 });
 
 test("parent can send a school request while student remains read-only", async () => {
-  const parentResponse = await applyAction(request("/api/v1/demo/action", "demo_parent_2026", {
+  const parentResponse = await applyAction(request("/api/v1/demo/action", demoToken("parent"), {
     action: "parent_request",
     requestType: "Callback",
     title: "Parent callback request",
@@ -94,7 +95,7 @@ test("parent can send a school request while student remains read-only", async (
   const parentState = await parentResponse.json() as { records: Array<{ workflow: string; title: string }> };
   assert.ok(parentState.records.some((record) => record.workflow === "Callback" && record.title === "Parent callback request"));
 
-  const studentResponse = await applyAction(request("/api/v1/demo/action", "demo_student_2026", {
+  const studentResponse = await applyAction(request("/api/v1/demo/action", demoToken("student"), {
     action: "parent_request",
     title: "Not allowed",
   }));

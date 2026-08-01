@@ -1,0 +1,3 @@
+import { assertSameOrigin,deleteCsrfCookie,deleteSessionCookie,noStoreHeaders } from "../../../../../server/auth/cookies.ts";
+import { authenticatedActor,assertCsrf,logout } from "../../../../../server/auth/service.ts";
+export async function POST(request:Request){try{assertSameOrigin(request);const actor=await authenticatedActor(request);if(actor)assertCsrf(actor,request);await logout(request);}catch{return Response.json({error:"Request rejected"},{status:403,headers:noStoreHeaders()});}const h=new Headers(noStoreHeaders());h.append("set-cookie",deleteSessionCookie());h.append("set-cookie",deleteCsrfCookie());return Response.json({authenticated:false},{headers:h});}

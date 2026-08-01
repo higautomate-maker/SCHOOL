@@ -1,0 +1,3 @@
+import { noStoreHeaders } from "../../../../../server/auth/cookies.ts";
+import { authenticatedActor } from "../../../../../server/auth/service.ts";
+export async function GET(request:Request){const actor=await authenticatedActor(request);if(!actor)return Response.json({authenticated:false},{status:401,headers:noStoreHeaders()});return Response.json({authenticated:true,user:{id:actor.userId,email:actor.email,name:actor.fullName,identityType:actor.identityType},activeTenantId:actor.activeTenantId,permissions:[...actor.rolePermissions],platformPermissions:[...actor.platformPermissions],moduleEntitlements:[...actor.moduleEntitlements]},{headers:noStoreHeaders()});}

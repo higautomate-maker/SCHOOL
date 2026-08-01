@@ -21,8 +21,8 @@ test("every migrated repository keeps SQLite and routes PostgreSQL explicitly", 
     const sqlite = read(sqlitePath);
     const postgres = read(postgresPath);
     assert.match(sqlite, /repositoryBackend\(\)\s*===\s*"postgres"/, sqlitePath);
-    assert.match(sqlite, /@db-runtime/, sqlitePath);
-    assert.doesNotMatch(postgres, /@db-runtime/, postgresPath);
+    assert.match(sqlite, /#db-runtime/, sqlitePath);
+    assert.doesNotMatch(postgres, /#db-runtime/, postgresPath);
     assert.match(postgres, /withTenantDatabase\(/, postgresPath);
   }
 });

@@ -1,10 +1,12 @@
-import { database, type DatabasePreparedStatement } from "@db-runtime";
+import { database, type DatabasePreparedStatement } from "#db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
 import {
   repositoryBackend,
   schedulePostgresShadowRead,
 } from "../runtime/repository-backend.ts";
 import type { SchoolAction } from "./management-validation";
+import { deliverInvitation } from "../auth/email.ts";
+import { randomToken as authRandomToken,sha256 as authTokenHash } from "../auth/crypto.ts";
 
 export type SchoolDetail = {
   tenantId: string;
@@ -94,6 +96,7 @@ export async function performSchoolAction(tenantId: string, action: SchoolAction
   ];
   let metadata: Record<string, unknown> = {};
   let auditAction: string = action.action;
+  let invitationDelivery: {email:string;token:string}|null = null;
 
   if (action.action === "update_plan") {
     const planId = action.plan.toLowerCase();
@@ -110,8 +113,10 @@ export async function performSchoolAction(tenantId: string, action: SchoolAction
     auditAction = "module.policy_change";
   } else if (action.action === "resend_invitation") {
     const expiresAt = new Date(now.getTime() + 7 * 86_400_000).toISOString();
-    const tokenHash = await sha256(`${crypto.randomUUID()}:${tenantId}:${nowIso}`);
+    const token = authRandomToken();
+    const tokenHash = authTokenHash(token);
     statements.push(database.prepare(`UPDATE school_invitations SET token_hash = ?, status = 'pending', expires_at = ?, updated_at = ? WHERE tenant_id = ?`).bind(tokenHash, expiresAt, nowIso, tenantId));
+    if(current.adminEmail)invitationDelivery={email:current.adminEmail,token};
     metadata = { invitationStatus: "pending", expiresAt };
     auditAction = "invitation.resent";
   } else {
@@ -122,6 +127,7 @@ export async function performSchoolAction(tenantId: string, action: SchoolAction
 
   statements.push(database.prepare(`INSERT INTO audit_events (id, tenant_id, actor_id, action, resource_type, resource_id, reason, metadata_json, occurred_at)
     VALUES (?, ?, ?, ?, 'tenant', ?, 'Platform administration', ?, ?)`).bind(crypto.randomUUID(), tenantId, actorId, auditAction, tenantId, JSON.stringify(metadata), nowIso));
+  if(invitationDelivery)await deliverInvitation(invitationDelivery.email,invitationDelivery.token);
   await database.batch(statements);
   const updated = await getSchoolDetail(tenantId);
   if (!updated) throw new Error("School not found after update");

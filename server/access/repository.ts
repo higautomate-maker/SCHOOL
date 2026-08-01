@@ -1,4 +1,4 @@
-import { database } from "@db-runtime";
+import { database } from "#db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
 import { repositoryBackend } from "../runtime/repository-backend.ts";
 import { permissionCatalogue } from "./catalogue.ts";

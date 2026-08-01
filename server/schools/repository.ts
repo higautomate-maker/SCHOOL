@@ -1,4 +1,4 @@
-import { database } from "@db-runtime";
+import { database } from "#db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
 import {
   postgresShadowReadsEnabled,
@@ -6,6 +6,9 @@ import {
   repositoryBackend,
 } from "../runtime/repository-backend";
 import type { CreateSchoolInput } from "./validation";
+import { deliverInvitation } from "../auth/email.ts";
+import { randomToken as authRandomToken, sha256 as authTokenHash } from "../auth/crypto.ts";
+import { permissionCatalogue } from "../access/catalogue.ts";
 
 export type SchoolSummary = {
   tenantId: string;
@@ -36,7 +39,7 @@ type SchoolRow = {
   status: string; period_ends_at: string | null; invitation_status: string | null; student_count: number | null;
 };
 
-const moduleKeys = ["student_information", "fees_finance", "attendance", "examinations", "communication"];
+const moduleKeys = ["student_information", "fees_finance", "attendance", "academics", "examinations", "communication", "settings_billing", "access_control"];
 
 export async function listSchools(): Promise<SchoolSummary[]> {
   return (await listSchoolPage()).schools;
@@ -114,6 +117,7 @@ export async function createSchool(input: CreateSchoolInput, actor: ChatGPTUser,
   const campusId = crypto.randomUUID();
   const subscriptionId = crypto.randomUUID();
   const invitationId = crypto.randomUUID();
+  const adminRoleId = crypto.randomUUID();
   const actorId = await stableUserId(actor.email);
   const adminId = await stableUserId(input.adminEmail);
   const planId = input.plan.toLowerCase();
@@ -122,7 +126,8 @@ export async function createSchool(input: CreateSchoolInput, actor: ChatGPTUser,
   const periodEndsAt = new Date(now.getTime() + 14 * 86_400_000).toISOString();
   const expiresAt = new Date(now.getTime() + 7 * 86_400_000).toISOString();
   const idempotencyExpiresAt = new Date(now.getTime() + 24 * 60 * 60_000).toISOString();
-  const tokenHash = await sha256(`${crypto.randomUUID()}:${input.adminEmail}:${tenantId}`);
+  const rawInvitationToken = authRandomToken();
+  const tokenHash = authTokenHash(rawInvitationToken);
   const adminName = input.adminEmail.split("@")[0].replace(/[._-]+/g, " ");
   const school: SchoolSummary = {
     tenantId,
@@ -151,8 +156,12 @@ export async function createSchool(input: CreateSchoolInput, actor: ChatGPTUser,
       VALUES (?, ?, 'Main Campus', 'MAIN', ?, ?, ?)`).bind(campusId, tenantId, input.city, nowIso, nowIso),
     database.prepare(`INSERT INTO subscriptions (id, tenant_id, plan_id, status, period_ends_at, created_at, updated_at)
       VALUES (?, ?, ?, 'trial', ?, ?, ?)`).bind(subscriptionId, tenantId, planId, periodEndsAt, nowIso, nowIso),
-    database.prepare(`INSERT INTO memberships (tenant_id, user_id, role_key, campus_id, created_at)
-      VALUES (?, ?, 'school_admin', ?, ?)`).bind(tenantId, adminId, campusId, nowIso),
+    database.prepare(`INSERT INTO roles (id, tenant_id, name, key, system, description, created_by, created_at, updated_at)
+      VALUES (?, ?, 'School Admin', 'school_admin', 1, 'Full tenant administration', ?, ?, ?)`).bind(adminRoleId, tenantId, actorId, nowIso, nowIso),
+    ...permissionCatalogue.map(([permission]) => database.prepare(`INSERT INTO role_permissions (role_id, permission, created_at)
+      VALUES (?, ?, ?)`).bind(adminRoleId, permission, nowIso)),
+    database.prepare(`INSERT INTO memberships (tenant_id, user_id, role_key, campus_id, status, created_at, updated_at)
+      VALUES (?, ?, 'school_admin', ?, 'invited', ?, ?)`).bind(tenantId, adminId, campusId, nowIso, nowIso),
     ...moduleKeys.map((moduleKey) => database.prepare(`INSERT INTO module_policies (tenant_id, module_key, enabled, source, updated_at, updated_by)
       VALUES (?, ?, 1, 'plan', ?, ?)`).bind(tenantId, moduleKey, nowIso, actorId)),
     database.prepare(`INSERT INTO school_invitations (id, tenant_id, email, role_key, token_hash, status, expires_at, invited_by, created_at, updated_at)
@@ -163,6 +172,7 @@ export async function createSchool(input: CreateSchoolInput, actor: ChatGPTUser,
       VALUES (?, ?, 'school.create', ?, ?, ?)`).bind(idempotencyKey, actor.email.toLowerCase(), JSON.stringify(school), nowIso, idempotencyExpiresAt),
   ];
 
+  await deliverInvitation(input.adminEmail, rawInvitationToken);
   await database.batch(statements);
   return school;
 }

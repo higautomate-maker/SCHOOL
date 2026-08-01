@@ -43,15 +43,19 @@ export function validateStagingEnvironment(
     HIG_QUEUE_MODE: z.literal("redis"),
     HIG_KEY_PROVIDER: z.literal("environment"),
     SESSION_SECRET: secret,
+    HIG_SECURITY_HASH_KEY: secret,
     HIG_ENCRYPTION_KEY: secret,
+    HIG_EMAIL_ADAPTER: z.literal("smtp"),
+    SMTP_URL: z.string().url().refine((value) => value.startsWith("smtps://"), "must use smtps://"),
+    SMTP_FROM: z.string().email().or(z.string().regex(/^[^\r\n<>]+<[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>$/)),
     HIG_STAGING_STORAGE_PATH: protectedPath,
     HIG_STAGING_LOG_PATH: protectedPath,
     HIG_STAGING_BACKUP_PATH: protectedPath,
     HIG_STAGING_REQUIRE_EMPTY: z.enum(["true", "false"]).default("true"),
   }).parse(environment);
 
-  if (parsed.SESSION_SECRET === parsed.HIG_ENCRYPTION_KEY) {
-    throw new Error("Staging session and encryption secrets must be different");
+  if (new Set([parsed.SESSION_SECRET, parsed.HIG_SECURITY_HASH_KEY, parsed.HIG_ENCRYPTION_KEY]).size !== 3) {
+    throw new Error("Staging session, security-hash, and encryption secrets must be different");
   }
   readPostgresEnvironment(environment);
   const appUrl = new URL(parsed.APP_URL);

@@ -72,16 +72,12 @@ Before storing real school records, a MySQL or PostgreSQL production adapter mus
 
 Until this work is completed, deploy this package only as a demonstration.
 
-## 7. Demo login accounts
+## 7. Sales-demo login accounts
 
-| Access | Email | Password |
-|---|---|---|
-| Company | `company@higschool.in` | `HIG@Company2026` |
-| School | `schooladmin@northfield.edu` | `School@2026` |
-| Teacher/Staff | `teacher@northfield.edu` | `Teacher@2026` |
-| Student | `student@northfield.edu` | `Student@2026` |
-| Parent | `parent@northfield.edu` | `Parent@2026` |
-| Driver | `driver@northfield.edu` | `Driver@2026` |
+Provision sales-demo accounts through the hosting secret manager using
+`HIG_DEMO_ACCOUNTS_JSON`. No email, password, or static bearer token is stored
+in this package. Never put the generated values in SQL, Git, documentation, or
+chat. Real Stage 7 web accounts must be created through bootstrap/invitations.
 
 ## 8. Connect and build the mobile apps
 

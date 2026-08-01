@@ -1,4 +1,6 @@
 export const permissionCatalogue = [
+  ["academics.view", "View academic setup", "Academics"],
+  ["academics.manage", "Manage academic setup", "Academics"],
   ["students.view", "View students", "Students"],
   ["students.manage", "Manage students", "Students"],
   ["attendance.view", "View attendance", "Attendance"],
@@ -10,5 +12,11 @@ export const permissionCatalogue = [
   ["exams.publish", "Publish results", "Academics"],
   ["reports.view", "View reports", "Reporting"],
   ["settings.manage", "Manage settings", "Administration"],
+  ["settings.view", "View settings", "Administration"],
+  ["roles.view", "View roles", "Administration"],
   ["roles.manage", "Manage roles", "Administration"],
+  ["operations.view", "View operations", "Operations"],
+  ["operations.manage", "Manage operations", "Operations"],
+  ["workspace.view", "View workspace", "Workspace"],
+  ["workspace.manage", "Manage workspace", "Workspace"],
 ] as const;

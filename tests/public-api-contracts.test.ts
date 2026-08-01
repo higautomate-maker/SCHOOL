@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import "./demo-environment.ts";
 import { POST as demoAction } from "../app/api/v1/demo/action/route.ts";
 import { POST as demoLogin } from "../app/api/v1/demo/login/route.ts";
 import { GET as demoSession } from "../app/api/v1/demo/session/route.ts";
 import { GET as demoState } from "../app/api/v1/demo/state/route.ts";
+import { GET as realSession } from "../app/api/v1/auth/session/route.ts";
 import { GET as health } from "../app/api/v1/health/route.ts";
 import { GET as readiness } from "../app/api/v1/readiness/route.ts";
 import {
@@ -53,6 +55,17 @@ test("demo login rejects invalid credentials without disclosing an account", asy
   }));
   assert.equal(response.status, 401);
   assert.deepEqual(await response.json(), { error: "Incorrect demo email or password" });
+});
+
+test("real and sales-demo authentication namespaces cannot authenticate each other", async () => {
+  const configured = JSON.parse(process.env.HIG_DEMO_ACCOUNTS_JSON ?? "[]") as Array<{ token: string }>;
+  assert.ok(configured[0]?.token);
+  assert.equal((await demoSession(new Request("http://localhost/api/v1/demo/session", {
+    headers: { cookie: "__Host-hig_session=not-a-demo-session" },
+  }))).status, 401);
+  assert.equal((await realSession(new Request("http://localhost/api/v1/auth/session", {
+    headers: { authorization: `Bearer ${configured[0].token}` },
+  }))).status, 401);
 });
 
 const productionEnvironment = {
