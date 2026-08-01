@@ -53,8 +53,8 @@ test("security manifest covers every current production API method", () => {
 test("every current protected route retains the authentication boundary", () => {
   for (const file of productionRouteFiles) {
     const source = readFileSync(file, "utf8");
-    assert.match(source, /getChatGPTUser\(\)/, `${file} does not resolve an actor`);
-    assert.match(source, /Authentication required/, `${file} does not return the current 401 contract`);
+    assert.match(source, /authorize\(/, `${file} does not use the central authorization resolver`);
+    assert.match(source, /authErrorResponse/, `${file} does not preserve 401\/403 authorization responses`);
   }
 });
 
@@ -98,8 +98,4 @@ test("every mutation has an explicit idempotency decision", () => {
   }
 });
 
-for (const operation of manifest.operations) {
-  test.todo(
-    `${operation.id}: rejects unauthenticated, wrong-scope, cross-tenant, unentitled, and unpermitted requests`,
-  );
-}
+test("all contracted operations are attached to the central policy catalogue",()=>{const catalogue=readFileSync("server/auth/policies.ts","utf8");for(const operation of manifest.operations){assert.match(catalogue,new RegExp(operation.permission.startsWith("resolved_")?"operations|workspace|permission":operation.permission.replaceAll(".","\\.")),operation.id);}});

@@ -16,14 +16,7 @@ export type DemoAccount = {
 type DemoStudent = { id: string; admissionNumber: string; rollNumber: string; firstName: string; lastName: string; fullName: string; gender: "female" | "male" | "other"; dateOfBirth: string; admissionDate: string; className: string; sectionName: string; guardianName: string; guardianPhone: string; status: "active" | "inactive" | "graduated"; createdAt: string };
 type DemoRecord = { id: string; moduleKey: string; workflow: string; title: string; description: string; recordDate: string; dueDate: string | null; amountPaise: number | null; assignee: string; priority: string; status: string; createdAt: string; updatedAt: string };
 
-export const demoAccounts: DemoAccount[] = [
-  { email: "company@higschool.in", password: "HIG@Company2026", role: "company", name: "Ankit Yadav", token: "demo_company_2026", destination: "/company" },
-  { email: "schooladmin@northfield.edu", password: "School@2026", role: "school_admin", name: "Priya Mehta", token: "demo_school_2026", destination: "/school/dashboard" },
-  { email: "teacher@northfield.edu", password: "Teacher@2026", role: "staff", name: "Neha Kapoor", token: "demo_staff_2026", destination: "/mobile-preview/staff" },
-  { email: "student@northfield.edu", password: "Student@2026", role: "student", name: "Aarav Sharma", token: "demo_student_2026", destination: "/mobile-preview/student" },
-  { email: "parent@northfield.edu", password: "Parent@2026", role: "parent", name: "Neha Sharma", token: "demo_parent_2026", destination: "/mobile-preview/student" },
-  { email: "driver@northfield.edu", password: "Driver@2026", role: "driver", name: "Ramesh Kumar", token: "demo_driver_2026", destination: "/mobile-preview/driver" },
-];
+export function demoAccounts(environment:Record<string,string|undefined>=process.env):DemoAccount[]{const encoded=environment.HIG_DEMO_ACCOUNTS_JSON;if(!encoded)throw new Error("Sales-demo accounts are not configured");let value:unknown;try{value=JSON.parse(encoded);}catch{throw new Error("Sales-demo accounts are invalid");}if(!Array.isArray(value))throw new Error("Sales-demo accounts are invalid");return value.map((entry)=>{if(!entry||typeof entry!=="object")throw new Error("Sales-demo accounts are invalid");const account=entry as Record<string,unknown>;if(typeof account.email!=="string"||typeof account.password!=="string"||typeof account.name!=="string"||typeof account.token!=="string"||typeof account.destination!=="string"||!(["company","school_admin","staff","student","parent","driver"] as const).includes(account.role as DemoRole)||account.password.length<12||account.token.length<32||!account.destination.startsWith("/")||account.destination.startsWith("//"))throw new Error("Sales-demo accounts are invalid");return account as DemoAccount;});}
 
 export type DemoState = ReturnType<typeof createDemoState>;
 
@@ -252,7 +245,13 @@ export function demoAccountFromRequest(request: Request): DemoAccount | null {
   const bearer = authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
   const cookie = request.headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith("hig_demo_session="))?.split("=")[1];
   const token = bearer ?? cookie ?? "";
-  return demoAccounts.find((account) => account.token === token) ?? null;
+  try {
+    return demoAccounts().find((account) => account.token === token) ?? null;
+  } catch {
+    // A sales-demo deployment without explicitly provisioned accounts must
+    // remain inaccessible instead of falling back to embedded credentials.
+    return null;
+  }
 }
 
 export function demoOperations(state = getDemoState()) {

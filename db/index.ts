@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/d1";
-import { database } from "@db-runtime";
+import { database } from "#db-runtime";
 import * as schema from "./schema";
 
 export function getDb() {

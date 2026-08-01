@@ -1,4 +1,5 @@
-import { getChatGPTUser } from "../../../chatgpt-auth";
+import { authorize, authErrorResponse } from "../../../../server/auth/authorization.ts";
+import { policies } from "../../../../server/auth/policies.ts";
 import { createSchool, findIdempotentResponse, listSchoolPage } from "../../../../server/schools/repository";
 import { createSchoolSchema } from "../../../../server/schools/validation";
 import { validIdempotencyKey } from "../../../../server/http/idempotency";
@@ -6,8 +7,7 @@ import { validIdempotencyKey } from "../../../../server/http/idempotency";
 export const dynamic = "force-dynamic";
 
 export async function GET(request?: Request) {
-  const actor = await getChatGPTUser();
-  if (!actor) return Response.json({ error: "Authentication required" }, { status: 401 });
+  let actor; try { actor = await authorize(request ?? new Request("http://local/api/v1/schools"), policies.schoolsList); } catch (error) { return authErrorResponse(error); }
   const url = request ? new URL(request.url) : null;
   const requestedLimit = Number(url?.searchParams.get("limit") ?? 50);
   const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
@@ -27,8 +27,7 @@ export async function GET(request?: Request) {
 }
 
 export async function POST(request: Request) {
-  const actor = await getChatGPTUser();
-  if (!actor) return Response.json({ error: "Authentication required" }, { status: 401 });
+  let actor; try { actor = await authorize(request, policies.schoolsManage); } catch (error) { return authErrorResponse(error); }
   const idempotencyKey = request.headers.get("idempotency-key");
   if (!validIdempotencyKey(idempotencyKey)) {
     return Response.json({ error: "A valid Idempotency-Key header is required" }, { status: 400 });

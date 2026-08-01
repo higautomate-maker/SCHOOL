@@ -50,4 +50,4 @@ test("all /api/v1/demo routes call assertSalesDemoAllowed before parsing request
     assert.match(source, /assertSalesDemoAllowed\(process\.env\)/);
   }
 });
-test.todo("production artifact contains no sales-demo password or static token");
+test("production demo runtime contains no bundled password or static authentication token",()=>{const source=["server/demo-store.ts","app/api/v1/demo/login/route.ts"].map(file=>readFileSync(file,"utf8")).join("\n");assert.match(source,/HIG_DEMO_ACCOUNTS_JSON/);assert.doesNotMatch(source,/(?:Company|School|Teacher|Student|Parent|Driver)@2026|demo_(?:company|school|staff|student|parent|driver)_2026/);});

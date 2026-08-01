@@ -9,7 +9,8 @@ import type {
 } from "./database";
 
 const databaseKey = Symbol.for("hig-school.node-database.v1");
-type DatabaseGlobal = typeof globalThis & { [databaseKey]?: DatabaseSync };
+const batchQueueKey = Symbol.for("hig-school.node-database.batch-queue.v1");
+type DatabaseGlobal = typeof globalThis & { [databaseKey]?: DatabaseSync; [batchQueueKey]?: Promise<void> };
 
 function inputValues(values: readonly unknown[]): SQLInputValue[] {
   return values.map((value) => value as SQLInputValue);
@@ -109,17 +110,23 @@ export const database: DatabaseAdapter = {
     return new NodeSqlitePreparedStatement(nodeDatabase().prepare(sql));
   },
   async batch(statements) {
-    const native = nodeDatabase();
-    native.exec("BEGIN IMMEDIATE");
-    try {
-      const results: DatabaseRunResult[] = [];
-      for (const statement of statements) results.push(await statement.run());
-      native.exec("COMMIT");
-      return results;
-    } catch (error) {
-      native.exec("ROLLBACK");
-      throw error;
-    }
+    const target=globalThis as DatabaseGlobal;
+    let results:DatabaseRunResult[]=[];
+    const operation=(target[batchQueueKey]??Promise.resolve()).then(async()=>{
+      const native = nodeDatabase();
+      native.exec("BEGIN IMMEDIATE");
+      try {
+        results = [];
+        for (const statement of statements) results.push(await statement.run());
+        native.exec("COMMIT");
+      } catch (error) {
+        native.exec("ROLLBACK");
+        throw error;
+      }
+    });
+    target[batchQueueKey]=operation.catch(()=>undefined);
+    await operation;
+    return results;
   },
 };
 

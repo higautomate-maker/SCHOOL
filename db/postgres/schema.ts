@@ -32,6 +32,7 @@ export const recordPriority = pgEnum("record_priority", ["low", "normal", "high"
 export const recordStatus = pgEnum("record_status", ["draft", "open", "in_progress", "completed", "cancelled"]);
 export const subjectType = pgEnum("subject_type", ["core", "elective", "cocurricular"]);
 export const outboxStatus = pgEnum("outbox_status", ["pending", "processing", "published", "failed"]);
+export const membershipStatus = pgEnum("membership_status", ["invited", "active", "suspended", "revoked"]);
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -161,7 +162,9 @@ export const memberships = pgTable("memberships", {
   userId: uuid("user_id").notNull().references(() => users.id),
   roleKey: text("role_key").notNull(),
   campusId: uuid("campus_id"),
+  status: membershipStatus("status").notNull().default("active"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   primaryKey({ columns: [table.tenantId, table.userId, table.roleKey] }),
   index("memberships_user_idx").on(table.userId),
@@ -171,6 +174,22 @@ export const memberships = pgTable("memberships", {
     foreignColumns: [campuses.tenantId, campuses.id],
   }),
 ]);
+
+export const authCredentials = pgTable("auth_credentials", {
+  userId: uuid("user_id").primaryKey().references(() => users.id), passwordHash: text("password_hash").notNull(), credentialVersion: bigint("credential_version", { mode: "number" }).notNull().default(1), mustChangePassword: boolean("must_change_password").notNull().default(false), passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }).notNull().defaultNow(), disabledAt: timestamp("disabled_at", { withTimezone: true }), ...timestamps,
+});
+
+export const authSessions = pgTable("auth_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(), tokenHash: text("token_hash").notNull(), userId: uuid("user_id").notNull().references(() => users.id), activeTenantId: uuid("active_tenant_id").references(() => tenants.id), credentialVersion: bigint("credential_version", { mode: "number" }).notNull(), csrfHash: text("csrf_hash").notNull(), issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(), lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(), idleExpiresAt: timestamp("idle_expires_at", { withTimezone: true }).notNull(), absoluteExpiresAt: timestamp("absolute_expires_at", { withTimezone: true }).notNull(), revokedAt: timestamp("revoked_at", { withTimezone: true }), revokeReason: text("revoke_reason"), ipHash: text("ip_hash"), userAgentHash: text("user_agent_hash"),
+}, (table) => [uniqueIndex("auth_sessions_token_hash_uq").on(table.tokenHash), index("auth_sessions_user_idx").on(table.userId), index("auth_sessions_expiry_idx").on(table.idleExpiresAt, table.absoluteExpiresAt)]);
+
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(), userId: uuid("user_id").notNull().references(() => users.id), tokenHash: text("token_hash").notNull(), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), consumedAt: timestamp("consumed_at", { withTimezone: true }), requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(), ipHash: text("ip_hash"),
+}, (table) => [uniqueIndex("password_reset_token_hash_uq").on(table.tokenHash), index("password_reset_expiry_idx").on(table.expiresAt)]);
+
+export const platformRoleAssignments = pgTable("platform_role_assignments", {
+  userId: uuid("user_id").notNull().references(() => users.id), roleKey: text("role_key").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [primaryKey({ columns: [table.userId, table.roleKey] })]);
 
 export const plans = pgTable("plans", {
   id: uuid("id").primaryKey().defaultRandom(),

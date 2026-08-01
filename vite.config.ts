@@ -52,7 +52,7 @@ export default defineConfig(async () => {
   return {
     resolve: {
       alias: {
-        "@db-runtime": databaseAdapter,
+        "#db-runtime": databaseAdapter,
       },
     },
     server: isCodexSeatbeltSandbox

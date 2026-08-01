@@ -1,0 +1,2 @@
+import { noStoreHeaders } from "../../../../../server/auth/cookies.ts";import { authenticatedActor } from "../../../../../server/auth/service.ts";import { listSessions } from "../../../../../server/auth/repository.ts";
+export async function GET(request:Request){const actor=await authenticatedActor(request);if(!actor)return Response.json({error:"Authentication required"},{status:401,headers:noStoreHeaders()});const sessions=(await listSessions(actor.userId)).map(s=>({...s,current:s.id===actor.sessionId}));return Response.json({sessions},{headers:noStoreHeaders()});}

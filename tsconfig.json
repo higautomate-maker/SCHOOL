@@ -22,7 +22,7 @@
     "types": ["@cloudflare/workers-types"],
     "paths": {
       "@/*": ["./*"],
-      "@db-runtime": ["./db/adapters/node-sqlite.ts"]
+      "#db-runtime": ["./db/adapters/node-sqlite.ts"]
     }
   },
   "include": [

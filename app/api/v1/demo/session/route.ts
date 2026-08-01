@@ -12,5 +12,5 @@ export async function GET(request: Request) {
 export async function DELETE() {
   try { assertSalesDemoAllowed(process.env); }
   catch { return Response.json({ error: "Not found" }, { status: 404 }); }
-  return Response.json({ authenticated: false }, { headers: { "set-cookie": "hig_demo_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0" } });
+  return Response.json({ authenticated: false }, { headers: { "set-cookie": "hig_demo_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0" } });
 }

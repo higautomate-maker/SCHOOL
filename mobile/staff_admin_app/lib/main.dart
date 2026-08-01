@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 const apiBase=String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:3002');
+const demoEmail=String.fromEnvironment('HIG_DEMO_EMAIL');
+const demoPassword=String.fromEnvironment('HIG_DEMO_PASSWORD');
 const modules=['My Attendance','Academics','Attendance','Marks','Exams','Library','PTM Meetings','Lesson Planner','Assessments','Fees Due','Homework','Gradebook','Students','My Logs','Leaves','Payroll'];
 void main()=>runApp(const StaffApp());
 
 class Api {
   String token='';
-  Future<String> login()async{final response=await http.post(Uri.parse('$apiBase/api/v1/demo/login'),headers:{'content-type':'application/json'},body:jsonEncode({'email':'teacher@northfield.edu','password':'Teacher@2026'}));final data=jsonDecode(response.body);if(response.statusCode!=200)throw Exception(data['error']);token=data['token'];return data['user']['name'];}
+  Future<String> login()async{if(demoEmail.isEmpty||demoPassword.isEmpty)throw Exception('Sales-demo credentials were not supplied at build time');final response=await http.post(Uri.parse('$apiBase/api/v1/demo/login'),headers:{'content-type':'application/json'},body:jsonEncode({'email':demoEmail,'password':demoPassword}));final data=jsonDecode(response.body);if(response.statusCode!=200)throw Exception(data['error']);token=data['token'];return data['user']['name'];}
   Future<Map<String,dynamic>> state()async{final response=await http.get(Uri.parse('$apiBase/api/v1/demo/state'),headers:{'authorization':'Bearer $token'});return jsonDecode(response.body);}
   Future<void> action(Map<String,dynamic> value)async{final response=await http.post(Uri.parse('$apiBase/api/v1/demo/action'),headers:{'content-type':'application/json','authorization':'Bearer $token'},body:jsonEncode(value));if(response.statusCode!=200)throw Exception(jsonDecode(response.body)['error']);}
 }

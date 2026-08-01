@@ -538,7 +538,7 @@ try {
     campuses: "1",
     subscriptions: "1",
     memberships: "1",
-    modules: "5",
+    modules: "8",
     invitations: "1",
     audits: "1",
     replays: "1",

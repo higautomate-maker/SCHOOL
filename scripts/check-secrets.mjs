@@ -1,15 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const allowedDemoFiles = new Set([
-  "DEMO_CREDENTIALS.md",
-  "app/login/page.tsx",
-  "mobile/driver_gps_app/lib/main.dart",
-  "mobile/staff_admin_app/lib/main.dart",
-  "mobile/student_parent_app/lib/main.dart",
-  "server/demo-store.ts",
-]);
-
 const patterns = [
   ["private key", /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/],
   ["AWS access key", /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/],
@@ -18,6 +9,7 @@ const patterns = [
   ["Stripe live secret", /\bsk_live_[A-Za-z0-9]{16,}\b/],
   ["Google API key", /\bAIza[A-Za-z0-9_-]{30,}\b/],
   ["generic assigned secret", /\b(?:api[_-]?key|client[_-]?secret|password|secret|token)\s*[:=]\s*["'][^"' \n]{20,}["']/i],
+  ["static sales-demo credential", /(?:Company|School|Teacher|Student|Parent|Driver)@2026|demo_(?:company|school|staff|student|parent|driver)_2026/],
 ];
 
 function trackedFiles() {
@@ -51,7 +43,7 @@ function trackedFiles() {
 const findings = [];
 
 for (const file of trackedFiles()) {
-  if (allowedDemoFiles.has(file) || file === ".env.example" || file === "scripts/check-secrets.mjs") {
+  if (file === ".env.example" || file === ".env.staging.example" || file === "scripts/check-secrets.mjs" || file === "scripts/check-hostinger-bundle.mjs") {
     continue;
   }
 
@@ -75,4 +67,4 @@ if (findings.length) {
   process.exit(1);
 }
 
-console.log("Secret scan passed. Known sales-demo credential files remain explicitly scoped until Stage 5.");
+console.log("Secret scan passed; no tracked real or static sales-demo secret was detected.");

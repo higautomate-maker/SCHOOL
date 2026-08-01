@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LogoutButton } from "./components/logout-button";
+import { authenticatedFetch } from "./auth-client";
 
 type SchoolStatus = "Active" | "Trial" | "Attention";
 
@@ -38,7 +40,7 @@ const navItems = [
 ] as const;
 
 const initialSchools: School[] = [
-  { tenantId: "demo-northfield", id: "HIG-001", name: "Northfield Public School", code: "NPS", location: "New Delhi", students: 1842, plan: "Enterprise", status: "Active", renewal: "12 Aug 2026", color: "mint", invitation: "Accepted" },
+  { id: "HIG-001", name: "Northfield Public School", code: "NPS", location: "New Delhi", students: 1842, plan: "Enterprise", status: "Active", renewal: "12 Aug 2026", color: "mint", invitation: "Accepted" },
   { id: "HIG-002", name: "Riverdale International", code: "RI", location: "Bengaluru", students: 1256, plan: "Enterprise", status: "Active", renewal: "28 Aug 2026", color: "peach" },
   { id: "HIG-003", name: "Sunrise Academy", code: "SA", location: "Jaipur", students: 684, plan: "Starter", status: "Trial", renewal: "Trial · 8 days", color: "lilac" },
   { id: "HIG-004", name: "Starlight Senior School", code: "SS", location: "Pune", students: 2190, plan: "Growth", status: "Attention", renewal: "Payment due", color: "yellow" },
@@ -57,19 +59,6 @@ const modules = [
   ["Attendance", "104 schools", "93%"],
   ["Examinations", "89 schools", "79%"],
   ["Transport", "61 schools", "54%"],
-];
-
-const demoPermissionCatalogue: Array<[string, string, string]> = [
-  ["students.view", "View students", "Students"], ["students.manage", "Manage admissions", "Students"],
-  ["attendance.manage", "Take attendance", "Attendance"], ["fees.manage", "Manage fees", "Finance"],
-  ["academics.manage", "Manage academics", "Academics"], ["reports.view", "View reports", "Reports"],
-  ["roles.manage", "Manage roles", "Administration"],
-];
-
-const demoRoles: AccessRole[] = [
-  { id: "demo-role-admin", name: "School Admin", key: "school_admin", system: true, description: "Complete school access", permissions: demoPermissionCatalogue.map(([permission]) => permission) },
-  { id: "demo-role-teacher", name: "Teacher", key: "teacher", system: false, description: "Teaching and attendance", permissions: ["students.view", "attendance.manage", "academics.manage"] },
-  { id: "demo-role-accountant", name: "Accountant", key: "accountant", system: false, description: "Fees and reports", permissions: ["fees.manage", "reports.view"] },
 ];
 
 function Sparkline({ points, tone }: { points: number[]; tone: string }) {
@@ -106,7 +95,7 @@ export default function Home() {
   const [activeRoleId, setActiveRoleId] = useState<string | null>(null);
   const [rolePending, setRolePending] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
-  const [companyPolicies, setCompanyPolicies] = useState<SchoolDetail["modules"]>([]);
+  const [companyPolicies] = useState<SchoolDetail["modules"]>(modules.map(([label]) => ({ key: label.toLowerCase().replace(/[^a-z0-9]+/g, "_"), label, enabled: true })));
   const [policyPending, setPolicyPending] = useState("");
 
   useEffect(() => {
@@ -115,7 +104,7 @@ export default function Home() {
       return;
     }
     let activeRequest = true;
-    fetch("/api/v1/schools", { headers: { accept: "application/json" } })
+    authenticatedFetch("/api/v1/schools", { headers: { accept: "application/json" } })
       .then(async (response) => response.ok ? response.json() as Promise<{ schools: School[]; actor: { displayName: string } }> : null)
       .then((data) => {
         if (!activeRequest || !data) return;
@@ -129,16 +118,6 @@ export default function Home() {
     return () => { activeRequest = false; };
   }, [pathname]);
 
-  useEffect(() => {
-    if (active !== "Modules") return;
-    let live = true;
-    fetch("/api/v1/demo/state", { cache: "no-store" })
-      .then(async (response) => response.ok ? response.json() as Promise<{ modules: SchoolDetail["modules"] }> : null)
-      .then((data) => { if (live && data) setCompanyPolicies(data.modules); })
-      .catch(() => setNotice("Module policies could not be refreshed."));
-    return () => { live = false; };
-  }, [active]);
-
   const filteredSchools = useMemo(
     () => schools.filter((school) => `${school.name} ${school.location} ${school.plan}`.toLowerCase().includes(query.toLowerCase())),
     [schools, query],
@@ -150,7 +129,7 @@ export default function Home() {
     const payload = { name: String(data.get("name") || ""), city: String(data.get("city") || ""), plan: String(data.get("plan") || "Growth"), adminEmail: String(data.get("adminEmail") || "") };
     setSubmitting(true);
     try {
-      const response = await fetch("/api/v1/schools", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() }, body: JSON.stringify(payload) });
+      const response = await authenticatedFetch("/api/v1/schools", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() }, body: JSON.stringify(payload) });
       const result = await response.json() as { school?: School; error?: string };
       if (!response.ok || !result.school) throw new Error(result.error || "Onboarding failed");
       setSchools((items) => [result.school as School, ...items.filter((school) => school.id !== result.school?.id)]);
@@ -171,22 +150,10 @@ export default function Home() {
     }
     setDrawerLoading(true);
     try {
-      if (school.tenantId === "demo-northfield") {
-        const response = await fetch("/api/v1/demo/state");
-        const demo = await response.json() as { school: { tenantId: string; name: string; city: string; plan: string; status: string; adminEmail: string }; modules: SchoolDetail["modules"]; audit: Array<{ id: string; action: string; occurredAt: string }> };
-        if (!response.ok) throw new Error("Demo school could not be loaded");
-        setSelectedSchool({ ...demo.school, invitationStatus: "accepted", invitationExpiresAt: "2027-03-31T23:59:59Z", modules: demo.modules, audit: demo.audit });
-        setRoles(demoRoles);
-        setPermissionCatalogue(demoPermissionCatalogue);
-        setActiveRoleId(demoRoles[0].id);
-        return;
-      }
-      const [detailResponse, rolesResponse] = await Promise.all([fetch(`/api/v1/schools/${encodeURIComponent(school.tenantId)}`), fetch(`/api/v1/schools/${encodeURIComponent(school.tenantId)}/roles`)]);
+      const detailResponse = await authenticatedFetch(`/api/v1/schools/${encodeURIComponent(school.tenantId)}`);
       const result = await detailResponse.json() as { school?: SchoolDetail; error?: string };
-      const roleResult = await rolesResponse.json() as { roles?: AccessRole[]; permissions?: Array<[string, string, string]>; error?: string };
       if (!detailResponse.ok || !result.school) throw new Error(result.error || "School details could not be loaded");
-      if (!rolesResponse.ok || !roleResult.roles || !roleResult.permissions) throw new Error(roleResult.error || "Roles could not be loaded");
-      setSelectedSchool(result.school); setRoles(roleResult.roles); setPermissionCatalogue(roleResult.permissions); setActiveRoleId(roleResult.roles[0]?.id ?? null);
+      setSelectedSchool(result.school); setRoles([]); setPermissionCatalogue([]); setActiveRoleId(null);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "School details could not be loaded");
     } finally {
@@ -198,24 +165,7 @@ export default function Home() {
     if (!selectedSchool) return;
     setSchoolActionPending(true);
     try {
-      if (selectedSchool.tenantId === "demo-northfield") {
-        if (action.action === "update_plan") {
-          const plan = String(action.plan);
-          setSelectedSchool((current) => current ? { ...current, plan, audit: [{ id: crypto.randomUUID(), action: "subscription.plan_updated", occurredAt: new Date().toISOString() }, ...current.audit] } : current);
-          setSchools((items) => items.map((school) => school.tenantId === "demo-northfield" ? { ...school, plan } : school));
-          setNotice(`Northfield Public School plan changed to ${plan}`);
-          return;
-        }
-        if (action.action === "set_module") {
-          const response = await fetch("/api/v1/demo/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(action) });
-          const result = await response.json() as { modules?: SchoolDetail["modules"]; error?: string; audit?: SchoolDetail["audit"] };
-          if (!response.ok || !result.modules) throw new Error(result.error || "Module access update failed");
-          setSelectedSchool((current) => current ? { ...current, modules: result.modules!, audit: result.audit ?? current.audit } : current);
-          setNotice("Module access updated. The School workspace will reflect it immediately.");
-          return;
-        }
-      }
-      const response = await fetch(`/api/v1/schools/${encodeURIComponent(selectedSchool.tenantId)}`, { method: "PATCH", headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() }, body: JSON.stringify(action) });
+      const response = await authenticatedFetch(`/api/v1/schools/${encodeURIComponent(selectedSchool.tenantId)}`, { method: "PATCH", headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() }, body: JSON.stringify(action) });
       const result = await response.json() as { school?: SchoolDetail; error?: string };
       if (!response.ok || !result.school) throw new Error(result.error || "School update failed");
       const updatedSchool = result.school;
@@ -229,44 +179,18 @@ export default function Home() {
     }
   }
 
-  async function manageRole(action: Record<string, unknown>) {
+  async function manageRole(_action: Record<string, unknown>) {
     if (!selectedSchool) return;
+    void _action;
     setRolePending(true);
-    try {
-      if (selectedSchool.tenantId === "demo-northfield") {
-        if (action.action === "create") {
-          const role: AccessRole = { id: crypto.randomUUID(), name: String(action.name), key: String(action.name).toLowerCase().replace(/[^a-z0-9]+/g, "_"), system: false, description: "Demo custom role", permissions: Array.isArray(action.permissions) ? action.permissions as string[] : [] };
-          setRoles((items) => [...items, role]); setActiveRoleId(role.id); setNewRoleName("");
-        } else if (action.action === "update_permissions") {
-          setRoles((items) => items.map((role) => role.id === action.roleId ? { ...role, permissions: action.permissions as string[] } : role));
-        }
-        setNotice("Demo role permissions updated.");
-        return;
-      }
-      const response = await fetch(`/api/v1/schools/${encodeURIComponent(selectedSchool.tenantId)}/roles`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(action) });
-      const result = await response.json() as { roles?: AccessRole[]; error?: string };
-      if (!response.ok || !result.roles) throw new Error(result.error || "Role update failed");
-      setRoles(result.roles);
-      if (action.action === "create") { const created = result.roles.find((role) => role.name === action.name); setActiveRoleId(created?.id ?? activeRoleId); setNewRoleName(""); }
-      setNotice(`${selectedSchool.name} role permissions updated and audited`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "Role update failed"); }
-    finally { setRolePending(false); }
+    setNotice("Sign in through the school workspace to manage tenant roles");
+    setRolePending(false);
   }
 
   async function updateCompanyPolicy(moduleKey: string, enabled: boolean) {
     setPolicyPending(moduleKey);
     try {
-      const response = await fetch("/api/v1/demo/action", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "set_module", moduleKey, enabled }),
-      });
-      const result = await response.json() as { modules?: SchoolDetail["modules"]; error?: string };
-      if (!response.ok || !result.modules) throw new Error(result.error || "Module policy update failed");
-      setCompanyPolicies(result.modules);
-      setSelectedSchool((school) => school?.tenantId === "demo-northfield" ? { ...school, modules: result.modules! } : school);
-      const label = result.modules.find((module) => module.key === moduleKey)?.label ?? "Module";
-      setNotice(`${label} ${enabled ? "enabled" : "disabled"} for Northfield Public School. School access synchronized.`);
+      setNotice(`Open a live school and use its audited tenant drawer to ${enabled ? "enable" : "disable"} this module.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Module policy update failed");
     } finally {
@@ -314,7 +238,7 @@ export default function Home() {
           <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search schools, students, invoices…" /><kbd>⌘ K</kbd></label>
           <div className="top-actions">
             <Link className="workspace-link" href="/school">School workspace <span>→</span></Link>
-            <Link className="workspace-link" href="/login?logout=1">Sign out</Link>
+            <LogoutButton className="workspace-link" />
             <button className="icon-button" aria-label="Help" onClick={() => setNotice("Hig School support center is ready")}>?</button>
             <button className="icon-button notification" aria-label="Notifications" onClick={() => setNotice("No new critical security alerts")}>♢<span /></button>
             <button className="primary-button compact" onClick={() => setModalOpen(true)}><span>＋</span> Add school</button>

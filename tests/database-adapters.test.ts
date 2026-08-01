@@ -15,13 +15,14 @@ const repositoryFiles = [
   "server/access/repository.ts",
   "server/configuration/repository.ts",
   "server/workspace/repository.ts",
+  "server/auth/sqlite-repository.ts",
 ];
 
 test("application repositories depend on the database contract, not Cloudflare runtime", () => {
   for (const file of repositoryFiles) {
     const source = readFileSync(resolve(file), "utf8");
     assert.doesNotMatch(source, /cloudflare:workers/);
-    assert.match(source, /@db-runtime/);
+    assert.match(source, /#db-runtime/);
   }
   assert.match(
     readFileSync(resolve("db/adapters/cloudflare-d1.ts"), "utf8"),

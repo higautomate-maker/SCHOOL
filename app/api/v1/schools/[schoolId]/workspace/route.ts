@@ -1,6 +1,37 @@
-import { getChatGPTUser } from "../../../../../chatgpt-auth";
+import { assertModuleEntitled,authorize,authErrorResponse } from "../../../../../../server/auth/authorization.ts";
+import { policies } from "../../../../../../server/auth/policies.ts";
 import { applyWorkspaceAction,getWorkspace } from "../../../../../../server/workspace/repository";
 import { moduleKeys,workspaceActionSchema } from "../../../../../../server/workspace/validation";
-export const dynamic="force-dynamic";type Context={params:Promise<{schoolId:string}>};
-export async function GET(request:Request,context:Context){const actor=await getChatGPTUser();if(!actor)return Response.json({error:"Authentication required"},{status:401});const url=new URL(request.url),moduleKey=url.searchParams.get("moduleKey")??"Dashboard",sessionId=url.searchParams.get("sessionId");if(!moduleKeys.includes(moduleKey as typeof moduleKeys[number]))return Response.json({error:"Unknown module"},{status:400});const {schoolId}=await context.params;try{return Response.json({workspace:await getWorkspace(schoolId,moduleKey,sessionId)});}catch(error){return Response.json({error:error instanceof Error?error.message:"Workspace could not be loaded"},{status:404});}}
-export async function POST(request:Request,context:Context){const actor=await getChatGPTUser();if(!actor)return Response.json({error:"Authentication required"},{status:401});const parsed=workspaceActionSchema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return Response.json({error:"Invalid workflow details",issues:parsed.error.issues},{status:422});const {schoolId}=await context.params;try{return Response.json({workspace:await applyWorkspaceAction(schoolId,parsed.data,actor)});}catch(error){const message=error instanceof Error?error.message:"Workflow update failed";return Response.json({error:message},{status:message.includes("not found")?404:409});}}
+
+export const dynamic="force-dynamic";
+type Context={params:Promise<{schoolId:string}>};
+
+export async function GET(request:Request,context:Context){
+  const{schoolId}=await context.params;
+  const url=new URL(request.url),moduleKey=url.searchParams.get("moduleKey")??"Dashboard",sessionId=url.searchParams.get("sessionId");
+  if(!moduleKeys.includes(moduleKey as typeof moduleKeys[number]))return Response.json({error:"Unknown module"},{status:400});
+  try{
+    const actor=await authorize(request,policies.workspaceView,schoolId);
+    assertModuleEntitled(actor,moduleKey);
+    return Response.json({workspace:await getWorkspace(schoolId,moduleKey,sessionId)});
+  }catch(error){
+    try{return authErrorResponse(error);}catch{}
+    return Response.json({error:error instanceof Error?error.message:"Workspace could not be loaded"},{status:404});
+  }
+}
+
+export async function POST(request:Request,context:Context){
+  const{schoolId}=await context.params;
+  let actor;
+  try{actor=await authorize(request,policies.workspaceManage,schoolId);}catch(error){return authErrorResponse(error);}
+  const parsed=workspaceActionSchema.safeParse(await request.json().catch(()=>null));
+  if(!parsed.success)return Response.json({error:"Invalid workflow details",issues:parsed.error.issues},{status:422});
+  try{
+    if(parsed.data.action==="create_record")assertModuleEntitled(actor,parsed.data.moduleKey);
+    return Response.json({workspace:await applyWorkspaceAction(schoolId,parsed.data,actor)});
+  }catch(error){
+    try{return authErrorResponse(error);}catch{}
+    const message=error instanceof Error?error.message:"Workflow update failed";
+    return Response.json({error:message},{status:message.includes("not found")?404:409});
+  }
+}

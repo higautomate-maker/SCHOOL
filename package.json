@@ -14,6 +14,7 @@
     "test": "npm run test:unit",
     "test:unit": "NODE_ENV=test HIG_SALES_DEMO=true node --experimental-strip-types --test tests/*.test.ts",
     "test:integration:infra": "node scripts/test-integration-infra.mjs",
+    "test:integration:auth": "node --experimental-strip-types scripts/test-auth-integration.ts",
     "test:integration:hostinger": "node scripts/test-hostinger-container.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -42,10 +43,12 @@
     "staging:rollback:verify": "node --experimental-strip-types scripts/test-staging-rollback.ts",
     "staging:audit": "node scripts/review-dependency-audit.mjs",
     "db:pg:check": "node --experimental-strip-types --test tests/postgres-foundation.test.ts",
-    "check:hostinger-bundle": "node scripts/check-hostinger-bundle.mjs"
+    "check:hostinger-bundle": "node scripts/check-hostinger-bundle.mjs",
+    "auth:bootstrap-platform-admin": "node --experimental-strip-types scripts/bootstrap-platform-admin.ts"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.49.0",
+    "@node-rs/argon2": "1.8.0",
     "@tailwindcss/postcss": "4.2.1",
     "@vitejs/plugin-react": "6.0.2",
     "drizzle-orm": "0.45.2",
@@ -59,7 +62,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260702.1",
+    "@cloudflare/workers-types": "5.20260801.1",
     "@types/node": "22.19.19",
     "@types/pg": "8.20.0",
     "@types/react": "19.2.14",
@@ -70,13 +73,17 @@
     "eslint-config-next": "16.2.12",
     "react-server-dom-webpack": "19.2.8",
     "typescript": "5.9.3",
-    "wrangler": "4.92.0"
+    "wrangler": "4.116.0"
   },
   "type": "module",
+  "imports": {
+    "#db-runtime": "./db/adapters/node-sqlite.ts"
+  },
   "overrides": {
     "fast-uri": "3.1.4",
     "sharp": "0.35.3",
     "react-server-dom-webpack": "$react-server-dom-webpack",
-    "postcss": "8.5.18"
+    "postcss": "8.5.18",
+    "workerd": "1.20260730.1"
   }
 }

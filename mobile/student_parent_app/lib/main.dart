@@ -8,6 +8,8 @@ const apiBase = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'http://10.0.2.2:3002',
 );
+const demoEmail = String.fromEnvironment('HIG_DEMO_EMAIL');
+const demoPassword = String.fromEnvironment('HIG_DEMO_PASSWORD');
 
 const studentModules = [
   'Attendance', 'Homework', 'Courses', 'CCO Reports', 'Assessments',
@@ -91,8 +93,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final api = DemoApi();
-  final email = TextEditingController(text: 'parent@northfield.edu');
-  final password = TextEditingController(text: 'Parent@2026');
+  final email = TextEditingController(text: demoEmail);
+  final password = TextEditingController(text: demoPassword);
   bool busy = false;
   String error = '';
 
