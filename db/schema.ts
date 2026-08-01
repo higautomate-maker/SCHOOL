@@ -83,6 +83,36 @@ export const plans = sqliteTable("plans", {
   id: text("id").primaryKey(), name: text("name").notNull(), monthlyPricePaise: integer("monthly_price_paise").notNull(), annualPricePaise: integer("annual_price_paise").notNull(), active: integer("active", { mode: "boolean" }).notNull().default(true), ...timestamps,
 });
 
+export const planModulePolicies = sqliteTable("plan_module_policies", {
+  planId: text("plan_id").notNull().references(() => plans.id),
+  moduleKey: text("module_key").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  configuration: text("configuration").notNull().default("{}"),
+  updatedAt: text("updated_at").notNull(),
+  updatedBy: text("updated_by").notNull().references(() => users.id),
+}, (table) => [primaryKey({ columns: [table.planId, table.moduleKey] }), index("plan_module_policies_enabled_idx").on(table.planId, table.enabled)]);
+
+export const planAppFeaturePolicies = sqliteTable("plan_app_feature_policies", {
+  planId: text("plan_id").notNull().references(() => plans.id),
+  audience: text("audience", { enum: ["parent", "student", "transporter"] }).notNull(),
+  featureKey: text("feature_key").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  configuration: text("configuration").notNull().default("{}"),
+  updatedAt: text("updated_at").notNull(),
+  updatedBy: text("updated_by").notNull().references(() => users.id),
+}, (table) => [primaryKey({ columns: [table.planId, table.audience, table.featureKey] }), index("plan_app_feature_policies_enabled_idx").on(table.planId, table.audience, table.enabled)]);
+
+export const tenantAppFeaturePolicies = sqliteTable("tenant_app_feature_policies", {
+  tenantId: text("tenant_id").notNull().references(() => tenants.id),
+  audience: text("audience", { enum: ["parent", "student", "transporter"] }).notNull(),
+  featureKey: text("feature_key").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  source: text("source", { enum: ["plan", "override"] }).notNull(),
+  configuration: text("configuration").notNull().default("{}"),
+  updatedAt: text("updated_at").notNull(),
+  updatedBy: text("updated_by").notNull().references(() => users.id),
+}, (table) => [primaryKey({ columns: [table.tenantId, table.audience, table.featureKey] }), index("tenant_app_feature_policies_enabled_idx").on(table.tenantId, table.audience, table.enabled)]);
+
 export const subscriptions = sqliteTable("subscriptions", {
   id: text("id").primaryKey(), tenantId: text("tenant_id").notNull().references(() => tenants.id), planId: text("plan_id").notNull().references(() => plans.id), status: text("status", { enum: ["trial", "active", "past_due", "cancelled"] }).notNull(), periodEndsAt: text("period_ends_at").notNull(), ...timestamps,
 }, (table) => [index("subscriptions_tenant_idx").on(table.tenantId), index("subscriptions_status_idx").on(table.status)]);

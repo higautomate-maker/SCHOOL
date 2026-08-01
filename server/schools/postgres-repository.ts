@@ -14,7 +14,11 @@ import type { SchoolListOptions, SchoolPage, SchoolSummary } from "./repository.
 import type { CreateSchoolInput } from "./validation.ts";
 import { deliverInvitation } from "../auth/email.ts";
 import { randomToken as authRandomToken, sha256 as authTokenHash } from "../auth/crypto.ts";
-import { permissionCatalogue } from "../access/catalogue.ts";
+import {
+  defaultEnabledSchoolModuleKeys,
+  permissionCatalogue,
+  schoolModuleCatalogue,
+} from "../access/catalogue.ts";
 
 type SchoolRow = {
   id: string;
@@ -28,17 +32,6 @@ type SchoolRow = {
   studentCount: number | string | null;
 };
 type ReplayRow = { response: unknown };
-const moduleKeys = [
-  "student_information",
-  "fees_finance",
-  "attendance",
-  "academics",
-  "examinations",
-  "communication",
-  "settings_billing",
-  "access_control",
-] as const;
-
 export async function listPostgresSchools(options: SchoolListOptions = {}): Promise<SchoolPage> {
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
   const decodedCursor = options.cursor ? decodeCursor(options.cursor) : null;
@@ -183,15 +176,20 @@ export async function createPostgresSchool(
          )`,
         [tenantId, adminId, campusId],
       );
-      for (const moduleKey of moduleKeys) {
+      for (const moduleDefinition of schoolModuleCatalogue) {
         await client.query(
           `INSERT INTO module_policies (
              tenant_id, module_key, enabled, source, configuration,
              updated_at, updated_by
            ) VALUES (
-             $1::uuid, $2::text, true, 'plan', '{}'::jsonb, now(), $3::uuid
+             $1::uuid, $2::text, $3::boolean, 'plan', '{}'::jsonb, now(), $4::uuid
            )`,
-          [tenantId, moduleKey, actorId],
+          [
+            tenantId,
+            moduleDefinition.key,
+            defaultEnabledSchoolModuleKeys.has(moduleDefinition.key),
+            actorId,
+          ],
         );
       }
       await client.query(

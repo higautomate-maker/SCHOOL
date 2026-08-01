@@ -8,7 +8,11 @@ import {
 import type { CreateSchoolInput } from "./validation";
 import { deliverInvitation } from "../auth/email.ts";
 import { randomToken as authRandomToken, sha256 as authTokenHash } from "../auth/crypto.ts";
-import { permissionCatalogue } from "../access/catalogue.ts";
+import {
+  defaultEnabledSchoolModuleKeys,
+  permissionCatalogue,
+  schoolModuleCatalogue,
+} from "../access/catalogue.ts";
 
 export type SchoolSummary = {
   tenantId: string;
@@ -39,7 +43,6 @@ type SchoolRow = {
   status: string; period_ends_at: string | null; invitation_status: string | null; student_count: number | null;
 };
 
-const moduleKeys = ["student_information", "fees_finance", "attendance", "academics", "examinations", "communication", "settings_billing", "access_control"];
 
 export async function listSchools(): Promise<SchoolSummary[]> {
   return (await listSchoolPage()).schools;
@@ -162,8 +165,14 @@ export async function createSchool(input: CreateSchoolInput, actor: ChatGPTUser,
       VALUES (?, ?, ?)`).bind(adminRoleId, permission, nowIso)),
     database.prepare(`INSERT INTO memberships (tenant_id, user_id, role_key, campus_id, status, created_at, updated_at)
       VALUES (?, ?, 'school_admin', ?, 'invited', ?, ?)`).bind(tenantId, adminId, campusId, nowIso, nowIso),
-    ...moduleKeys.map((moduleKey) => database.prepare(`INSERT INTO module_policies (tenant_id, module_key, enabled, source, updated_at, updated_by)
-      VALUES (?, ?, 1, 'plan', ?, ?)`).bind(tenantId, moduleKey, nowIso, actorId)),
+    ...schoolModuleCatalogue.map((moduleDefinition) => database.prepare(`INSERT INTO module_policies (tenant_id, module_key, enabled, source, updated_at, updated_by)
+      VALUES (?, ?, ?, 'plan', ?, ?)`).bind(
+        tenantId,
+        moduleDefinition.key,
+        defaultEnabledSchoolModuleKeys.has(moduleDefinition.key) ? 1 : 0,
+        nowIso,
+        actorId,
+      )),
     database.prepare(`INSERT INTO school_invitations (id, tenant_id, email, role_key, token_hash, status, expires_at, invited_by, created_at, updated_at)
       VALUES (?, ?, ?, 'school_admin', ?, 'pending', ?, ?, ?, ?)`).bind(invitationId, tenantId, input.adminEmail, tokenHash, expiresAt, actorId, nowIso, nowIso),
     database.prepare(`INSERT INTO audit_events (id, tenant_id, actor_id, action, resource_type, resource_id, reason, metadata_json, occurred_at)

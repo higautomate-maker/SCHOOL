@@ -68,7 +68,15 @@ export async function applyRoleAction(tenantId: string, action: RoleAction, acto
 
 async function ensureDefaultRole(tenantId: string, actor: ChatGPTUser): Promise<void> {
   const existing = await database.prepare("SELECT id FROM roles WHERE tenant_id = ? AND key = 'school_admin'").bind(tenantId).first<{ id: string }>();
-  if (existing) return;
+  if (existing) {
+    const now = new Date().toISOString();
+    await database.batch(permissionCatalogue.map(([permission]) =>
+      database.prepare(
+        "INSERT INTO role_permissions (role_id, permission, created_at) VALUES (?, ?, ?) ON CONFLICT(role_id, permission) DO NOTHING",
+      ).bind(existing.id, permission, now)
+    ));
+    return;
+  }
   const school = await database.prepare("SELECT id FROM tenants WHERE id = ? AND status != 'archived'").bind(tenantId).first<{ id: string }>();
   if (!school) throw new Error("School not found");
   const now = new Date().toISOString();

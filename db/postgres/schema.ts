@@ -22,6 +22,7 @@ export const sessionStatus = pgEnum("academic_session_status", ["planned", "acti
 export const userStatus = pgEnum("user_status", ["invited", "active", "locked", "disabled"]);
 export const subscriptionStatus = pgEnum("subscription_status", ["trial", "active", "past_due", "cancelled"]);
 export const policySource = pgEnum("policy_source", ["plan", "override"]);
+export const appAudience = pgEnum("app_audience", ["parent", "student", "transporter"]);
 export const invitationStatus = pgEnum("invitation_status", ["pending", "accepted", "expired", "revoked"]);
 export const studentGender = pgEnum("student_gender", ["female", "male", "other"]);
 export const studentStatus = pgEnum("student_status", ["active", "inactive", "graduated"]);
@@ -205,6 +206,45 @@ export const plans = pgTable("plans", {
 }, (table) => [
   check("plans_monthly_price_ck", sql`${table.monthlyPricePaise} >= 0`),
   check("plans_annual_price_ck", sql`${table.annualPricePaise} >= 0`),
+]);
+
+export const planModulePolicies = pgTable("plan_module_policies", {
+  planId: uuid("plan_id").notNull().references(() => plans.id),
+  moduleKey: text("module_key").notNull(),
+  enabled: boolean("enabled").notNull().default(false),
+  configuration: jsonb("configuration").notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by").notNull().references(() => users.id),
+}, (table) => [
+  primaryKey({ columns: [table.planId, table.moduleKey] }),
+  index("plan_module_policies_enabled_idx").on(table.planId, table.enabled),
+]);
+
+export const planAppFeaturePolicies = pgTable("plan_app_feature_policies", {
+  planId: uuid("plan_id").notNull().references(() => plans.id),
+  audience: appAudience("audience").notNull(),
+  featureKey: text("feature_key").notNull(),
+  enabled: boolean("enabled").notNull().default(false),
+  configuration: jsonb("configuration").notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by").notNull().references(() => users.id),
+}, (table) => [
+  primaryKey({ columns: [table.planId, table.audience, table.featureKey] }),
+  index("plan_app_feature_policies_enabled_idx").on(table.planId, table.audience, table.enabled),
+]);
+
+export const tenantAppFeaturePolicies = pgTable("tenant_app_feature_policies", {
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  audience: appAudience("audience").notNull(),
+  featureKey: text("feature_key").notNull(),
+  enabled: boolean("enabled").notNull().default(false),
+  source: policySource("source").notNull(),
+  configuration: jsonb("configuration").notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid("updated_by").notNull().references(() => users.id),
+}, (table) => [
+  primaryKey({ columns: [table.tenantId, table.audience, table.featureKey] }),
+  index("tenant_app_feature_policies_enabled_idx").on(table.tenantId, table.audience, table.enabled),
 ]);
 
 export const subscriptions = pgTable("subscriptions", {
