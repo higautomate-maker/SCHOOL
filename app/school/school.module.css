@@ -188,3 +188,31 @@
 @media(max-width:1180px){.ecosystemGrid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:820px){.dashboardPage{padding:20px 24px}.referenceKpi{grid-template-columns:minmax(180px,45%) 1fr}.ecosystemGrid{grid-template-columns:repeat(3,1fr)}.referenceLowerGrid{grid-template-columns:1fr}.dashboardTopbar .schoolTitle{display:flex}.dashboardTopbar .settingsIcon{display:none}}
 @media(max-width:560px){.dashboardPage{padding:18px 14px}.dashboardTopbar .schoolTitle b{max-width:145px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dashboardSupport{display:none}.referenceGreeting h1{font-size:22px}.referenceGreeting p{font-size:11px}.referenceTicker span{padding:0 12px}.referenceKpi{min-height:116px;grid-template-columns:145px 1fr;padding:14px}.referenceKpi svg{height:62px}.ecosystemHub>header{grid-template-columns:1fr}.ecosystemHub header label,.ecosystemHub header nav{grid-column:1}.ecosystemGrid{grid-template-columns:repeat(2,1fr)}}
+
+.policyEmpty {
+  min-height: 320px;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  text-align: center;
+  border: 1px solid #dfe5df;
+  border-radius: 18px;
+  background: #fff;
+  padding: 32px;
+  color: #66736c;
+}
+.policyEmpty b { color: #17211c; font-size: 20px; }
+.policyEmpty a, .policyEmpty button { justify-self: center; }
+.schoolRolesSecurity {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  border: 1px solid #dfe5df;
+  border-left: 4px solid #164b39;
+  border-radius: 14px;
+  background: #f6f7f3;
+  color: #66736c;
+}
+.schoolRolesSecurity b { color: #17211c; }
+.schoolRolesSecurity em { color: #164b39; font-style: normal; font-weight: 700; }

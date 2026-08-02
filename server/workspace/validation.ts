@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const moduleKeys=["Dashboard","Finance & Fees","Accounts","Student Information","Academics","Front Office","Offline Examinations","CBC Academics","Online Examinations","Human Resource","PTM Meetings","Lesson Planner","OSM Module","QR Code Attendance","Assessment","Live Classes","Study Center","Certificates","Communicate","Library","Inventory","Transport","Hostel","Help Center","Asset Management","Reports & Analytics","Settings & Billing","Apps Center","Comms Wallet"] as const;
+export const moduleKeys=["Dashboard","Finance & Fees","Accounts","Student Information","Academics","Front Office","Lead Management","Offline Examinations","CBC Academics","Online Examinations","Human Resource","PTM Meetings","Lesson Planner","OSM Module","QR Code Attendance","Assessment","Live Classes","Study Center","Certificates","Communicate","Library","Inventory","Transport","Hostel","Help Center","Asset Management","Reports & Analytics","Settings & Billing","Apps Center","Comms Wallet"] as const;
 const moduleKey=z.enum(moduleKeys);
 
 export const workspaceActionSchema=z.discriminatedUnion("action",[

@@ -27,6 +27,7 @@ const productionRouteFiles = [
   "app/api/v1/schools/route.ts",
   "app/api/v1/schools/[schoolId]/route.ts",
   "app/api/v1/schools/[schoolId]/access/route.ts",
+  "app/api/v1/schools/[schoolId]/app-access/route.ts",
   "app/api/v1/schools/[schoolId]/configuration/route.ts",
   "app/api/v1/schools/[schoolId]/foundation/route.ts",
   "app/api/v1/schools/[schoolId]/operations/route.ts",

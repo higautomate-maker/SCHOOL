@@ -134,7 +134,7 @@ export const schoolModuleCatalogue = [
     displayOrder: 20,
     description: "Fee structures, invoices, collections, dues and payment records.",
     requiredViewPermissions: ["fees.view"],
-    requiredManagementPermissions: ["fees.collect", "fees.export"],
+    requiredManagementPermissions: ["fees.collect"],
     coreAdministrative: true,
     routeAliases: ["Finance & Fees", "Fees", "Search Due Fees", "All Transactions", "Online Transactions"],
   },
