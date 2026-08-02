@@ -34,6 +34,7 @@
     "test:readiness:production": "node --experimental-strip-types scripts/test-stage5-readiness.ts",
     "validate:production": "node --experimental-strip-types scripts/validate-production-environment.ts",
     "staging:validate": "node --experimental-strip-types scripts/validate-staging-environment.ts",
+    "staging:database-roles": "node --experimental-strip-types scripts/validate-staging-database-roles.ts",
     "staging:migrate": "node --experimental-strip-types scripts/migrate-staging-postgres.ts",
     "staging:initialize": "node --experimental-strip-types scripts/initialize-staging-greenfield.ts",
     "staging:smoke": "node --experimental-strip-types scripts/test-staging-smoke.ts",

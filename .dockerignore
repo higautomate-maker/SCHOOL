@@ -13,3 +13,6 @@ outputs
 release
 work
 *.tsbuildinfo
+
+# Never copy runtime or operator secrets into Docker build layers.
+.env*

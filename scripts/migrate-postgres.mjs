@@ -5,9 +5,11 @@ import pg from "pg";
 
 const { Client } = pg;
 const mode = process.argv.includes("--check") ? "check" : "apply";
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL;
 if (!databaseUrl || !/^postgres(ql)?:\/\//.test(databaseUrl)) {
-  console.error("DATABASE_URL is required and must use postgres:// or postgresql://.");
+  console.error(
+    "MIGRATION_DATABASE_URL (preferred) or DATABASE_URL is required and must use postgres:// or postgresql://.",
+  );
   process.exit(1);
 }
 

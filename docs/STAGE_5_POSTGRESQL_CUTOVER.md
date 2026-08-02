@@ -44,6 +44,7 @@ their values or paste them into logs.
 | --- | --- |
 | `HIG_REPOSITORY_BACKEND` | Keep `sqlite` until the approved activation step; then set `postgres` |
 | `DATABASE_URL` | Managed PostgreSQL URL using a least-privilege application role |
+| `MIGRATION_DATABASE_URL` | Operator-only migration-owner URL for the same database; never expose it to the app/worker |
 | `PG_SSL` | `require` |
 | `PG_POOL_MAX` | Start at `8`; allowed range is 1–20 |
 | `PG_IDLE_TIMEOUT_MS` | Start at `30000` |
@@ -127,12 +128,20 @@ company retention policy and delete rehearsal databases after approval.
 
 ## Ordered schema migration
 
-Use a migration owner account only for this command:
+Use a migration owner account only for this command. Keep `DATABASE_URL`
+set to the restricted runtime role and supply the owner separately:
 
 ```sh
+read -rsp "Migration-owner PostgreSQL URL: " MIGRATION_DATABASE_URL; echo
+export MIGRATION_DATABASE_URL
 npm run db:pg:migrate
 npm run db:pg:migrate:check
+unset MIGRATION_DATABASE_URL
 ```
+
+The migration command prefers `MIGRATION_DATABASE_URL`; `DATABASE_URL` remains
+the runtime connection used by the application. Never store the migration-owner
+URL in the app or worker environment.
 
 Migrations run lexicographically from `drizzle-postgres/*.sql`, record SHA-256
 checksums in `hig_schema_migrations`, use a PostgreSQL advisory lock, and wrap

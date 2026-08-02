@@ -69,6 +69,7 @@ services:
     image: hig-school-staging-operator:${STAGING_IMAGE_TAG:-local}
     env_file:
       - ../.env.staging
+      - ../.env.staging.operator
     volumes:
       - staging_school_backups:/backups/staging-school
     profiles:

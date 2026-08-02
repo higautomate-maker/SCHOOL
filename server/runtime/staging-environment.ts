@@ -10,6 +10,24 @@ const secret = z.string().min(32).refine(
   (value) => !/replace|change-me|example|placeholder/i.test(value),
   "must not be a placeholder",
 );
+const postgresConnectionUrl = z.string().url().refine(
+  (value) => value.startsWith("postgresql://") || value.startsWith("postgres://"),
+  "must use the postgresql:// or postgres:// protocol",
+).refine(
+  (value) => {
+    const url = new URL(value);
+    return Boolean(url.username && url.password);
+  },
+  "must include a database username and password",
+).refine(
+  (value) => {
+    const url = new URL(value);
+    return !/replace|change-me|example|placeholder/i.test(
+      `${url.username}:${url.password}`,
+    );
+  },
+  "must not contain placeholder credentials",
+);
 
 export type StagingEnvironment = {
   name: string;
@@ -21,6 +39,10 @@ export type StagingEnvironment = {
   logPath: string;
   backupPath: string;
   requireEmpty: boolean;
+};
+
+export type StagingMigrationEnvironment = StagingEnvironment & {
+  migrationDatabaseUrl: URL;
 };
 
 export function validateStagingEnvironment(
@@ -36,7 +58,7 @@ export function validateStagingEnvironment(
     HIG_POSTGRES_SHADOW_READS: z.literal("false"),
     HIG_SALES_DEMO: z.literal("false"),
     APP_URL: z.string().url(),
-    DATABASE_URL: z.string().url(),
+    DATABASE_URL: postgresConnectionUrl,
     PG_SSL: z.enum(["require", "disable"]),
     REDIS_URL: z.string().url(),
     HIG_REDIS_NAMESPACE: z.string().min(4),
@@ -93,15 +115,9 @@ export function validateStagingEnvironment(
   ]) {
     requireStagingMarker(name, value, parsed.HIG_STAGING_NAME);
   }
-  for (const [name, value] of [
-    ["APP_URL", appUrl.hostname],
-    ["DATABASE_URL", `${databaseUrl.hostname}${databaseUrl.pathname}${databaseUrl.username}`],
-    ["REDIS_URL", `${redisUrl.hostname}${redisUrl.pathname}${redisUrl.username}`],
-  ]) {
-    if (/(^|[._/-])(prod|production|live)([._/-]|$)/i.test(value)) {
-      throw new Error(`${name} appears to target production`);
-    }
-  }
+  rejectProductionTarget("APP_URL", appUrl);
+  rejectProductionTarget("DATABASE_URL", databaseUrl);
+  rejectProductionTarget("REDIS_URL", redisUrl);
 
   return {
     name: parsed.HIG_STAGING_NAME,
@@ -116,12 +132,60 @@ export function validateStagingEnvironment(
   };
 }
 
+export function validateStagingMigrationEnvironment(
+  environment: Record<string, string | undefined> = process.env,
+): StagingMigrationEnvironment {
+  const staging = validateStagingEnvironment(environment);
+  const parsed = z.object({
+    MIGRATION_DATABASE_URL: postgresConnectionUrl,
+  }).parse(environment);
+  const migrationDatabaseUrl = new URL(parsed.MIGRATION_DATABASE_URL);
+  const nameToken = staging.name.replaceAll("-", "_");
+
+  requireStagingMarker(
+    "MIGRATION_DATABASE_URL database/user",
+    `${migrationDatabaseUrl.pathname}/${migrationDatabaseUrl.username}`,
+    nameToken,
+  );
+  rejectProductionTarget("MIGRATION_DATABASE_URL", migrationDatabaseUrl);
+
+  if (!sameDatabaseTarget(staging.databaseUrl, migrationDatabaseUrl)) {
+    throw new Error(
+      "MIGRATION_DATABASE_URL must target the same host, port, and database as DATABASE_URL",
+    );
+  }
+  if (staging.databaseUrl.username === migrationDatabaseUrl.username) {
+    throw new Error(
+      "MIGRATION_DATABASE_URL must use a different database role from DATABASE_URL",
+    );
+  }
+
+  return { ...staging, migrationDatabaseUrl };
+}
+
 function requireStagingMarker(name: string, value: string, marker: string): void {
   const normalizedValue = value.toLowerCase().replaceAll("_", "-");
   const normalizedMarker = marker.toLowerCase().replaceAll("_", "-");
   if (!normalizedValue.includes(normalizedMarker)) {
     throw new Error(`${name} must contain the staging identifier ${marker}`);
   }
+}
+
+function rejectProductionTarget(name: string, url: URL): void {
+  const value = `${url.hostname}${url.pathname}${url.username}`;
+  if (/(^|[._/-])(prod|production|live)([._/-]|$)/i.test(value)) {
+    throw new Error(`${name} appears to target production`);
+  }
+}
+
+function sameDatabaseTarget(first: URL, second: URL): boolean {
+  return first.hostname.toLowerCase() === second.hostname.toLowerCase()
+    && normalizedPort(first) === normalizedPort(second)
+    && first.pathname === second.pathname;
+}
+
+function normalizedPort(url: URL): string {
+  return url.port || "5432";
 }
 
 function isLoopback(hostname: string): boolean {

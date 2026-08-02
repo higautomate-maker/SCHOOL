@@ -411,3 +411,20 @@ Batch 1 code is accepted locally only when:
 
 Staging migration and deployment require a separate reviewed command after
 local acceptance.
+
+## Staging operational acceptance
+
+Stage 9 staging is not approved unless PostgreSQL credentials are separated:
+
+- `DATABASE_URL` is the application runtime role and must be `NOSUPERUSER`
+  and `NOBYPASSRLS`, and must not own application tables;
+- `MIGRATION_DATABASE_URL` is a different operator-only migration-owner role
+  targeting the same staging database;
+- only the staging operator container receives the migration-owner URL;
+- app and worker containers never receive it;
+- `.env*` files are excluded from Docker build layers;
+- `staging:database-roles` must pass before `staging:migrate`;
+- migrations run through the owner URL, then verification reconnects through
+  the restricted runtime URL.
+
+Native APK/IPA packaging and operational mobile features remain outside Batch 1.

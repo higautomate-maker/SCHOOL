@@ -171,8 +171,10 @@ Required groups:
 - staging guard: `HIG_DEPLOYMENT_ENV`, `HIG_STAGING_NAME`,
   `HIG_STAGING_PROTECTION`, `HIG_STAGING_REQUIRE_EMPTY`;
 - runtime: `NODE_ENV`, `HIG_RUNTIME`, `PORT`, `APP_URL`, `LOG_LEVEL`;
-- PostgreSQL: `DATABASE_URL`, `PG_SSL`, `PG_POOL_MAX`,
+- PostgreSQL runtime: `DATABASE_URL`, `PG_SSL`, `PG_POOL_MAX`,
   `PG_IDLE_TIMEOUT_MS`, `PG_CONNECTION_TIMEOUT_MS`;
+- PostgreSQL operator only: `MIGRATION_DATABASE_URL` in
+  `.env.staging.operator`, never in the app/worker environment;
 - Redis/queue: `REDIS_URL`, `HIG_REDIS_NAMESPACE`, `HIG_QUEUE_MODE`;
 - repository: `HIG_REPOSITORY_BACKEND=postgres`,
   `HIG_POSTGRES_SHADOW_READS=false`;
@@ -205,12 +207,17 @@ Run from a protected operator workstation or Hostinger VPS project terminal:
 
 ```sh
 cp .env.staging.example .env.staging
-chmod 600 .env.staging
+cp .env.staging.operator.example .env.staging.operator
+chmod 600 .env.staging .env.staging.operator
 # Replace every placeholder and verify staging-only resource URLs.
+# DATABASE_URL is the restricted runtime role. MIGRATION_DATABASE_URL is a
+# different migration-owner role targeting the same host, port, and database.
 
 docker compose -f deploy/hostinger-staging.compose.yml build
 docker compose -f deploy/hostinger-staging.compose.yml \
   --profile operator run --rm operator npm run staging:validate
+docker compose -f deploy/hostinger-staging.compose.yml \
+  --profile operator run --rm operator npm run staging:database-roles
 docker compose -f deploy/hostinger-staging.compose.yml \
   --profile operator run --rm operator npm run staging:migrate
 docker compose -f deploy/hostinger-staging.compose.yml \
@@ -219,16 +226,27 @@ docker compose -f deploy/hostinger-staging.compose.yml up -d app
 docker compose -f deploy/hostinger-staging.compose.yml ps
 ```
 
+`staging:database-roles` performs a read-only connection preflight. It
+requires the runtime and migration URLs to reach the same staging database,
+requires different database users, and rejects a runtime role that is
+`SUPERUSER`, has `BYPASSRLS`, or owns application tables after migration.
+
 `staging:migrate`:
 
-1. validates all staging variables;
-2. queries the connected database/user and requires the staging identifier;
+1. validates all staging variables and both database URLs;
+2. rechecks that the runtime and migration roles are distinct and staging-scoped;
 3. rejects every production-cutover flag;
-4. applies ordered migrations under the existing advisory lock;
+4. applies ordered migrations only through `MIGRATION_DATABASE_URL` under the
+   existing advisory lock;
 5. verifies checksums and migration ordering;
-6. verifies known demo-seed records are absent;
+6. reconnects through the restricted `DATABASE_URL` and verifies the migration
+   ledger plus greenfield/demo-seed conditions;
 7. requires zero users/plans/tenants while
    `HIG_STAGING_REQUIRE_EMPTY=true`.
+
+The app and worker services load only `.env.staging`. Only the operator service
+loads `.env.staging.operator`. `.dockerignore` excludes every `.env*` file so
+neither credential is copied into Docker build layers.
 
 No demo seed is invoked. After the first initialization succeeds, change
 `HIG_STAGING_REQUIRE_EMPTY=false` for future staging-only migration checks.
