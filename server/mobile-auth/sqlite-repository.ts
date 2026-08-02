@@ -1,5 +1,9 @@
 import { database } from "#db-runtime";
 import {
+  resolveEffectiveAppFeatureAccess,
+  resolveEffectiveSchoolModuleAccess,
+} from "../access/catalogue.ts";
+import {
   hashMobileToken,
   isWellFormedMobileToken,
   issueMobileTokenSet,
@@ -9,6 +13,7 @@ import type {
   FindMobileLoginInput,
 } from "./repository.ts";
 import type {
+  MobileAccessSummary,
   MobileAssignment,
   MobileAuthenticatedPrincipal,
   MobileIdentityStatus,
@@ -44,8 +49,13 @@ type AccessSessionRow = {
   credentialVersion: number;
   currentCredentialVersion: number;
   credentialDisabledAt: string | null;
+  issuedAt: string;
+  lastSeenAt: string;
   accessExpiresAt: string;
+  locatorExpiresAt: string;
   refreshExpiresAt: string;
+  devicePlatform: string | null;
+  appVersion: string | null;
   identityStatus: string | null;
   identityAudience: string | null;
   identityUserId: string | null;
@@ -62,9 +72,16 @@ type RotatedSessionRow = {
   credentialVersion: number;
 };
 
-type ConsumedRefreshRow = {
+type TokenLocatorRow = {
+  tokenHash: string;
+  tokenKind: "access" | "refresh";
+  tenantId: string;
   sessionId: string;
+  userId: string;
   refreshFamilyId: string;
+  rotation: number;
+  state: "active" | "used" | "revoked" | "expired";
+  expiresAt: string;
 };
 
 const nowIso = (): string => new Date().toISOString();
@@ -360,8 +377,13 @@ async function accessSessionRow(
       s.credential_version AS credentialVersion,
       c.credential_version AS currentCredentialVersion,
       c.disabled_at AS credentialDisabledAt,
+      s.issued_at AS issuedAt,
+      s.last_seen_at AS lastSeenAt,
       s.access_expires_at AS accessExpiresAt,
+      locator.expires_at AS locatorExpiresAt,
       s.refresh_expires_at AS refreshExpiresAt,
+      s.device_platform AS devicePlatform,
+      s.app_version AS appVersion,
       i.status AS identityStatus,
       i.audience AS identityAudience,
       i.user_id AS identityUserId,
@@ -384,7 +406,11 @@ async function accessSessionRow(
         ORDER BY m.created_at
         LIMIT 1
       ) AS roleKey
-    FROM mobile_sessions s
+    FROM mobile_token_locators locator
+    JOIN mobile_sessions s
+      ON s.tenant_id = locator.tenant_id
+     AND s.id = locator.session_id
+     AND s.access_token_hash = locator.token_hash
     JOIN users u
       ON u.id = s.user_id
     JOIN auth_credentials c
@@ -392,7 +418,9 @@ async function accessSessionRow(
     LEFT JOIN mobile_identities i
       ON i.tenant_id = s.tenant_id
      AND i.id = s.mobile_identity_id
-    WHERE s.access_token_hash = ?
+    WHERE locator.token_hash = ?
+      AND locator.token_kind = 'access'
+      AND locator.state = 'active'
       AND s.revoked_at IS NULL
     LIMIT 1
   `).bind(
@@ -409,7 +437,6 @@ function validAccessSession(
     || row.credentialDisabledAt !== null
     || Number(row.credentialVersion)
       !== Number(row.currentCredentialVersion)
-    || Date.parse(row.accessExpiresAt) <= currentTime
     || Date.parse(row.refreshExpiresAt) <= currentTime
   ) {
     return false;
@@ -442,8 +469,23 @@ export async function resolveMobileAccessToken(
 
   const currentTime = Date.now();
 
+  if (Date.parse(row.locatorExpiresAt) <= currentTime) {
+    await database.prepare(`
+      UPDATE mobile_token_locators
+         SET state = 'expired', updated_at = ?
+       WHERE token_hash = ?
+         AND token_kind = 'access'
+         AND state = 'active'
+    `).bind(
+      new Date(currentTime).toISOString(),
+      hashMobileToken(accessToken),
+    ).run();
+    return null;
+  }
+
   if (!validAccessSession(row, currentTime)) {
     await revokeMobileSession(
+      row.tenantId,
       row.sessionId,
       "invalid_or_expired",
     );
@@ -451,13 +493,16 @@ export async function resolveMobileAccessToken(
     return null;
   }
 
+  const resolvedAt = new Date(currentTime).toISOString();
   await database.prepare(`
     UPDATE mobile_sessions
        SET last_seen_at = ?
-     WHERE id = ?
+     WHERE tenant_id = ?
+       AND id = ?
        AND revoked_at IS NULL
   `).bind(
-    new Date(currentTime).toISOString(),
+    resolvedAt,
+    row.tenantId,
     row.sessionId,
   ).run();
 
@@ -469,9 +514,14 @@ export async function resolveMobileAccessToken(
     tenantId: row.tenantId,
     principalType: row.principalType,
     mobileIdentityId: row.mobileIdentityId,
+    roleKey: row.roleKey,
     credentialVersion: Number(row.credentialVersion),
+    issuedAt: row.issuedAt,
+    lastSeenAt: resolvedAt,
     accessExpiresAt: row.accessExpiresAt,
     refreshExpiresAt: row.refreshExpiresAt,
+    devicePlatform: row.devicePlatform,
+    appVersion: row.appVersion,
   };
 }
 
@@ -484,6 +534,78 @@ export async function rotateMobileRefreshToken(
   }
 
   const oldTokenHash = hashMobileToken(refreshToken);
+  const locator = await database.prepare(`
+    SELECT
+      token_hash AS tokenHash,
+      token_kind AS tokenKind,
+      tenant_id AS tenantId,
+      session_id AS sessionId,
+      user_id AS userId,
+      refresh_family_id AS refreshFamilyId,
+      rotation,
+      state,
+      expires_at AS expiresAt
+    FROM mobile_token_locators
+    WHERE token_hash = ?
+      AND token_kind = 'refresh'
+    LIMIT 1
+  `).bind(oldTokenHash).first<TokenLocatorRow>();
+
+  if (!locator) return { status: "invalid" };
+
+  if (locator.state === "used") {
+    const detectedAt = nowIso();
+    await database.batch([
+      database.prepare(`
+        UPDATE mobile_refresh_token_uses
+           SET replay_detected_at = COALESCE(replay_detected_at, ?)
+         WHERE token_hash = ?
+      `).bind(detectedAt, oldTokenHash),
+      database.prepare(`
+        UPDATE mobile_sessions
+           SET revoked_at = COALESCE(revoked_at, ?),
+               revoke_reason = COALESCE(revoke_reason, 'refresh_replay')
+         WHERE tenant_id = ?
+           AND refresh_family_id = ?
+      `).bind(detectedAt, locator.tenantId, locator.refreshFamilyId),
+      database.prepare(`
+        INSERT INTO audit_events (
+          id, tenant_id, actor_id, action, resource_type, resource_id,
+          reason, ip_hash, metadata_json, occurred_at
+        ) VALUES (?, ?, ?, 'mobile.auth.refresh.replay',
+          'authentication', ?, 'failure', ?, ?, ?)
+      `).bind(
+        crypto.randomUUID(),
+        locator.tenantId,
+        locator.userId,
+        locator.sessionId,
+        metadata.ipHash,
+        JSON.stringify({
+          deviceIdHash: metadata.deviceIdHash,
+          devicePlatform: metadata.devicePlatform,
+          appVersion: metadata.appVersion,
+          userAgentHash: metadata.userAgentHash,
+        }),
+        detectedAt,
+      ),
+    ]);
+    return { status: "replay" };
+  }
+
+  if (
+    locator.state !== "active"
+    || Date.parse(locator.expiresAt) <= Date.now()
+  ) {
+    if (locator.state === "active") {
+      await database.prepare(`
+        UPDATE mobile_token_locators
+           SET state = 'expired', updated_at = ?
+         WHERE token_hash = ? AND state = 'active'
+      `).bind(nowIso(), oldTokenHash).run();
+    }
+    return { status: "invalid" };
+  }
+
   const rotatedAt = new Date();
   const rotatedAtIso = rotatedAt.toISOString();
   const tokens = issueMobileTokenSet(rotatedAt);
@@ -501,51 +623,37 @@ export async function rotateMobileRefreshToken(
            app_version = ?,
            ip_hash = ?,
            user_agent_hash = ?
-     WHERE refresh_token_hash = ?
+     WHERE id = ?
+       AND tenant_id = ?
+       AND refresh_token_hash = ?
+       AND refresh_rotation = ?
        AND revoked_at IS NULL
        AND refresh_expires_at > ?
        AND EXISTS (
          SELECT 1
            FROM users u
-           JOIN auth_credentials c
-             ON c.user_id = u.id
+           JOIN auth_credentials c ON c.user_id = u.id
           WHERE u.id = mobile_sessions.user_id
             AND u.status = 'active'
             AND c.disabled_at IS NULL
-            AND c.credential_version
-              = mobile_sessions.credential_version
+            AND c.credential_version = mobile_sessions.credential_version
        )
        AND (
-         (
-           principal_type = 'school'
-           AND mobile_identity_id IS NULL
-           AND EXISTS (
-             SELECT 1
-               FROM memberships m
-              WHERE m.tenant_id
-                = mobile_sessions.tenant_id
-                AND m.user_id
-                  = mobile_sessions.user_id
-                AND m.status = 'active'
-           )
-         )
+         (principal_type = 'school' AND mobile_identity_id IS NULL AND EXISTS (
+           SELECT 1 FROM memberships m
+            WHERE m.tenant_id = mobile_sessions.tenant_id
+              AND m.user_id = mobile_sessions.user_id
+              AND m.status = 'active'
+         ))
          OR
-         (
-           principal_type <> 'school'
-           AND EXISTS (
-             SELECT 1
-               FROM mobile_identities i
-              WHERE i.tenant_id
-                = mobile_sessions.tenant_id
-                AND i.id
-                  = mobile_sessions.mobile_identity_id
-                AND i.user_id
-                  = mobile_sessions.user_id
-                AND i.audience
-                  = mobile_sessions.principal_type
-                AND i.status = 'active'
-           )
-         )
+         (principal_type <> 'school' AND EXISTS (
+           SELECT 1 FROM mobile_identities i
+            WHERE i.tenant_id = mobile_sessions.tenant_id
+              AND i.id = mobile_sessions.mobile_identity_id
+              AND i.user_id = mobile_sessions.user_id
+              AND i.audience = mobile_sessions.principal_type
+              AND i.status = 'active'
+         ))
        )
     RETURNING
       id AS sessionId,
@@ -565,7 +673,10 @@ export async function rotateMobileRefreshToken(
     metadata.appVersion,
     metadata.ipHash,
     metadata.userAgentHash,
+    locator.sessionId,
+    locator.tenantId,
     oldTokenHash,
+    locator.rotation,
     rotatedAtIso,
   ).first<RotatedSessionRow>();
 
@@ -579,72 +690,66 @@ export async function rotateMobileRefreshToken(
         tenantId: row.tenantId,
         principalType: row.principalType,
         mobileIdentityId: row.mobileIdentityId,
-        credentialVersion:
-          Number(row.credentialVersion),
+        credentialVersion: Number(row.credentialVersion),
       },
     };
   }
 
-  const consumed = await database.prepare(`
-    SELECT
-      session_id AS sessionId,
-      refresh_family_id AS refreshFamilyId
-    FROM mobile_refresh_token_uses
-    WHERE token_hash = ?
+  const latest = await database.prepare(`
+    SELECT state
+    FROM mobile_token_locators
+    WHERE token_hash = ? AND token_kind = 'refresh'
     LIMIT 1
-  `).bind(
-    oldTokenHash,
-  ).first<ConsumedRefreshRow>();
+  `).bind(oldTokenHash).first<{ state: string }>();
 
-  if (consumed) {
+  if (latest?.state === "used") {
     const detectedAt = nowIso();
-
     await database.batch([
       database.prepare(`
         UPDATE mobile_refresh_token_uses
-           SET replay_detected_at =
-             COALESCE(replay_detected_at, ?)
+           SET replay_detected_at = COALESCE(replay_detected_at, ?)
          WHERE token_hash = ?
-      `).bind(
-        detectedAt,
-        oldTokenHash,
-      ),
-
+      `).bind(detectedAt, oldTokenHash),
       database.prepare(`
         UPDATE mobile_sessions
            SET revoked_at = COALESCE(revoked_at, ?),
-               revoke_reason =
-                 COALESCE(revoke_reason, 'refresh_replay')
-         WHERE refresh_family_id = ?
+               revoke_reason = COALESCE(revoke_reason, 'refresh_replay')
+         WHERE tenant_id = ? AND refresh_family_id = ?
+      `).bind(detectedAt, locator.tenantId, locator.refreshFamilyId),
+      database.prepare(`
+        INSERT INTO audit_events (
+          id, tenant_id, actor_id, action, resource_type, resource_id,
+          reason, ip_hash, metadata_json, occurred_at
+        ) VALUES (?, ?, ?, 'mobile.auth.refresh.replay',
+          'authentication', ?, 'failure', ?, ?, ?)
       `).bind(
+        crypto.randomUUID(),
+        locator.tenantId,
+        locator.userId,
+        locator.sessionId,
+        metadata.ipHash,
+        JSON.stringify({
+          deviceIdHash: metadata.deviceIdHash,
+          devicePlatform: metadata.devicePlatform,
+          appVersion: metadata.appVersion,
+          userAgentHash: metadata.userAgentHash,
+        }),
         detectedAt,
-        consumed.refreshFamilyId,
       ),
     ]);
-
     return { status: "replay" };
   }
 
-  const current = await database.prepare(`
-    SELECT id
-    FROM mobile_sessions
-    WHERE refresh_token_hash = ?
-    LIMIT 1
-  `).bind(
-    oldTokenHash,
-  ).first<{ id: string }>();
-
-  if (current) {
-    await revokeMobileSession(
-      current.id,
-      "invalid_or_expired",
-    );
-  }
-
+  await revokeMobileSession(
+    locator.tenantId,
+    locator.sessionId,
+    "invalid_or_expired",
+  );
   return { status: "invalid" };
 }
 
 export async function revokeMobileSession(
+  tenantId: string,
   sessionId: string,
   reason: string,
 ): Promise<void> {
@@ -652,10 +757,12 @@ export async function revokeMobileSession(
     UPDATE mobile_sessions
        SET revoked_at = COALESCE(revoked_at, ?),
            revoke_reason = COALESCE(revoke_reason, ?)
-     WHERE id = ?
+     WHERE tenant_id = ?
+       AND id = ?
   `).bind(
     nowIso(),
     safeReason(reason),
+    tenantId,
     sessionId,
   ).run();
 }
@@ -668,15 +775,23 @@ export async function revokeMobileSessionByAccessToken(
     return;
   }
 
+  const tokenHash = hashMobileToken(accessToken);
   await database.prepare(`
     UPDATE mobile_sessions
        SET revoked_at = COALESCE(revoked_at, ?),
            revoke_reason = COALESCE(revoke_reason, ?)
-     WHERE access_token_hash = ?
+     WHERE EXISTS (
+       SELECT 1 FROM mobile_token_locators locator
+        WHERE locator.token_hash = ?
+          AND locator.token_kind = 'access'
+          AND locator.state = 'active'
+          AND locator.tenant_id = mobile_sessions.tenant_id
+          AND locator.session_id = mobile_sessions.id
+     )
   `).bind(
     nowIso(),
     safeReason(reason),
-    hashMobileToken(accessToken),
+    tokenHash,
   ).run();
 }
 
@@ -720,4 +835,115 @@ export async function listActiveMobileAssignments(
   ).all<MobileAssignment>();
 
   return result.results;
+}
+
+export async function mobileAccessForPrincipal(
+  principal: MobileAuthenticatedPrincipal,
+): Promise<MobileAccessSummary> {
+  const moduleRows = await database.prepare(`
+    SELECT module_key AS moduleKey, enabled
+    FROM module_policies
+    WHERE tenant_id = ?
+  `).bind(principal.tenantId).all<{ moduleKey: string; enabled: number }>();
+
+  const enabledSchoolModules = new Set(
+    moduleRows.results
+      .filter((row) => Boolean(row.enabled))
+      .map((row) => row.moduleKey),
+  );
+
+  if (principal.principalType === "school") {
+    const permissionRows = principal.roleKey
+      ? await database.prepare(`
+          SELECT rp.permission
+          FROM roles r
+          JOIN role_permissions rp ON rp.role_id = r.id
+          WHERE r.tenant_id = ? AND r.key = ?
+        `).bind(principal.tenantId, principal.roleKey)
+        .all<{ permission: string }>()
+      : { results: [] as Array<{ permission: string }> };
+
+    const effective = resolveEffectiveSchoolModuleAccess({
+      policies: moduleRows.results.map((row) => ({
+        moduleKey: row.moduleKey,
+        enabled: Boolean(row.enabled),
+      })),
+      rolePermissions: new Set(
+        permissionRows.results.map((row) => row.permission),
+      ),
+    });
+
+    return {
+      tenantId: principal.tenantId,
+      principalType: principal.principalType,
+      modules: effective
+        .filter((entry) => entry.accessible)
+        .map((entry) => ({
+          key: entry.module.key,
+          label: entry.module.label,
+        })),
+      features: [],
+      assignments: [],
+    };
+  }
+
+  const subscription = await database.prepare(`
+    SELECT plan_id AS planId
+    FROM subscriptions
+    WHERE tenant_id = ? AND status IN ('trial', 'active')
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).bind(principal.tenantId).first<{ planId: string }>();
+
+  const planRows = subscription?.planId
+    ? await database.prepare(`
+        SELECT audience, feature_key AS featureKey, enabled
+        FROM plan_app_feature_policies
+        WHERE plan_id = ? AND audience = ?
+      `).bind(subscription.planId, principal.principalType)
+      .all<{ audience: "parent" | "student" | "transporter"; featureKey: string; enabled: number }>()
+    : { results: [] as Array<{ audience: "parent" | "student" | "transporter"; featureKey: string; enabled: number }> };
+
+  const tenantRows = await database.prepare(`
+    SELECT audience, feature_key AS featureKey, enabled
+    FROM tenant_app_feature_policies
+    WHERE tenant_id = ? AND audience = ?
+  `).bind(principal.tenantId, principal.principalType)
+    .all<{ audience: "parent" | "student" | "transporter"; featureKey: string; enabled: number }>();
+
+  const effective = resolveEffectiveAppFeatureAccess({
+    audience: principal.principalType,
+    planPolicies: planRows.results.map((row) => ({
+      audience: row.audience,
+      featureKey: row.featureKey,
+      enabled: Boolean(row.enabled),
+    })),
+    tenantPolicies: tenantRows.results.map((row) => ({
+      audience: row.audience,
+      featureKey: row.featureKey,
+      enabled: Boolean(row.enabled),
+    })),
+    enabledSchoolModules,
+  });
+
+  const assignments = principal.mobileIdentityId
+    ? await listActiveMobileAssignments(
+        principal.tenantId,
+        principal.mobileIdentityId,
+      )
+    : [];
+
+  return {
+    tenantId: principal.tenantId,
+    principalType: principal.principalType,
+    modules: [],
+    features: effective
+      .filter((entry) => entry.accessible)
+      .map((entry) => ({
+        key: entry.feature.key,
+        label: entry.feature.label,
+        requiredSchoolModule: entry.feature.requiredSchoolModule,
+      })),
+    assignments,
+  };
 }

@@ -376,3 +376,34 @@ export const mobileRefreshTokenUses = sqliteTable(
     }).onDelete("cascade"),
   ],
 );
+
+export const mobileTokenLocators = sqliteTable(
+  "mobile_token_locators",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    tokenKind: text("token_kind", { enum: ["access", "refresh"] }).notNull(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    sessionId: text("session_id").notNull(),
+    userId: text("user_id").notNull().references(() => users.id),
+    refreshFamilyId: text("refresh_family_id").notNull(),
+    rotation: integer("rotation").notNull(),
+    state: text("state", { enum: ["active", "used", "revoked", "expired"] }).notNull().default("active"),
+    expiresAt: text("expires_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    usedAt: text("used_at"),
+    revokedAt: text("revoked_at"),
+    revokeReason: text("revoke_reason"),
+  },
+  (table) => [
+    index("mobile_token_locators_session_idx").on(table.sessionId, table.state),
+    index("mobile_token_locators_user_idx").on(table.userId, table.state),
+    index("mobile_token_locators_family_idx").on(table.refreshFamilyId, table.state),
+    index("mobile_token_locators_expiry_idx").on(table.expiresAt, table.state),
+    foreignKey({
+      name: "mobile_token_locators_session_fk",
+      columns: [table.tenantId, table.sessionId],
+      foreignColumns: [mobileSessions.tenantId, mobileSessions.id],
+    }).onDelete("cascade"),
+  ],
+);

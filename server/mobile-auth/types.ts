@@ -85,9 +85,14 @@ export type MobileAuthenticatedPrincipal = {
   tenantId: string;
   principalType: MobilePrincipalType;
   mobileIdentityId: string | null;
+  roleKey: string | null;
   credentialVersion: number;
+  issuedAt: string;
+  lastSeenAt: string;
   accessExpiresAt: string;
   refreshExpiresAt: string;
+  devicePlatform: string | null;
+  appVersion: string | null;
 };
 
 export function isMobilePrincipalType(
@@ -154,4 +159,24 @@ export type MobileAssignment = {
   resourceType: MobileResourceType;
   resourceId: string;
   status: MobileAssignmentStatus;
+};
+
+
+export type MobileAccessModule = {
+  key: string;
+  label: string;
+};
+
+export type MobileAccessFeature = {
+  key: string;
+  label: string;
+  requiredSchoolModule: string | null;
+};
+
+export type MobileAccessSummary = {
+  tenantId: string;
+  principalType: MobilePrincipalType;
+  modules: MobileAccessModule[];
+  features: MobileAccessFeature[];
+  assignments: MobileAssignment[];
 };

@@ -19,6 +19,7 @@ type MobileTable = {
   tenantScoped: boolean;
   forceRls: boolean;
   authenticationServicePolicyRequired: boolean;
+  purpose?: string;
 };
 
 type MobileContract = {
@@ -199,7 +200,7 @@ test("mobile access cannot accept arbitrary tenant or audience overrides", () =>
   assert.equal(endpoint.acceptsAudienceOverride, false);
 });
 
-test("all mobile foundation tables require tenant isolation and forced RLS", () => {
+test("mobile tables retain tenant isolation and the global locator is service-only", () => {
   assert.deepEqual(
     contract.tables.map(({ name }) => name),
     [
@@ -207,17 +208,22 @@ test("all mobile foundation tables require tenant isolation and forced RLS", () 
       "mobile_identity_assignments",
       "mobile_sessions",
       "mobile_refresh_token_uses",
+      "mobile_token_locators",
     ],
   );
 
-  for (const table of contract.tables) {
+  for (const table of contract.tables.slice(0, 4)) {
     assert.equal(table.tenantScoped, true);
     assert.equal(table.forceRls, true);
-    assert.equal(
-      table.authenticationServicePolicyRequired,
-      true,
-    );
+    assert.equal(table.authenticationServicePolicyRequired, true);
   }
+
+  const locator = contract.tables.at(-1);
+  assert.equal(locator?.name, "mobile_token_locators");
+  assert.equal(locator?.tenantScoped, false);
+  assert.equal(locator?.forceRls, true);
+  assert.equal(locator?.authenticationServicePolicyRequired, true);
+  assert.equal(locator?.purpose, "opaque_token_to_tenant_locator_only");
 });
 
 test("mobile authentication audit events exclude raw credentials and tokens", () => {

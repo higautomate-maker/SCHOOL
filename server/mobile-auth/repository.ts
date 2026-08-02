@@ -2,6 +2,7 @@ import {
   repositoryBackend,
 } from "../runtime/repository-backend.ts";
 import type {
+  MobileAccessSummary,
   MobileAssignment,
   MobileAuthenticatedPrincipal,
   MobileLoginRecord,
@@ -24,13 +25,9 @@ export type CreateMobileSessionInput = {
 };
 
 function implementation() {
-  if (repositoryBackend() === "postgres") {
-    throw new Error(
-      "Mobile PostgreSQL repository is not implemented",
-    );
-  }
-
-  return import("./sqlite-repository.ts");
+  return repositoryBackend() === "postgres"
+    ? import("./postgres-repository.ts")
+    : import("./sqlite-repository.ts");
 }
 
 export async function findMobileLoginRecord(
@@ -63,11 +60,12 @@ export async function rotateMobileRefreshToken(
 }
 
 export async function revokeMobileSession(
+  tenantId: string,
   sessionId: string,
   reason: string,
 ): Promise<void> {
   return (await implementation())
-    .revokeMobileSession(sessionId, reason);
+    .revokeMobileSession(tenantId, sessionId, reason);
 }
 
 export async function revokeMobileSessionByAccessToken(
@@ -95,4 +93,11 @@ export async function listActiveMobileAssignments(
       tenantId,
       mobileIdentityId,
     );
+}
+
+export async function mobileAccessForPrincipal(
+  principal: MobileAuthenticatedPrincipal,
+): Promise<MobileAccessSummary> {
+  return (await implementation())
+    .mobileAccessForPrincipal(principal);
 }

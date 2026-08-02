@@ -6,21 +6,16 @@ import {
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
-const sqliteMigrationPath =
-  "drizzle/0010_mobile_identity_api.sql";
+const sqliteMigration = [
+  "drizzle/0010_mobile_identity_api.sql",
+  "drizzle/0011_mobile_refresh_rotation_guard.sql",
+  "drizzle/0012_mobile_token_locators.sql",
+].map((path) => readFileSync(path, "utf8")).join("\n");
 
-const postgresMigrationPath =
-  "drizzle-postgres/0008_mobile_identity_api.sql";
-
-const sqliteMigration = readFileSync(
-  sqliteMigrationPath,
-  "utf8",
-);
-
-const postgresMigration = readFileSync(
-  postgresMigrationPath,
-  "utf8",
-);
+const postgresMigration = [
+  "drizzle-postgres/0008_mobile_identity_api.sql",
+  "drizzle-postgres/0009_mobile_token_locators.sql",
+].map((path) => readFileSync(path, "utf8")).join("\n");
 
 function applySqliteMigrations(
   database: DatabaseSync,
@@ -33,7 +28,7 @@ function applySqliteMigrations(
 
   assert.equal(
     migrations.at(-1),
-    "0011_mobile_refresh_rotation_guard.sql",
+    "0012_mobile_token_locators.sql",
   );
 
   for (const migration of migrations) {
@@ -320,7 +315,7 @@ function insertFoundationRecords(
   };
 }
 
-test("SQLite migrations through 0011 apply and create the mobile foundation", () => {
+test("SQLite migrations through 0012 apply and create the mobile foundation", () => {
   const database = new DatabaseSync(":memory:");
 
   try {
@@ -341,6 +336,7 @@ test("SQLite migrations through 0011 apply and create the mobile foundation", ()
         "mobile_identity_assignments",
         "mobile_refresh_token_uses",
         "mobile_sessions",
+        "mobile_token_locators",
       ],
     );
 
@@ -357,8 +353,12 @@ test("SQLite migrations through 0011 apply and create the mobile foundation", ()
       [
         "mobile_identity_assignments_validate_insert",
         "mobile_identity_assignments_validate_update",
+        "mobile_sessions_locator_insert",
+        "mobile_sessions_locator_revoke",
+        "mobile_sessions_locator_rotation",
         "mobile_sessions_record_refresh_use",
         "mobile_sessions_validate_insert",
+        "mobile_sessions_validate_locator_rotation",
         "mobile_sessions_validate_refresh_rotation",
         "mobile_sessions_validate_update",
       ],
@@ -374,6 +374,7 @@ test("SQLite and PostgreSQL mobile schemas retain core parity", () => {
     "mobile_identity_assignments",
     "mobile_sessions",
     "mobile_refresh_token_uses",
+    "mobile_token_locators",
   ]) {
     assert.match(
       sqliteMigration,
@@ -424,6 +425,20 @@ test("SQLite and PostgreSQL mobile schemas retain core parity", () => {
     sqliteMigration,
     /DISABLE ROW LEVEL SECURITY|BYPASSRLS/i,
   );
+});
+
+test("SQLite mobile session triggers create the contracted audit events", () => {
+  for (const action of [
+    "mobile.auth.login.success",
+    "mobile.auth.refresh.success",
+    "mobile.auth.logout",
+    "mobile.auth.session.revoked",
+  ]) {
+    assert.match(
+      sqliteMigration,
+      new RegExp(action.replaceAll(".", "\\.")),
+    );
+  }
 });
 
 test("SQLite mobile assignments enforce tenant and persona boundaries", () => {

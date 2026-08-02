@@ -38,6 +38,8 @@ export const notificationRecipientType = pgEnum("notification_recipient_type", [
 export const notificationChannel = pgEnum("notification_channel", ["in_app", "email", "sms", "push", "capture"]);
 export const notificationDeliveryStatus = pgEnum("notification_delivery_status", ["pending", "processing", "delivered", "failed", "skipped", "dead_letter"]);
 export const notificationAttemptStatus = pgEnum("notification_attempt_status", ["started", "delivered", "failed", "skipped"]);
+export const mobilePrincipalType = pgEnum("mobile_principal_type", ["school", "parent", "student", "transporter"]);
+export const mobileAssignmentStatus = pgEnum("mobile_assignment_status", ["active", "suspended", "revoked"]);
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -520,7 +522,6 @@ export const outboxEvents = pgTable("outbox_events", {
   check("outbox_attempts_ck", sql`${table.attempts} >= 0`),
 ]);
 
-
 export const notificationDeliveries = pgTable("notification_deliveries", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
@@ -601,4 +602,128 @@ export const notificationDeadLetters = pgTable("notification_dead_letters", {
   index("notification_dead_letters_failed_idx").on(table.failedAt),
   check("notification_dead_letters_attempts_ck", sql`${table.attempts} >= 0`),
   check("notification_dead_letters_reference_ck", sql`${table.outboxEventId} IS NOT NULL OR ${table.deliveryId} IS NOT NULL`),
+]);
+
+// Stage 9 mobile identity, sessions, refresh replay evidence, and global token locators.
+export const mobileIdentities = pgTable("mobile_identities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  audience: appAudience("audience").notNull(),
+  status: membershipStatus("status").notNull().default("invited"),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokedReason: text("revoked_reason"),
+  ...timestamps,
+}, (table) => [
+  unique("mobile_identities_tenant_id_id_uq").on(table.tenantId, table.id),
+  unique("mobile_identities_tenant_user_audience_uq").on(table.tenantId, table.userId, table.audience),
+  index("mobile_identities_tenant_audience_status_idx").on(table.tenantId, table.audience, table.status),
+  index("mobile_identities_user_status_idx").on(table.userId, table.status),
+]);
+
+export const mobileIdentityAssignments = pgTable("mobile_identity_assignments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  mobileIdentityId: uuid("mobile_identity_id").notNull(),
+  resourceType: text("resource_type").notNull(),
+  resourceId: uuid("resource_id").notNull(),
+  status: mobileAssignmentStatus("status").notNull().default("active"),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokedReason: text("revoked_reason"),
+  ...timestamps,
+}, (table) => [
+  unique("mobile_identity_assignments_tenant_id_id_uq").on(table.tenantId, table.id),
+  unique("mobile_identity_assignments_resource_uq").on(table.tenantId, table.mobileIdentityId, table.resourceType, table.resourceId),
+  index("mobile_identity_assignments_lookup_idx").on(table.tenantId, table.mobileIdentityId, table.resourceType, table.status),
+  foreignKey({
+    name: "mobile_identity_assignments_identity_fk",
+    columns: [table.tenantId, table.mobileIdentityId],
+    foreignColumns: [mobileIdentities.tenantId, mobileIdentities.id],
+  }).onDelete("cascade"),
+]);
+
+export const mobileSessions = pgTable("mobile_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  mobileIdentityId: uuid("mobile_identity_id"),
+  principalType: mobilePrincipalType("principal_type").notNull(),
+  accessTokenHash: text("access_token_hash").notNull(),
+  refreshTokenHash: text("refresh_token_hash").notNull(),
+  refreshFamilyId: uuid("refresh_family_id").notNull(),
+  refreshRotation: bigint("refresh_rotation", { mode: "number" }).notNull().default(0),
+  credentialVersion: bigint("credential_version", { mode: "number" }).notNull(),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }).notNull(),
+  refreshExpiresAt: timestamp("refresh_expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokeReason: text("revoke_reason"),
+  deviceIdHash: text("device_id_hash"),
+  devicePlatform: text("device_platform"),
+  appVersion: text("app_version"),
+  ipHash: text("ip_hash"),
+  userAgentHash: text("user_agent_hash"),
+}, (table) => [
+  unique("mobile_sessions_tenant_id_id_uq").on(table.tenantId, table.id),
+  unique("mobile_sessions_access_token_hash_uq").on(table.accessTokenHash),
+  unique("mobile_sessions_refresh_token_hash_uq").on(table.refreshTokenHash),
+  index("mobile_sessions_user_active_idx").on(table.userId, table.tenantId, table.revokedAt, table.refreshExpiresAt),
+  index("mobile_sessions_family_active_idx").on(table.refreshFamilyId, table.revokedAt),
+  index("mobile_sessions_identity_active_idx").on(table.tenantId, table.mobileIdentityId, table.revokedAt),
+  foreignKey({
+    name: "mobile_sessions_identity_fk",
+    columns: [table.tenantId, table.mobileIdentityId],
+    foreignColumns: [mobileIdentities.tenantId, mobileIdentities.id],
+  }),
+]);
+
+export const mobileRefreshTokenUses = pgTable("mobile_refresh_token_uses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  sessionId: uuid("session_id").notNull(),
+  refreshFamilyId: uuid("refresh_family_id").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  rotation: bigint("rotation", { mode: "number" }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }).notNull().defaultNow(),
+  replayDetectedAt: timestamp("replay_detected_at", { withTimezone: true }),
+  deviceIdHash: text("device_id_hash"),
+  ipHash: text("ip_hash"),
+}, (table) => [
+  unique("mobile_refresh_token_uses_hash_uq").on(table.tokenHash),
+  unique("mobile_refresh_token_uses_rotation_uq").on(table.sessionId, table.rotation),
+  index("mobile_refresh_token_uses_family_idx").on(table.refreshFamilyId, table.usedAt),
+  index("mobile_refresh_token_uses_session_idx").on(table.tenantId, table.sessionId, table.usedAt),
+  foreignKey({
+    name: "mobile_refresh_token_uses_session_fk",
+    columns: [table.tenantId, table.sessionId],
+    foreignColumns: [mobileSessions.tenantId, mobileSessions.id],
+  }).onDelete("cascade"),
+]);
+
+export const mobileTokenLocators = pgTable("mobile_token_locators", {
+  tokenHash: text("token_hash").primaryKey(),
+  tokenKind: text("token_kind").notNull(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  sessionId: uuid("session_id").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  refreshFamilyId: uuid("refresh_family_id").notNull(),
+  rotation: bigint("rotation", { mode: "number" }).notNull(),
+  state: text("state").notNull().default("active"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  revokeReason: text("revoke_reason"),
+}, (table) => [
+  index("mobile_token_locators_session_idx").on(table.sessionId, table.state),
+  index("mobile_token_locators_user_idx").on(table.userId, table.state),
+  index("mobile_token_locators_family_idx").on(table.refreshFamilyId, table.state),
+  index("mobile_token_locators_expiry_idx").on(table.expiresAt, table.state),
+  foreignKey({
+    name: "mobile_token_locators_session_fk",
+    columns: [table.tenantId, table.sessionId],
+    foreignColumns: [mobileSessions.tenantId, mobileSessions.id],
+  }).onDelete("cascade"),
 ]);

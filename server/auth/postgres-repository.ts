@@ -36,6 +36,34 @@ async function enableTenant(client: PoolClient, tenantId: string): Promise<void>
   await client.query("SELECT set_config('app.tenant_id', $1::text, true)", [tenantId]);
 }
 
+async function revokeMobileSessionsForUser(
+  client: PoolClient,
+  userId: string,
+  reason: string,
+): Promise<void> {
+  await client.query(
+    "SELECT set_config('app.mobile_auth_service', 'true', true)",
+  );
+  const tenants = await client.query<{ tenantId: string }>(
+    `SELECT DISTINCT tenant_id AS "tenantId"
+       FROM mobile_token_locators
+      WHERE user_id = $1::uuid`,
+    [userId],
+  );
+  for (const { tenantId } of tenants.rows) {
+    await enableTenant(client, tenantId);
+    await client.query(
+      `UPDATE mobile_sessions
+          SET revoked_at = COALESCE(revoked_at, now()),
+              revoke_reason = COALESCE(revoke_reason, $1::text)
+        WHERE tenant_id = $2::uuid
+          AND user_id = $3::uuid
+          AND revoked_at IS NULL`,
+      [reason, tenantId, userId],
+    );
+  }
+}
+
 export async function findLoginRecord(email: string): Promise<LoginRecord | null> {
   return transaction(async (client) => {
     const result = await client.query(
@@ -70,6 +98,7 @@ export async function replacePassword(userId: string, passwordHash: string): Pro
         WHERE user_id = $1::uuid AND revoked_at IS NULL`,
       [userId],
     );
+    await revokeMobileSessionsForUser(client, userId, "password_changed");
   });
 }
 
@@ -352,6 +381,7 @@ export async function consumeReset(tokenHash: string, passwordHash: string, meta
         WHERE user_id = $1::uuid AND revoked_at IS NULL`,
       [userId],
     );
+    await revokeMobileSessionsForUser(client, userId, "password_reset");
     await client.query(
       `SELECT set_config('app.platform_create', 'true', true)`,
     );
@@ -408,6 +438,12 @@ export async function acceptInvitation(tokenHash: string, email: string, passwor
         WHERE user_id = $1::uuid AND revoked_at IS NULL`,
       [row.user_id],
     );
+    await revokeMobileSessionsForUser(
+      client,
+      row.user_id,
+      "invitation_acceptance",
+    );
+    await enableTenant(client, row.tenant_id);
     await client.query(
       `INSERT INTO audit_events(tenant_id, actor_id, action, resource_type, reason, ip_hash, metadata)
        VALUES($1::uuid, $2::uuid, 'auth.invitation.accept', 'authentication', 'success', $3::text, $4::jsonb)`,

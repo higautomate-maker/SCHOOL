@@ -181,6 +181,27 @@ Consumed refresh-token hashes are retained for replay detection.
 
 A replayed refresh token revokes every active session in the refresh family.
 
+### `mobile_token_locators`
+
+This internal authentication table maps an opaque token hash to the minimum
+server-controlled session locator required to discover the authoritative tenant.
+It is not tenant-scoped because the tenant is not known until the opaque token
+is resolved.
+
+Required fields:
+
+- token hash and token kind (`access` or `refresh`);
+- tenant, session, user, refresh-family, and rotation identifiers;
+- state (`active`, `used`, `revoked`, or `expired`);
+- expiry, created, updated, used, and revoked timestamps;
+- optional bounded revocation reason.
+
+The table stores hashes only, uses forced row-level security, and is available
+only when the mobile-authentication service context is enabled. Locator data is
+never authorization evidence. After lookup, the repository sets the exact tenant
+context and revalidates the authoritative `mobile_sessions` row and relationship.
+Consumed refresh locators remain available for replay detection.
+
 ## Token lifecycle
 
 - Access token lifetime: 15 minutes.

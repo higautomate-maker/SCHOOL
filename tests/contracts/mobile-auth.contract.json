@@ -142,6 +142,13 @@
       "tenantScoped": true,
       "forceRls": true,
       "authenticationServicePolicyRequired": true
+    },
+    {
+      "name": "mobile_token_locators",
+      "tenantScoped": false,
+      "forceRls": true,
+      "authenticationServicePolicyRequired": true,
+      "purpose": "opaque_token_to_tenant_locator_only"
     }
   ],
   "securityEvents": [

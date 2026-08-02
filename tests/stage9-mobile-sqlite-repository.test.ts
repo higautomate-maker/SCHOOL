@@ -409,6 +409,35 @@ test("SQLite mobile sessions store hashes and resolve access tokens", async () =
     assert.equal(serialized.includes(rawToken), false);
   }
 
+  const locators = await database.prepare(`
+    SELECT token_hash AS tokenHash, token_kind AS tokenKind,
+           tenant_id AS tenantId, session_id AS sessionId, state
+    FROM mobile_token_locators
+    ORDER BY session_id, token_kind
+  `).all<{
+    tokenHash: string;
+    tokenKind: string;
+    tenantId: string;
+    sessionId: string;
+    state: string;
+  }>();
+
+  assert.equal(locators.results.length, 4);
+  assert.ok(locators.results.every((locator) =>
+    /^[a-f0-9]{64}$/.test(locator.tokenHash)
+      && locator.tenantId === tenantId
+      && locator.state === "active"
+  ));
+  const locatorSerialized = JSON.stringify(locators.results);
+  for (const rawToken of [
+    schoolSession.accessToken,
+    schoolSession.refreshToken,
+    parentSession.accessToken,
+    parentSession.refreshToken,
+  ]) {
+    assert.equal(locatorSerialized.includes(rawToken), false);
+  }
+
   const schoolActor =
     await repository.resolveMobileAccessToken(
       schoolSession.accessToken,
@@ -512,6 +541,28 @@ test("SQLite mobile sessions store hashes and resolve access tokens", async () =
   assert.equal(recordedUse.rotation, 0);
   assert.match(recordedUse.tokenHash, /^[a-f0-9]{64}$/);
 
+
+  const locatorStates = await database.prepare(`
+    SELECT token_hash AS tokenHash, token_kind AS tokenKind, state
+    FROM mobile_token_locators
+    WHERE session_id = ?
+    ORDER BY created_at, token_kind
+  `).bind(parentSession.sessionId).all<{
+    tokenHash: string;
+    tokenKind: string;
+    state: string;
+  }>();
+
+  assert.deepEqual(
+    locatorStates.results.map(({ tokenKind, state }) => ({ tokenKind, state })),
+    [
+      { tokenKind: "access", state: "revoked" },
+      { tokenKind: "refresh", state: "used" },
+      { tokenKind: "access", state: "active" },
+      { tokenKind: "refresh", state: "active" },
+    ],
+  );
+
   const replay =
     await repository.rotateMobileRefreshToken(
       parentSession.refreshToken,
@@ -545,6 +596,14 @@ test("SQLite mobile sessions store hashes and resolve access tokens", async () =
     replayState.revokeReason,
     "refresh_replay",
   );
+
+
+  const activeLocatorsAfterReplay = await database.prepare(`
+    SELECT COUNT(*) AS count
+    FROM mobile_token_locators
+    WHERE refresh_family_id = ? AND state = 'active'
+  `).bind(parentSession.refreshFamilyId).first<{ count: number }>();
+  assert.equal(Number(activeLocatorsAfterReplay?.count ?? -1), 0);
 
   await database.prepare(`
     UPDATE auth_credentials
@@ -611,11 +670,13 @@ test("SQLite mobile revocation and relationship invalidation are fail-closed", a
   );
 
   await repository.revokeMobileSession(
+    tenantId,
     relationshipSession.sessionId,
     "logout",
   );
 
   await repository.revokeMobileSession(
+    tenantId,
     relationshipSession.sessionId,
     "logout",
   );
@@ -642,10 +703,31 @@ test("SQLite mobile revocation and relationship invalidation are fail-closed", a
   assert.equal(Number(activeSessions?.count ?? -1), 0);
 });
 
-test("PostgreSQL mobile repository remains explicitly fail-closed", () => {
-  const source = `
-    ${process.env.HIG_REPOSITORY_BACKEND ?? ""}
-  `;
+test("PostgreSQL mobile repository dispatch is implemented and locator-bound", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const dispatch = await readFile(
+    "server/mobile-auth/repository.ts",
+    "utf8",
+  );
+  const postgres = await readFile(
+    "server/mobile-auth/postgres-repository.ts",
+    "utf8",
+  );
 
-  assert.equal(source.trim(), "sqlite");
+  assert.match(dispatch, /import\("\.\/postgres-repository\.ts"\)/);
+  assert.doesNotMatch(
+    dispatch,
+    /Mobile PostgreSQL repository is not implemented/,
+  );
+  assert.match(postgres, /FROM mobile_token_locators/);
+  assert.match(postgres, /FOR UPDATE/);
+  assert.match(
+    postgres,
+    /set_config\('app\.tenant_id', \$1::text, true\)/,
+  );
+  assert.match(
+    postgres,
+    /set_config\('app\.mobile_auth_service', 'true', true\)/,
+  );
+  assert.doesNotMatch(postgres, /BYPASSRLS|SECURITY DEFINER/i);
 });

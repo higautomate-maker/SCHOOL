@@ -17,6 +17,7 @@ import {
   createMobileSession,
   findMobileLoginRecord,
   listActiveMobileAssignments,
+  mobileAccessForPrincipal,
   resolveMobileAccessToken,
   revokeMobileSession,
   revokeMobileSessionByAccessToken,
@@ -26,6 +27,7 @@ import {
   mobileBearerTokenFromRequest,
 } from "./tokens.ts";
 import type {
+  MobileAccessSummary,
   MobileAssignment,
   MobileAuthenticatedPrincipal,
   MobileLoginRecord,
@@ -51,11 +53,13 @@ const mobileDeviceSchema = z.object({
   devicePlatform: z.enum([
     "android",
     "ios",
-  ]),
+  ]).nullable().optional(),
   appVersion: z.string()
     .trim()
     .min(1)
-    .max(64),
+    .max(64)
+    .nullable()
+    .optional(),
 }).strict();
 
 export const mobileLoginInputSchema = mobileDeviceSchema.extend({
@@ -139,16 +143,16 @@ export function mobileRequestMetadata(
   request: Request,
   device: {
     deviceId?: string | null;
-    devicePlatform: "android" | "ios";
-    appVersion: string;
+    devicePlatform?: "android" | "ios" | null;
+    appVersion?: string | null;
   },
 ): MobileSessionMetadata {
   return {
     deviceIdHash: device.deviceId
       ? privacyHash(device.deviceId)
       : null,
-    devicePlatform: device.devicePlatform,
-    appVersion: device.appVersion,
+    devicePlatform: device.devicePlatform ?? null,
+    appVersion: device.appVersion ?? null,
     ipHash: privacyHash(
       mobileClientAddress(request),
     ),
@@ -196,7 +200,7 @@ async function writeMobileLoginFailure(
   await writeSecurityEvent({
     tenantId: auditTenantId(record),
     actorId: record?.userId ?? null,
-    action: "mobile.auth.login",
+    action: "mobile.auth.login.failure",
     outcome: "failure",
     ipHash: metadata.ipHash,
     metadata: {
@@ -226,7 +230,7 @@ export async function authenticateMobilePassword(
 
   const limit = await authRateLimit(
     "login",
-    `${input.tenantId}:${input.principalType}:${email}`,
+    email,
     mobileClientAddress(request),
   );
 
@@ -243,6 +247,12 @@ export async function authenticateMobilePassword(
       retryAfter: limit.retryAfter,
       delayMs: limit.delayMs,
     };
+  }
+
+  if (limit.delayMs) {
+    await new Promise((resolve) =>
+      setTimeout(resolve, limit.delayMs)
+    );
   }
 
   const record = await findMobileLoginRecord({
@@ -305,21 +315,6 @@ export async function authenticateMobilePassword(
     metadata,
   });
 
-  await writeSecurityEvent({
-    tenantId: currentRecord.tenantId,
-    actorId: currentRecord.userId,
-    action: "mobile.auth.login",
-    outcome: "success",
-    ipHash: metadata.ipHash,
-    metadata: {
-      principalType: currentRecord.principalType,
-      deviceIdHash: metadata.deviceIdHash,
-      devicePlatform: metadata.devicePlatform,
-      appVersion: metadata.appVersion,
-      userAgentHash: metadata.userAgentHash,
-    },
-  });
-
   return {
     status: "authenticated",
     actorUserId: currentRecord.userId,
@@ -351,28 +346,20 @@ export async function refreshMobileSession(
     metadata,
   );
 
-  await writeSecurityEvent({
-    tenantId: result.status === "rotated"
-      ? result.session.tenantId
-      : null,
-    action: result.status === "replay"
-      ? "mobile.auth.refresh_replay"
-      : "mobile.auth.refresh",
-    outcome: result.status === "rotated"
-      ? "success"
-      : "failure",
-    ipHash: metadata.ipHash,
-    metadata: {
-      result: result.status,
-      principalType: result.status === "rotated"
-        ? result.session.principalType
-        : null,
-      deviceIdHash: metadata.deviceIdHash,
-      devicePlatform: metadata.devicePlatform,
-      appVersion: metadata.appVersion,
-      userAgentHash: metadata.userAgentHash,
-    },
-  });
+  if (result.status === "invalid") {
+    await writeSecurityEvent({
+      action: "mobile.auth.refresh.failure",
+      outcome: "failure",
+      ipHash: metadata.ipHash,
+      metadata: {
+        result: result.status,
+        deviceIdHash: metadata.deviceIdHash,
+        devicePlatform: metadata.devicePlatform,
+        appVersion: metadata.appVersion,
+        userAgentHash: metadata.userAgentHash,
+      },
+    });
+  }
 
   return result;
 }
@@ -398,41 +385,10 @@ export async function logoutMobileSession(
   }
 
   await revokeMobileSession(
+    actor.tenantId,
     actor.sessionId,
     "logout",
   );
-
-  const metadata = mobileRequestMetadata(
-    request,
-    {
-      devicePlatform: request.headers
-        .get("x-hig-device-platform") === "ios"
-        ? "ios"
-        : "android",
-      appVersion: request.headers
-        .get("x-hig-app-version")
-        ?.trim()
-        .slice(0, 64)
-        || "unknown",
-      deviceId: request.headers
-        .get("x-hig-device-id"),
-    },
-  );
-
-  await writeSecurityEvent({
-    tenantId: actor.tenantId,
-    actorId: actor.userId,
-    action: "mobile.auth.logout",
-    outcome: "success",
-    ipHash: metadata.ipHash,
-    metadata: {
-      principalType: actor.principalType,
-      deviceIdHash: metadata.deviceIdHash,
-      devicePlatform: metadata.devicePlatform,
-      appVersion: metadata.appVersion,
-      userAgentHash: metadata.userAgentHash,
-    },
-  });
 
   return true;
 }
@@ -448,4 +404,10 @@ export async function activeAssignmentsForPrincipal(
     principal.tenantId,
     principal.mobileIdentityId,
   );
+}
+
+export async function effectiveAccessForPrincipal(
+  principal: MobileAuthenticatedPrincipal,
+): Promise<MobileAccessSummary> {
+  return mobileAccessForPrincipal(principal);
 }
