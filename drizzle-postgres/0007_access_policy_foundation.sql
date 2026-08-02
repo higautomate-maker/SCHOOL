@@ -135,6 +135,11 @@ CREATE POLICY "role_permissions_access_policy_backfill_insert"
   FOR INSERT
   WITH CHECK (app_platform_policy_management_enabled());
 --> statement-breakpoint
+CREATE POLICY "role_permissions_access_policy_backfill_read"
+  ON "role_permissions"
+  FOR SELECT
+  USING (app_platform_policy_management_enabled());
+--> statement-breakpoint
 -- Existing system School Admin roles receive every newly introduced permission.
 -- Custom roles are intentionally untouched. The write context is transaction-local.
 DO $$
@@ -211,5 +216,7 @@ END
 $$;
 --> statement-breakpoint
 DROP POLICY "roles_access_policy_backfill_read" ON "roles";
+--> statement-breakpoint
+DROP POLICY "role_permissions_access_policy_backfill_read" ON "role_permissions";
 --> statement-breakpoint
 DROP POLICY "role_permissions_access_policy_backfill_insert" ON "role_permissions";
