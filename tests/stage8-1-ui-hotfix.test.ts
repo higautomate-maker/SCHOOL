@@ -8,6 +8,8 @@ test("Company policy cards expose a real full-card input hit target",()=>{
   assert.match(css,/\.toggle-list input \{ position:absolute; inset:0; z-index:2; width:100%; height:100%/);
   assert.match(css,/\.policy-module input\{position:absolute;inset:0;z-index:2;width:100%;height:100%/);
   assert.match(css,/\.app-policy input\{position:absolute;inset:0;z-index:2;width:100%;height:100%/);
+  assert.match(css,/\.app-policy input:checked\+\.policy-switch\{background:#4e8667\}/);
+  assert.match(css,/\.app-policy input:checked\+\.policy-switch::after\{transform:translateX\(14px\)\}/);
   assert.doesNotMatch(css,/\.policy-module input\{position:absolute;opacity:0;pointer-events:none\}/);
 });
 
