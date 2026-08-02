@@ -181,3 +181,14 @@ footer { display:flex; justify-content:space-between; padding:18px 2px 0; color:
 .modal,.school-drawer{box-shadow:var(--hig-shadow-md)}
 footer{color:var(--hig-muted)}
 @media(max-width:760px){.topbar{height:64px}.content{padding:22px 16px}.heading-row{align-items:flex-start}.heading-row h1{font-size:27px}}
+
+/* Stage 8.1 Batch 5 click-audit states */
+.nav-item:disabled,.profile-button:disabled,.icon-button:disabled{cursor:not-allowed;opacity:.58}
+.nav-item-disabled:hover{background:transparent;color:#aebeb7}
+.nav-planned{margin-left:auto;border:1px solid rgba(255,255,255,.15);border-radius:999px;padding:2px 5px;font-size:6px;letter-spacing:.5px;color:#9cb2a8}
+.live-context{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--hig-border);border-radius:999px;background:#fff;padding:7px 10px;color:var(--hig-primary);font-size:8px;font-weight:800;letter-spacing:.55px}
+.live-context i{width:7px;height:7px;border-radius:50%;background:#4cae74;box-shadow:0 0 0 4px #e2f3e8}
+.company-schools-page{padding-bottom:4px}
+.company-empty-state{display:flex;min-height:110px;align-items:center;justify-content:center;flex-direction:column;gap:7px;border-top:1px solid var(--hig-border);color:var(--hig-muted)}
+.company-empty-state b{color:var(--hig-text);font-size:12px}.company-empty-state span,.company-compact-empty{font-size:9px;color:var(--hig-muted)}
+.company-compact-empty{padding:18px 0;text-align:center}
