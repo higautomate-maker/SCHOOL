@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { foreignKey, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestamps = {
   createdAt: text("created_at").notNull(),
@@ -228,3 +228,151 @@ export const moduleRecords = sqliteTable("module_records", {
   createdBy: text("created_by").notNull().references(() => users.id),
   ...timestamps,
 }, (table) => [index("module_records_tenant_module_idx").on(table.tenantId, table.moduleKey, table.status), index("module_records_session_idx").on(table.academicSessionId), index("module_records_due_idx").on(table.dueDate, table.status)]);
+
+// Stage 9 mobile identity and opaque-token session foundation.
+
+export const mobileIdentities = sqliteTable("mobile_identities", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().references(() => tenants.id),
+  userId: text("user_id").notNull().references(() => users.id),
+  audience: text("audience", {
+    enum: ["parent", "student", "transporter"],
+  }).notNull(),
+  status: text("status", {
+    enum: ["invited", "active", "suspended", "revoked"],
+  }).notNull().default("invited"),
+  revokedAt: text("revoked_at"),
+  revokedReason: text("revoked_reason"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("mobile_identities_tenant_id_id_uq")
+    .on(table.tenantId, table.id),
+  uniqueIndex("mobile_identities_tenant_user_audience_uq")
+    .on(table.tenantId, table.userId, table.audience),
+  index("mobile_identities_tenant_audience_status_idx")
+    .on(table.tenantId, table.audience, table.status),
+  index("mobile_identities_user_status_idx")
+    .on(table.userId, table.status),
+]);
+
+export const mobileIdentityAssignments = sqliteTable(
+  "mobile_identity_assignments",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    mobileIdentityId: text("mobile_identity_id").notNull(),
+    resourceType: text("resource_type", {
+      enum: ["student", "vehicle", "route", "trip"],
+    }).notNull(),
+    resourceId: text("resource_id").notNull(),
+    status: text("status", {
+      enum: ["active", "suspended", "revoked"],
+    }).notNull().default("active"),
+    revokedAt: text("revoked_at"),
+    revokedReason: text("revoked_reason"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("mobile_identity_assignments_tenant_id_id_uq")
+      .on(table.tenantId, table.id),
+    uniqueIndex("mobile_identity_assignments_resource_uq")
+      .on(
+        table.tenantId,
+        table.mobileIdentityId,
+        table.resourceType,
+        table.resourceId,
+      ),
+    index("mobile_identity_assignments_lookup_idx")
+      .on(
+        table.tenantId,
+        table.mobileIdentityId,
+        table.resourceType,
+        table.status,
+      ),
+    foreignKey({
+      name: "mobile_identity_assignments_identity_fk",
+      columns: [table.tenantId, table.mobileIdentityId],
+      foreignColumns: [mobileIdentities.tenantId, mobileIdentities.id],
+    }).onDelete("cascade"),
+  ],
+);
+
+export const mobileSessions = sqliteTable("mobile_sessions", {
+  id: text("id").primaryKey(),
+  tenantId: text("tenant_id").notNull().references(() => tenants.id),
+  userId: text("user_id").notNull().references(() => users.id),
+  mobileIdentityId: text("mobile_identity_id"),
+  principalType: text("principal_type", {
+    enum: ["school", "parent", "student", "transporter"],
+  }).notNull(),
+  accessTokenHash: text("access_token_hash").notNull(),
+  refreshTokenHash: text("refresh_token_hash").notNull(),
+  refreshFamilyId: text("refresh_family_id").notNull(),
+  refreshRotation: integer("refresh_rotation").notNull().default(0),
+  credentialVersion: integer("credential_version").notNull(),
+  issuedAt: text("issued_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  accessExpiresAt: text("access_expires_at").notNull(),
+  refreshExpiresAt: text("refresh_expires_at").notNull(),
+  revokedAt: text("revoked_at"),
+  revokeReason: text("revoke_reason"),
+  deviceIdHash: text("device_id_hash"),
+  devicePlatform: text("device_platform"),
+  appVersion: text("app_version"),
+  ipHash: text("ip_hash"),
+  userAgentHash: text("user_agent_hash"),
+}, (table) => [
+  uniqueIndex("mobile_sessions_tenant_id_id_uq")
+    .on(table.tenantId, table.id),
+  uniqueIndex("mobile_sessions_access_token_hash_uq")
+    .on(table.accessTokenHash),
+  uniqueIndex("mobile_sessions_refresh_token_hash_uq")
+    .on(table.refreshTokenHash),
+  index("mobile_sessions_user_active_idx")
+    .on(
+      table.userId,
+      table.tenantId,
+      table.revokedAt,
+      table.refreshExpiresAt,
+    ),
+  index("mobile_sessions_family_active_idx")
+    .on(table.refreshFamilyId, table.revokedAt),
+  index("mobile_sessions_identity_active_idx")
+    .on(table.tenantId, table.mobileIdentityId, table.revokedAt),
+  foreignKey({
+    name: "mobile_sessions_identity_fk",
+    columns: [table.tenantId, table.mobileIdentityId],
+    foreignColumns: [mobileIdentities.tenantId, mobileIdentities.id],
+  }),
+]);
+
+export const mobileRefreshTokenUses = sqliteTable(
+  "mobile_refresh_token_uses",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id),
+    sessionId: text("session_id").notNull(),
+    refreshFamilyId: text("refresh_family_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    rotation: integer("rotation").notNull(),
+    usedAt: text("used_at").notNull(),
+    replayDetectedAt: text("replay_detected_at"),
+    deviceIdHash: text("device_id_hash"),
+    ipHash: text("ip_hash"),
+  },
+  (table) => [
+    uniqueIndex("mobile_refresh_token_uses_hash_uq")
+      .on(table.tokenHash),
+    uniqueIndex("mobile_refresh_token_uses_rotation_uq")
+      .on(table.sessionId, table.rotation),
+    index("mobile_refresh_token_uses_family_idx")
+      .on(table.refreshFamilyId, table.usedAt),
+    index("mobile_refresh_token_uses_session_idx")
+      .on(table.tenantId, table.sessionId, table.usedAt),
+    foreignKey({
+      name: "mobile_refresh_token_uses_session_fk",
+      columns: [table.tenantId, table.sessionId],
+      foreignColumns: [mobileSessions.tenantId, mobileSessions.id],
+    }).onDelete("cascade"),
+  ],
+);
