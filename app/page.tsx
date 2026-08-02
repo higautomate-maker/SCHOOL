@@ -434,7 +434,7 @@ export default function Home() {
       <aside className={menuOpen ? "sidebar open" : "sidebar"}>
         <div className="brand">
           <div className="brand-mark" aria-hidden="true"><span>H</span></div>
-          <div><strong>Hig School</strong><small>COMMAND CENTER</small></div>
+          <div><strong>HIG School</strong><small>COMMAND CENTER</small></div>
         </div>
 
         <nav aria-label="Primary navigation">
@@ -465,7 +465,7 @@ export default function Home() {
           <div className="top-actions">
             <Link className="workspace-link" href="/school">School workspace <span>→</span></Link>
             <LogoutButton className="workspace-link" />
-            <button className="icon-button" aria-label="Help" onClick={() => setNotice("Hig School support center is ready")}>?</button>
+            <button className="icon-button" aria-label="Help" onClick={() => setNotice("HIG School support center is ready")}>?</button>
             <button className="icon-button notification" aria-label="Notifications" onClick={() => setNotice("No new critical security alerts")}>♢<span /></button>
             <button className="primary-button compact" onClick={() => setModalOpen(true)}><span>＋</span> Add school</button>
           </div>
