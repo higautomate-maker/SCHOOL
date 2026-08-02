@@ -62,6 +62,82 @@ export const permissionCatalogue = [
 
 export type PermissionKey = typeof permissionCatalogue[number][0];
 
+const permissionModuleDependencies: Readonly<
+  Partial<Record<PermissionKey, SchoolModuleKey>>
+> = {
+  "academics.view": "academics",
+  "academics.manage": "academics",
+  "students.view": "student_information",
+  "students.manage": "student_information",
+  "attendance.view": "attendance",
+  "attendance.manage": "attendance",
+  "fees.view": "fees_finance",
+  "fees.collect": "fees_finance",
+  "fees.export": "fees_finance",
+  "exams.view": "examinations",
+  "exams.publish": "examinations",
+  "reports.view": "reports_analytics",
+  "reports.manage": "reports_analytics",
+  "settings.view": "settings_billing",
+  "settings.manage": "settings_billing",
+  "roles.view": "access_control",
+  "roles.manage": "access_control",
+  "accounts.view": "accounts",
+  "accounts.manage": "accounts",
+  "front_office.view": "front_office",
+  "front_office.manage": "front_office",
+  "lead_management.view": "lead_management",
+  "lead_management.manage": "lead_management",
+  "cbc_academics.view": "cbc_academics",
+  "cbc_academics.manage": "cbc_academics",
+  "human_resources.view": "human_resources",
+  "human_resources.manage": "human_resources",
+  "ptm_meetings.view": "ptm_meetings",
+  "ptm_meetings.manage": "ptm_meetings",
+  "lesson_planner.view": "lesson_planner",
+  "lesson_planner.manage": "lesson_planner",
+  "osm.view": "osm",
+  "osm.manage": "osm",
+  "assessment.view": "assessment",
+  "assessment.manage": "assessment",
+  "live_classes.view": "live_classes",
+  "live_classes.manage": "live_classes",
+  "study_center.view": "study_center",
+  "study_center.manage": "study_center",
+  "certificates.view": "certificates",
+  "certificates.manage": "certificates",
+  "communication.view": "communication",
+  "communication.manage": "communication",
+  "library.view": "library",
+  "library.manage": "library",
+  "inventory.view": "inventory",
+  "inventory.manage": "inventory",
+  "transport.view": "transport",
+  "transport.manage": "transport",
+  "hostel.view": "hostel",
+  "hostel.manage": "hostel",
+  "help_center.view": "help_center",
+  "help_center.manage": "help_center",
+  "asset_management.view": "asset_management",
+  "asset_management.manage": "asset_management",
+};
+
+export function permissionModuleDependency(
+  permission: string,
+): SchoolModuleKey | null {
+  return permissionModuleDependencies[permission as PermissionKey] ?? null;
+}
+
+export function permissionAllowedByModuleEntitlements(
+  permission: string,
+  moduleEntitlements: ReadonlySet<string>,
+): boolean {
+  const moduleKey = permissionModuleDependency(permission);
+  // resolved operation/workspace permissions never bypass the separate
+  // module entitlement check performed by the route authorization layer.
+  return moduleKey === null || moduleEntitlements.has(moduleKey);
+}
+
 export const schoolModuleKeys = [
   "student_information",
   "fees_finance",

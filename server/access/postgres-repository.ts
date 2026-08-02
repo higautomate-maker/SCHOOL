@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
-import { permissionCatalogue } from "./catalogue.ts";
+import { permissionAllowedByModuleEntitlements, permissionCatalogue } from "./catalogue.ts";
 import type { RoleRecord } from "./repository.ts";
 import {
   ensurePostgresActor,
@@ -38,6 +38,11 @@ export function applyPostgresRoleAction(
   return withTenantDatabase(tenantId, async (_database, client) => {
     await requirePostgresSchool(client, tenantId);
     const actorId = await ensurePostgresActor(client, actor);
+    await assertPermissionsInsideCompanyBoundary(
+      client,
+      tenantId,
+      action.permissions,
+    );
     let roleId: string;
     let auditAction: string;
     let metadata: Record<string, unknown>;
@@ -187,6 +192,28 @@ async function replacePermissions(
          tenant_id, role_id, permission
        ) VALUES ($1, $2, $3)`,
       [tenantId, roleId, permission],
+    );
+  }
+}
+async function assertPermissionsInsideCompanyBoundary(
+  client: PoolClient,
+  tenantId: string,
+  permissions: readonly string[],
+): Promise<void> {
+  const result = await client.query<{ module_key: string }>(
+    `SELECT module_key
+       FROM module_policies
+      WHERE tenant_id = $1
+        AND enabled = true`,
+    [tenantId],
+  );
+  const entitlements = new Set(result.rows.map((row) => row.module_key));
+  const blocked = permissions.filter((permission) =>
+    !permissionAllowedByModuleEntitlements(permission, entitlements)
+  );
+  if (blocked.length) {
+    throw new Error(
+      `Company has not enabled the module required by: ${blocked.join(", ")}`,
     );
   }
 }

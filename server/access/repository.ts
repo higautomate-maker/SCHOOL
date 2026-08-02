@@ -1,7 +1,7 @@
 import { database } from "#db-runtime";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
 import { repositoryBackend } from "../runtime/repository-backend.ts";
-import { permissionCatalogue } from "./catalogue.ts";
+import { permissionAllowedByModuleEntitlements, permissionCatalogue } from "./catalogue.ts";
 import type { RoleAction } from "./validation";
 
 export { permissionCatalogue };
@@ -33,6 +33,10 @@ export async function applyRoleAction(tenantId: string, action: RoleAction, acto
   const actorId = await stableUserId(actor.email);
   const now = new Date().toISOString();
   await ensureUser(actorId, actor, now);
+  await assertSqlitePermissionsInsideCompanyBoundary(
+    tenantId,
+    action.permissions,
+  );
   let roleId: string;
   let auditAction: string;
   let metadata: Record<string, unknown>;
@@ -98,4 +102,21 @@ async function stableUserId(email: string): Promise<string> {
   const bytes = new TextEncoder().encode(email.trim().toLowerCase());
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))).map((byte) => byte.toString(16).padStart(2, "0")).join("");
   return `usr_${hash.slice(0, 24)}`;
+}
+async function assertSqlitePermissionsInsideCompanyBoundary(
+  tenantId: string,
+  permissions: readonly string[],
+): Promise<void> {
+  const result = await database.prepare(
+    "SELECT module_key FROM module_policies WHERE tenant_id = ? AND enabled = 1",
+  ).bind(tenantId).all<{ module_key: string }>();
+  const entitlements = new Set(result.results.map((row) => row.module_key));
+  const blocked = permissions.filter((permission) =>
+    !permissionAllowedByModuleEntitlements(permission, entitlements)
+  );
+  if (blocked.length) {
+    throw new Error(
+      `Company has not enabled the module required by: ${blocked.join(", ")}`,
+    );
+  }
 }
