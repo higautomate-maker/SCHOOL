@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "scope": "stage9_batch1_mobile_identity_and_api_foundation",
+  "webAuthentication": {
+    "unchanged": true,
+    "actorTypes": [
+      "platform",
+      "school"
+    ],
+    "sessionTransport": "secure_cookie",
+    "unsafeRequestProtection": [
+      "same_origin",
+      "csrf"
+    ]
+  },
+  "mobileAuthentication": {
+    "separateFromWebSessions": true,
+    "sessionTransport": "opaque_bearer_tokens",
+    "accessTokenTtlSeconds": 900,
+    "refreshTokenTtlSeconds": 2592000,
+    "tokenEntropyBytes": 32,
+    "tokenStorage": "sha256_hash_only",
+    "refreshRotation": "every_successful_use",
+    "refreshReplayAction": "revoke_token_family",
+    "credentialVersionRequired": true,
+    "rawTokensMayBeLogged": false
+  },
+  "principalTypes": [
+    "school",
+    "parent",
+    "student",
+    "transporter"
+  ],
+  "authorizationOrder": {
+    "school": [
+      "authenticated_mobile_session",
+      "client_identity_type",
+      "active_school_membership",
+      "exact_tenant_match",
+      "company_module_entitlement",
+      "school_role_permission",
+      "resource_assignment"
+    ],
+    "parent": [
+      "authenticated_mobile_session",
+      "client_identity_type",
+      "active_mobile_relationship",
+      "exact_tenant_match",
+      "company_app_feature",
+      "required_school_module",
+      "resource_assignment"
+    ],
+    "student": [
+      "authenticated_mobile_session",
+      "client_identity_type",
+      "active_mobile_relationship",
+      "exact_tenant_match",
+      "company_app_feature",
+      "required_school_module",
+      "resource_assignment"
+    ],
+    "transporter": [
+      "authenticated_mobile_session",
+      "client_identity_type",
+      "active_mobile_relationship",
+      "exact_tenant_match",
+      "company_app_feature",
+      "required_school_module",
+      "resource_assignment"
+    ]
+  },
+  "endpoints": [
+    {
+      "id": "mobile.auth.login",
+      "file": "app/api/v1/mobile/auth/login/route.ts",
+      "method": "POST",
+      "authentication": "public_credentials",
+      "rateLimited": true,
+      "createsCookies": false,
+      "idempotency": "not_applicable"
+    },
+    {
+      "id": "mobile.auth.refresh",
+      "file": "app/api/v1/mobile/auth/refresh/route.ts",
+      "method": "POST",
+      "authentication": "refresh_token",
+      "rateLimited": true,
+      "createsCookies": false,
+      "idempotency": "atomic_rotation"
+    },
+    {
+      "id": "mobile.auth.logout",
+      "file": "app/api/v1/mobile/auth/logout/route.ts",
+      "method": "POST",
+      "authentication": "access_bearer",
+      "rateLimited": true,
+      "createsCookies": false,
+      "idempotency": "safe_repeat"
+    },
+    {
+      "id": "mobile.session.view",
+      "file": "app/api/v1/mobile/session/route.ts",
+      "method": "GET",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "idempotency": "not_applicable"
+    },
+    {
+      "id": "mobile.access.view",
+      "file": "app/api/v1/mobile/access/route.ts",
+      "method": "GET",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "acceptsTenantOverride": false,
+      "acceptsAudienceOverride": false,
+      "idempotency": "not_applicable"
+    }
+  ],
+  "tables": [
+    {
+      "name": "mobile_identities",
+      "tenantScoped": true,
+      "forceRls": true,
+      "authenticationServicePolicyRequired": true
+    },
+    {
+      "name": "mobile_identity_assignments",
+      "tenantScoped": true,
+      "forceRls": true,
+      "authenticationServicePolicyRequired": true
+    },
+    {
+      "name": "mobile_sessions",
+      "tenantScoped": true,
+      "forceRls": true,
+      "authenticationServicePolicyRequired": true
+    },
+    {
+      "name": "mobile_refresh_token_uses",
+      "tenantScoped": true,
+      "forceRls": true,
+      "authenticationServicePolicyRequired": true
+    }
+  ],
+  "securityEvents": [
+    "mobile.auth.login.success",
+    "mobile.auth.login.failure",
+    "mobile.auth.refresh.success",
+    "mobile.auth.refresh.failure",
+    "mobile.auth.refresh.replay",
+    "mobile.auth.logout",
+    "mobile.auth.session.revoked"
+  ],
+  "deferred": [
+    "operational_mobile_data_apis",
+    "mobile_account_provisioning_ui",
+    "push_device_registration",
+    "flutter_secure_storage",
+    "flutter_api_integration",
+    "android_ios_runners",
+    "background_location_configuration",
+    "store_signing_and_submission",
+    "staging_migration",
+    "staging_deployment"
+  ]
+}
