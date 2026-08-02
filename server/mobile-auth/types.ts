@@ -113,3 +113,45 @@ export function mobileAudienceForPrincipal(
     ? null
     : principalType;
 }
+
+export type MobileLoginRecord = {
+  userId: string;
+  email: string;
+  fullName: string;
+  status: string;
+  passwordHash: string;
+  credentialVersion: number;
+  disabled: boolean;
+  tenantId: string;
+  principalType: MobilePrincipalType;
+  mobileIdentityId: string | null;
+  relationshipStatus: MobileIdentityStatus | null;
+  roleKey: string | null;
+};
+
+export type MobileSessionCreation = MobileTokenSet & {
+  sessionId: string;
+  refreshFamilyId: string;
+  tenantId: string;
+  principalType: MobilePrincipalType;
+  mobileIdentityId: string | null;
+  credentialVersion: number;
+};
+
+export type MobileRefreshResult =
+  | {
+      status: "rotated";
+      session: MobileSessionCreation;
+    }
+  | {
+      status: "invalid" | "replay";
+    };
+
+export type MobileAssignment = {
+  id: string;
+  tenantId: string;
+  mobileIdentityId: string;
+  resourceType: MobileResourceType;
+  resourceId: string;
+  status: MobileAssignmentStatus;
+};

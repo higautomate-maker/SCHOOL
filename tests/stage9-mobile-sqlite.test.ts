@@ -33,7 +33,7 @@ function applySqliteMigrations(
 
   assert.equal(
     migrations.at(-1),
-    "0010_mobile_identity_api.sql",
+    "0011_mobile_refresh_rotation_guard.sql",
   );
 
   for (const migration of migrations) {
@@ -320,7 +320,7 @@ function insertFoundationRecords(
   };
 }
 
-test("SQLite migration 0010 applies and creates every mobile table", () => {
+test("SQLite migrations through 0011 apply and create the mobile foundation", () => {
   const database = new DatabaseSync(":memory:");
 
   try {
@@ -357,7 +357,9 @@ test("SQLite migration 0010 applies and creates every mobile table", () => {
       [
         "mobile_identity_assignments_validate_insert",
         "mobile_identity_assignments_validate_update",
+        "mobile_sessions_record_refresh_use",
         "mobile_sessions_validate_insert",
+        "mobile_sessions_validate_refresh_rotation",
         "mobile_sessions_validate_update",
       ],
     );

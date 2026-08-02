@@ -78,6 +78,13 @@
       "when": 1785663460408,
       "tag": "0010_mobile_identity_api",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1785664081563,
+      "tag": "0011_mobile_refresh_rotation_guard",
+      "breakpoints": true
     }
   ]
 }
