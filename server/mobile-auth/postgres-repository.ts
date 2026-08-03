@@ -484,6 +484,19 @@ async function replayRefresh(
     [locator.tenantId, locator.refreshFamilyId],
   );
   await client.query(
+    `UPDATE mobile_device_registrations
+        SET status = 'revoked',
+            revoked_at = COALESCE(revoked_at, now()),
+            updated_at = now()
+      WHERE tenant_id = $1::uuid
+        AND session_id IN (
+          SELECT id FROM mobile_sessions
+           WHERE tenant_id = $1::uuid AND refresh_family_id = $2::uuid
+        )
+        AND status = 'active'`,
+    [locator.tenantId, locator.refreshFamilyId],
+  );
+  await client.query(
     `INSERT INTO audit_events (
        tenant_id, actor_id, action, resource_type, resource_id,
        reason, ip_hash, metadata
@@ -688,6 +701,15 @@ export async function revokeMobileSession(
         WHERE tenant_id = $2::uuid AND id = $3::uuid`,
       [safeReason(reason), tenantId, sessionId],
     );
+    await client.query(
+      `UPDATE mobile_device_registrations
+          SET status = 'revoked',
+              revoked_at = COALESCE(revoked_at, now()),
+              updated_at = now()
+        WHERE tenant_id = $1::uuid AND session_id = $2::uuid
+          AND status = 'active'`,
+      [tenantId, sessionId],
+    );
   });
 }
 
@@ -710,6 +732,15 @@ export async function revokeMobileSessionByAccessToken(
               revoke_reason = COALESCE(revoke_reason, $1::text)
         WHERE tenant_id = $2::uuid AND id = $3::uuid`,
       [safeReason(reason), locator.tenantId, locator.sessionId],
+    );
+    await client.query(
+      `UPDATE mobile_device_registrations
+          SET status = 'revoked',
+              revoked_at = COALESCE(revoked_at, now()),
+              updated_at = now()
+        WHERE tenant_id = $1::uuid AND session_id = $2::uuid
+          AND status = 'active'`,
+      [locator.tenantId, locator.sessionId],
     );
   });
 }
@@ -735,6 +766,15 @@ export async function revokeMobileUserSessions(
             AND user_id = $3::uuid
             AND revoked_at IS NULL`,
         [safeReason(reason), tenantId, userId],
+      );
+      await client.query(
+        `UPDATE mobile_device_registrations
+            SET status = 'revoked',
+                revoked_at = COALESCE(revoked_at, now()),
+                updated_at = now()
+          WHERE tenant_id = $1::uuid AND user_id = $2::uuid
+            AND status = 'active'`,
+        [tenantId, userId],
       );
     }
   });
@@ -809,6 +849,9 @@ export async function mobileAccessForPrincipal(
           .map((entry) => ({
             key: entry.module.key,
             label: entry.module.label,
+            canManage: entry.module.requiredManagementPermissions.every((permission) =>
+              permissions.rows.some((row) => row.permission === permission)
+            ),
           })),
         features: [],
         assignments: [],

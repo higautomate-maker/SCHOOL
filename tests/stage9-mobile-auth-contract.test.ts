@@ -12,6 +12,7 @@ type MobileEndpoint = {
   acceptsTenantOverride?: boolean;
   acceptsAudienceOverride?: boolean;
   idempotency: string;
+  batch: number;
 };
 
 type MobileTable = {
@@ -65,7 +66,7 @@ const design = readFileSync(
 );
 
 test("Stage 9 mobile contract keeps browser and mobile sessions separate", () => {
-  assert.equal(contract.version, 1);
+  assert.equal(contract.version, 2);
   assert.equal(contract.webAuthentication.unchanged, true);
   assert.deepEqual(
     contract.webAuthentication.actorTypes,
@@ -174,7 +175,9 @@ test("Batch 1 exposes only the five approved foundation endpoints", () => {
   ];
 
   assert.deepEqual(
-    contract.endpoints.map(({ id, file, method }) => [id, file, method]),
+    contract.endpoints
+      .filter(({ batch }) => batch === 1)
+      .map(({ id, file, method }) => [id, file, method]),
     expected,
   );
 
@@ -209,16 +212,18 @@ test("mobile tables retain tenant isolation and the global locator is service-on
       "mobile_sessions",
       "mobile_refresh_token_uses",
       "mobile_token_locators",
+      "mobile_device_registrations",
+      "mobile_transport_events",
     ],
   );
 
-  for (const table of contract.tables.slice(0, 4)) {
+  for (const table of contract.tables.filter(({ tenantScoped }) => tenantScoped)) {
     assert.equal(table.tenantScoped, true);
     assert.equal(table.forceRls, true);
     assert.equal(table.authenticationServicePolicyRequired, true);
   }
 
-  const locator = contract.tables.at(-1);
+  const locator = contract.tables.find(({ name }) => name === "mobile_token_locators");
   assert.equal(locator?.name, "mobile_token_locators");
   assert.equal(locator?.tenantScoped, false);
   assert.equal(locator?.forceRls, true);
@@ -297,18 +302,24 @@ test("the established security contract retains its approved authorization order
   );
 });
 
-test("native mobile and operational work remain explicitly deferred", () => {
-  for (const deferredItem of [
+test("Stage 9 completion keeps only release credentials and Stage 10 tracking deferred", () => {
+  for (const completedItem of [
     "operational_mobile_data_apis",
     "flutter_secure_storage",
     "flutter_api_integration",
-    "android_ios_runners",
+    "push_device_registration",
+  ]) {
+    assert.equal(contract.deferred.includes(completedItem), false);
+  }
+  for (const deferredItem of [
+    "remote_push_provider_credentials",
+    "background_location_tracking",
+    "geofencing_and_parent_live_map",
+    "location_retention_automation",
+    "store_signing_and_submission",
     "staging_migration",
     "staging_deployment",
   ]) {
-    assert.ok(
-      contract.deferred.includes(deferredItem),
-      `${deferredItem} must remain deferred in Batch 1`,
-    );
+    assert.ok(contract.deferred.includes(deferredItem), `${deferredItem} must remain deferred`);
   }
 });

@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "scope": "stage9_batch1_mobile_identity_and_api_foundation",
+  "version": 2,
+  "scope": "stage9_mobile_app_completion",
   "webAuthentication": {
     "unchanged": true,
     "actorTypes": [
@@ -77,7 +77,8 @@
       "authentication": "public_credentials",
       "rateLimited": true,
       "createsCookies": false,
-      "idempotency": "not_applicable"
+      "idempotency": "not_applicable",
+      "batch": 1
     },
     {
       "id": "mobile.auth.refresh",
@@ -86,7 +87,8 @@
       "authentication": "refresh_token",
       "rateLimited": true,
       "createsCookies": false,
-      "idempotency": "atomic_rotation"
+      "idempotency": "atomic_rotation",
+      "batch": 1
     },
     {
       "id": "mobile.auth.logout",
@@ -95,7 +97,8 @@
       "authentication": "access_bearer",
       "rateLimited": true,
       "createsCookies": false,
-      "idempotency": "safe_repeat"
+      "idempotency": "safe_repeat",
+      "batch": 1
     },
     {
       "id": "mobile.session.view",
@@ -104,7 +107,8 @@
       "authentication": "access_bearer",
       "rateLimited": false,
       "createsCookies": false,
-      "idempotency": "not_applicable"
+      "idempotency": "not_applicable",
+      "batch": 1
     },
     {
       "id": "mobile.access.view",
@@ -115,7 +119,122 @@
       "createsCookies": false,
       "acceptsTenantOverride": false,
       "acceptsAudienceOverride": false,
-      "idempotency": "not_applicable"
+      "idempotency": "not_applicable",
+      "batch": 1
+    },
+    {
+      "id": "mobile.home.view",
+      "file": "app/api/v1/mobile/home/route.ts",
+      "method": "GET",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "acceptsTenantOverride": false,
+      "acceptsAudienceOverride": false,
+      "idempotency": "not_applicable",
+      "batch": 2
+    },
+    {
+      "id": "mobile.operations.view",
+      "file": "app/api/v1/mobile/operations/route.ts",
+      "method": "GET",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "idempotency": "not_applicable",
+      "batch": 2
+    },
+    {
+      "id": "mobile.operations.manage",
+      "file": "app/api/v1/mobile/operations/route.ts",
+      "method": "POST",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "idempotency": "required_key",
+      "batch": 2
+    },
+    {
+      "id": "mobile.content.view",
+      "file": "app/api/v1/mobile/content/route.ts",
+      "method": "GET",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "acceptsTenantOverride": false,
+      "acceptsAudienceOverride": false,
+      "idempotency": "not_applicable",
+      "batch": 2
+    },
+    {
+      "id": "mobile.content.manage",
+      "file": "app/api/v1/mobile/content/route.ts",
+      "method": "POST",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "idempotency": "client_queue_or_server_action",
+      "batch": 2
+    },
+    {
+      "id": "mobile.notifications.view",
+      "file": "app/api/v1/mobile/notifications/route.ts",
+      "method": "GET",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "idempotency": "not_applicable",
+      "batch": 2
+    },
+    {
+      "id": "mobile.notifications.read",
+      "file": "app/api/v1/mobile/notifications/[notificationId]/read/route.ts",
+      "method": "POST",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "idempotency": "safe_repeat",
+      "batch": 2
+    },
+    {
+      "id": "mobile.devices.register",
+      "file": "app/api/v1/mobile/devices/route.ts",
+      "method": "PUT",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "idempotency": "token_hash_upsert",
+      "batch": 2
+    },
+    {
+      "id": "mobile.devices.revoke",
+      "file": "app/api/v1/mobile/devices/route.ts",
+      "method": "DELETE",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "idempotency": "safe_repeat",
+      "batch": 2
+    },
+    {
+      "id": "mobile.transport.view",
+      "file": "app/api/v1/mobile/transport/route.ts",
+      "method": "GET",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "idempotency": "not_applicable",
+      "batch": 2
+    },
+    {
+      "id": "mobile.transport.events.create",
+      "file": "app/api/v1/mobile/transport/events/route.ts",
+      "method": "POST",
+      "authentication": "access_bearer",
+      "rateLimited": false,
+      "createsCookies": false,
+      "idempotency": "required_key",
+      "batch": 2
     }
   ],
   "tables": [
@@ -149,6 +268,20 @@
       "forceRls": true,
       "authenticationServicePolicyRequired": true,
       "purpose": "opaque_token_to_tenant_locator_only"
+    },
+    {
+      "name": "mobile_device_registrations",
+      "tenantScoped": true,
+      "forceRls": true,
+      "authenticationServicePolicyRequired": true,
+      "purpose": "encrypted_push_provider_registration"
+    },
+    {
+      "name": "mobile_transport_events",
+      "tenantScoped": true,
+      "forceRls": true,
+      "authenticationServicePolicyRequired": true,
+      "purpose": "foreground_stage9_transport_event_log"
     }
   ],
   "securityEvents": [
@@ -161,13 +294,11 @@
     "mobile.auth.session.revoked"
   ],
   "deferred": [
-    "operational_mobile_data_apis",
     "mobile_account_provisioning_ui",
-    "push_device_registration",
-    "flutter_secure_storage",
-    "flutter_api_integration",
-    "android_ios_runners",
-    "background_location_configuration",
+    "remote_push_provider_credentials",
+    "background_location_tracking",
+    "geofencing_and_parent_live_map",
+    "location_retention_automation",
     "store_signing_and_submission",
     "staging_migration",
     "staging_deployment"

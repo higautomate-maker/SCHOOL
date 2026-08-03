@@ -317,3 +317,122 @@ function timestampString(value: Date | string): string {
   if (Number.isNaN(date.getTime())) throw new Error("notification_timestamp_invalid");
   return date.toISOString();
 }
+
+/** Mobile inbox variant. Parent/student/driver deliveries are resolved from
+ * server-side relationship assignments rather than client supplied IDs. */
+export async function listMobileNotificationInbox(input: {
+  tenantId: string;
+  userId: string;
+  recipientTypes: string[];
+  recipientIds: string[];
+  includeSchoolAudience: boolean;
+  limit: number;
+  unreadOnly: boolean;
+}): Promise<NotificationInboxPage> {
+  if (repositoryBackend() !== "postgres") {
+    return { notifications: [], unreadCount: 0, nextCursor: null };
+  }
+  const limit = Math.min(Math.max(input.limit, 1), 100);
+  return withTenantDatabase(input.tenantId, async (_database, client) => {
+    const accessPredicate = `(
+      (delivery.recipient_type IN ('user', 'staff') AND delivery.recipient_id = $2::uuid)
+      OR ($3::boolean AND delivery.recipient_type = 'audience')
+      OR (
+        delivery.recipient_type = ANY($4::text[])
+        AND delivery.recipient_id = ANY($5::uuid[])
+      )
+    )`;
+    const unreadFilter = input.unreadOnly ? "AND read_state.delivery_id IS NULL" : "";
+    const values = [
+      input.tenantId,
+      input.userId,
+      input.includeSchoolAudience,
+      input.recipientTypes,
+      input.recipientIds,
+      limit + 1,
+    ];
+    const result = await client.query<DeliveryRow>(`
+      SELECT delivery.id, outbox.topic, delivery.template_key,
+        delivery.recipient_type, delivery.recipient_id, delivery.payload,
+        delivery.created_at, read_state.read_at
+      FROM notification_deliveries delivery
+      JOIN outbox_events outbox
+        ON outbox.tenant_id = delivery.tenant_id
+       AND outbox.id = delivery.outbox_event_id
+      LEFT JOIN notification_reads read_state
+        ON read_state.tenant_id = delivery.tenant_id
+       AND read_state.delivery_id = delivery.id
+       AND read_state.user_id = $2::uuid
+      WHERE delivery.tenant_id = $1::uuid
+        AND delivery.channel = 'in_app'
+        AND delivery.status = 'delivered'
+        AND ${accessPredicate}
+        ${unreadFilter}
+      ORDER BY delivery.created_at DESC, delivery.id DESC
+      LIMIT $6::int
+    `, values);
+    const unread = await client.query<{ count: string }>(`
+      SELECT count(*)::text AS count
+      FROM notification_deliveries delivery
+      LEFT JOIN notification_reads read_state
+        ON read_state.tenant_id = delivery.tenant_id
+       AND read_state.delivery_id = delivery.id
+       AND read_state.user_id = $2::uuid
+      WHERE delivery.tenant_id = $1::uuid
+        AND delivery.channel = 'in_app'
+        AND delivery.status = 'delivered'
+        AND read_state.delivery_id IS NULL
+        AND ${accessPredicate}
+    `, values.slice(0, 5));
+    const hasMore = result.rows.length > limit;
+    const rows = hasMore ? result.rows.slice(0, limit) : result.rows;
+    return {
+      notifications: rows.map(toInboxItem),
+      unreadCount: Number(unread.rows[0]?.count ?? 0),
+      nextCursor: null,
+    };
+  });
+}
+
+export async function markMobileNotificationRead(input: {
+  tenantId: string;
+  userId: string;
+  notificationId: string;
+  recipientTypes: string[];
+  recipientIds: string[];
+  includeSchoolAudience: boolean;
+}): Promise<{ id: string; readAt: string } | null> {
+  if (repositoryBackend() !== "postgres") return null;
+  const parsedId = z.string().uuid().safeParse(input.notificationId);
+  if (!parsedId.success) return null;
+  return withTenantDatabase(input.tenantId, async (_database, client) => {
+    const result = await client.query<{ read_at: Date | string }>(`
+      INSERT INTO notification_reads (tenant_id, delivery_id, user_id, read_at, created_at)
+      SELECT delivery.tenant_id, delivery.id, $3::uuid, now(), now()
+      FROM notification_deliveries delivery
+      WHERE delivery.tenant_id = $1::uuid
+        AND delivery.id = $2::uuid
+        AND delivery.channel = 'in_app'
+        AND delivery.status = 'delivered'
+        AND (
+          (delivery.recipient_type IN ('user', 'staff') AND delivery.recipient_id = $3::uuid)
+          OR ($4::boolean AND delivery.recipient_type = 'audience')
+          OR (
+            delivery.recipient_type = ANY($5::text[])
+            AND delivery.recipient_id = ANY($6::uuid[])
+          )
+        )
+      ON CONFLICT (tenant_id, delivery_id, user_id) DO UPDATE SET read_at = notification_reads.read_at
+      RETURNING read_at
+    `, [
+      input.tenantId,
+      parsedId.data,
+      input.userId,
+      input.includeSchoolAudience,
+      input.recipientTypes,
+      input.recipientIds,
+    ]);
+    const row = result.rows[0];
+    return row ? { id: parsedId.data, readAt: timestampString(row.read_at) } : null;
+  });
+}

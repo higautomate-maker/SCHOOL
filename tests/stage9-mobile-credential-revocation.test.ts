@@ -103,7 +103,27 @@ async function createParentSession() {
     principalType: "parent",
   });
   assert.ok(login);
-  return mobile.createMobileSession({ login, metadata });
+  const session = await mobile.createMobileSession({ login, metadata });
+  await database.prepare(`
+    INSERT INTO mobile_device_registrations (
+      id, tenant_id, user_id, mobile_identity_id, session_id,
+      platform, provider, token_hash, token_ciphertext, app_id,
+      app_version, status, last_seen_at, revoked_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, 'android', 'firebase', ?, ?,
+      'com.higautomation.higschool.studentparent', '1.0.0', 'active', ?, NULL, ?, ?)
+  `).bind(
+    crypto.randomUUID(),
+    tenantId,
+    userId,
+    identityId,
+    session.sessionId,
+    `device-${session.sessionId}`,
+    `ciphertext-${session.sessionId}`,
+    timestamp,
+    timestamp,
+    timestamp,
+  ).run();
+  return session;
 }
 
 async function assertRevoked(sessionId: string, reason: string) {
@@ -119,6 +139,13 @@ async function assertRevoked(sessionId: string, reason: string) {
     WHERE session_id = ? AND state = 'active'
   `).bind(sessionId).first<{ count: number }>();
   assert.equal(Number(activeLocators?.count ?? -1), 0);
+  const device = await database.prepare(`
+    SELECT status, revoked_at AS revokedAt
+    FROM mobile_device_registrations
+    WHERE session_id = ?
+  `).bind(sessionId).first<{ status: string; revokedAt: string | null }>();
+  assert.equal(device?.status, "revoked");
+  assert.ok(device?.revokedAt);
 }
 
 test("password change revokes web-independent mobile sessions atomically", async () => {

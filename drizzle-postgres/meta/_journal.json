@@ -71,6 +71,13 @@
       "when": 1785665000000,
       "tag": "0009_mobile_token_locators",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785681000000,
+      "tag": "0010_mobile_app_completion",
+      "breakpoints": true
     }
   ]
 }

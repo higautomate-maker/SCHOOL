@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { foreignKey, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const timestamps = {
   createdAt: text("created_at").notNull(),
@@ -185,6 +185,7 @@ export const students = sqliteTable("students", {
   ...timestamps,
 }, (table) => [
   uniqueIndex("students_tenant_admission_uq").on(table.tenantId, table.admissionNumber),
+  uniqueIndex("students_tenant_id_uq").on(table.tenantId, table.id),
   index("students_tenant_class_idx").on(table.tenantId, table.className, table.sectionName),
   index("students_campus_idx").on(table.campusId),
   index("students_session_idx").on(table.academicSessionId),
@@ -405,5 +406,121 @@ export const mobileTokenLocators = sqliteTable(
       columns: [table.tenantId, table.sessionId],
       foreignColumns: [mobileSessions.tenantId, mobileSessions.id],
     }).onDelete("cascade"),
+  ],
+);
+
+
+// Stage 9 mobile application device registrations and foreground transport events.
+export const mobileDeviceRegistrations = sqliteTable(
+  "mobile_device_registrations",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    mobileIdentityId: text("mobile_identity_id"),
+    sessionId: text("session_id").notNull(),
+    platform: text("platform", { enum: ["android", "ios"] }).notNull(),
+    provider: text("provider", { enum: ["firebase", "apns"] }).notNull(),
+    tokenHash: text("token_hash").notNull(),
+    tokenCiphertext: text("token_ciphertext").notNull(),
+    appId: text("app_id").notNull(),
+    appVersion: text("app_version"),
+    status: text("status", { enum: ["active", "revoked"] }).notNull().default("active"),
+    lastSeenAt: text("last_seen_at").notNull(),
+    revokedAt: text("revoked_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("mobile_device_registrations_token_uq").on(table.tenantId, table.tokenHash),
+    index("mobile_device_registrations_user_idx").on(table.tenantId, table.userId, table.status),
+    index("mobile_device_registrations_session_idx").on(table.tenantId, table.sessionId, table.status),
+    check(
+      "mobile_device_registrations_status_timestamp_ck",
+      sql`(${table.status} = 'active' AND ${table.revokedAt} IS NULL) OR (${table.status} = 'revoked' AND ${table.revokedAt} IS NOT NULL)`,
+    ),
+    foreignKey({
+      name: "mobile_device_registrations_identity_fk",
+      columns: [table.tenantId, table.mobileIdentityId],
+      foreignColumns: [mobileIdentities.tenantId, mobileIdentities.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "mobile_device_registrations_session_fk",
+      columns: [table.tenantId, table.sessionId],
+      foreignColumns: [mobileSessions.tenantId, mobileSessions.id],
+    }).onDelete("cascade"),
+  ],
+);
+
+export const mobileTransportEvents = sqliteTable(
+  "mobile_transport_events",
+  {
+    id: text("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+    mobileIdentityId: text("mobile_identity_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    tripId: text("trip_id"),
+    studentId: text("student_id"),
+    eventType: text("event_type", {
+      enum: [
+        "trip_started",
+        "trip_paused",
+        "trip_completed",
+        "location",
+        "student_boarded",
+        "student_dropped",
+        "sos",
+      ],
+    }).notNull(),
+    latitude: real("latitude"),
+    longitude: real("longitude"),
+    accuracyMeters: real("accuracy_meters"),
+    speedKph: real("speed_kph"),
+    headingDegrees: real("heading_degrees"),
+    capturedAt: text("captured_at").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    metadataJson: text("metadata_json").notNull().default("{}"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("mobile_transport_events_idempotency_uq").on(
+      table.tenantId,
+      table.mobileIdentityId,
+      table.idempotencyKey,
+    ),
+    index("mobile_transport_events_trip_idx").on(table.tenantId, table.tripId, table.capturedAt),
+    index("mobile_transport_events_identity_idx").on(
+      table.tenantId,
+      table.mobileIdentityId,
+      table.capturedAt,
+    ),
+    check(
+      "mobile_transport_events_coordinates_ck",
+      sql`(${table.latitude} IS NULL OR ${table.latitude} BETWEEN -90 AND 90)
+        AND (${table.longitude} IS NULL OR ${table.longitude} BETWEEN -180 AND 180)
+        AND (${table.accuracyMeters} IS NULL OR ${table.accuracyMeters} BETWEEN 0 AND 10000)
+        AND (${table.speedKph} IS NULL OR ${table.speedKph} BETWEEN 0 AND 400)
+        AND (${table.headingDegrees} IS NULL OR ${table.headingDegrees} BETWEEN 0 AND 360)
+        AND (${table.eventType} <> 'location' OR (${table.latitude} IS NOT NULL AND ${table.longitude} IS NOT NULL))`,
+    ),
+    check(
+      "mobile_transport_events_boarding_student_ck",
+      sql`${table.eventType} NOT IN ('student_boarded', 'student_dropped') OR ${table.studentId} IS NOT NULL`,
+    ),
+    foreignKey({
+      name: "mobile_transport_events_identity_fk",
+      columns: [table.tenantId, table.mobileIdentityId],
+      foreignColumns: [mobileIdentities.tenantId, mobileIdentities.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "mobile_transport_events_session_fk",
+      columns: [table.tenantId, table.sessionId],
+      foreignColumns: [mobileSessions.tenantId, mobileSessions.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "mobile_transport_events_student_fk",
+      columns: [table.tenantId, table.studentId],
+      foreignColumns: [students.tenantId, students.id],
+    }).onDelete("set null"),
   ],
 );

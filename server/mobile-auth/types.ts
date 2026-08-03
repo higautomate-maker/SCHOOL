@@ -165,6 +165,7 @@ export type MobileAssignment = {
 export type MobileAccessModule = {
   key: string;
   label: string;
+  canManage: boolean;
 };
 
 export type MobileAccessFeature = {

@@ -428,3 +428,78 @@ Stage 9 staging is not approved unless PostgreSQL credentials are separated:
   the restricted runtime URL.
 
 Native APK/IPA packaging and operational mobile features remain outside Batch 1.
+
+# Stage 9 mobile application completion
+
+The completion branch builds on the accepted Batch 1 identity foundation. It does not alter browser sessions and does not relax tenant RLS.
+
+## Operational mobile API
+
+All routes use the dedicated opaque mobile bearer token. Tenant, persona, role, feature, module, and resource IDs are derived from the authoritative session and assignments; clients cannot submit a tenant or audience override.
+
+| Route | Methods | Purpose |
+| --- | --- | --- |
+| `/api/v1/mobile/home` | GET | Persona dashboard, authorized students, assignments, access, alerts, and offline policy |
+| `/api/v1/mobile/operations` | GET, POST | Assigned attendance/fees reads and School-role-authorized attendance/fee writes |
+| `/api/v1/mobile/content` | GET, POST | Homework, timetable, examination, notice, PTM, library, communication, and School module records |
+| `/api/v1/mobile/notifications` | GET | Relationship-aware in-app notification inbox |
+| `/api/v1/mobile/notifications/:id/read` | POST | Idempotent mobile notification read state |
+| `/api/v1/mobile/devices` | PUT, DELETE | Push registration upsert/revocation with encrypted provider tokens |
+| `/api/v1/mobile/transport` | GET | Transporter assignments, recent foreground events, and tracking policy |
+| `/api/v1/mobile/transport/events` | POST | Idempotent foreground trip, location, boarding, completion, and SOS events |
+
+School identities receive only modules enabled by Company policy and permitted by the School role. The access response includes `canManage` per module so mobile write controls fail closed.
+
+Parent and Student operations are filtered to active `student` assignments. Content records are returned only when the assignee is an exact linked student, class/section, authorized resource, or an explicitly schoolwide communication/transport audience. Missing or ambiguous assignment metadata returns no record.
+
+Transporter events require the transporter identity, enabled app feature, and matching assignment when a trip or student ID is supplied. Stage 9 rejects any event marked as background tracking.
+
+## Secure push registration
+
+`mobile_device_registrations` stores:
+
+- a keyed token hash for lookup/deduplication;
+- AES-256-GCM ciphertext protected by `HIG_ENCRYPTION_KEY`;
+- tenant, user, mobile identity, and mobile session linkage;
+- platform, provider, application ID, version, status, and timestamps.
+
+The plaintext provider token is never stored in audit metadata or returned by the API. Firebase/APNs project files and provider credentials remain external protected release inputs.
+
+## Foreground transport event log
+
+`mobile_transport_events` stores idempotent, tenant-scoped foreground events. PostgreSQL enables and forces RLS and requires both exact tenant context and the mobile authentication service policy.
+
+Stage 10 remains responsible for:
+
+- background execution and battery/network policy;
+- route/vehicle/trip master-data productionization;
+- geofencing and parent live maps;
+- location retention, aggregation, and deletion automation;
+- emergency escalation integrations.
+
+## Flutter products
+
+The three apps share `mobile/packages/hig_mobile_core`:
+
+- access and refresh token storage through `flutter_secure_storage`;
+- automatic access-token refresh and session restoration;
+- bounded cached home snapshots;
+- a 72-hour, maximum-100-item offline write queue;
+- replay using the original idempotency key;
+- server-authoritative conflict handling;
+- Firebase/APNs token registration;
+- role/feature/module-driven navigation;
+- no demo endpoint or demo password dependency.
+
+The Student/Parent and Staff/Admin products share the secure shell. The Driver product uses the same authentication and queue but adds foreground-only geolocation and SOS.
+
+## Remaining external release inputs
+
+Source completion does not create account-owned credentials. Final signed distribution still requires:
+
+- Firebase Android/iOS app registrations and provider credentials;
+- Google Play Console account and upload key;
+- Apple Developer team, App Store Connect records, signing certificates, and profiles;
+- final icons, screenshots, store text, support URL, and privacy-policy URL.
+
+Staging migration/deployment remains a separate reviewed release action. No Stage 9 source package may migrate Neon or deploy Hostinger automatically.

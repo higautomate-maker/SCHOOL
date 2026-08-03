@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   date,
+  doublePrecision,
   foreignKey,
   index,
   jsonb,
@@ -726,4 +727,105 @@ export const mobileTokenLocators = pgTable("mobile_token_locators", {
     columns: [table.tenantId, table.sessionId],
     foreignColumns: [mobileSessions.tenantId, mobileSessions.id],
   }).onDelete("cascade"),
+]);
+
+
+// Stage 9 mobile application device registrations and foreground transport events.
+export const mobileDeviceRegistrations = pgTable("mobile_device_registrations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  mobileIdentityId: uuid("mobile_identity_id"),
+  sessionId: uuid("session_id").notNull(),
+  platform: text("platform").notNull(),
+  provider: text("provider").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  tokenCiphertext: text("token_ciphertext").notNull(),
+  appId: text("app_id").notNull(),
+  appVersion: text("app_version"),
+  status: text("status").notNull().default("active"),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  ...timestamps,
+}, (table) => [
+  unique("mobile_device_registrations_token_uq").on(table.tenantId, table.tokenHash),
+  index("mobile_device_registrations_user_idx").on(table.tenantId, table.userId, table.status),
+  index("mobile_device_registrations_session_idx").on(table.tenantId, table.sessionId, table.status),
+  foreignKey({
+    name: "mobile_device_registrations_identity_fk",
+    columns: [table.tenantId, table.mobileIdentityId],
+    foreignColumns: [mobileIdentities.tenantId, mobileIdentities.id],
+  }).onDelete("cascade"),
+  foreignKey({
+    name: "mobile_device_registrations_session_fk",
+    columns: [table.tenantId, table.sessionId],
+    foreignColumns: [mobileSessions.tenantId, mobileSessions.id],
+  }).onDelete("cascade"),
+  check("mobile_device_registrations_platform_ck", sql`${table.platform} IN ('android', 'ios')`),
+  check("mobile_device_registrations_provider_ck", sql`${table.provider} IN ('firebase', 'apns')`),
+  check("mobile_device_registrations_status_ck", sql`${table.status} IN ('active', 'revoked')`),
+  check(
+    "mobile_device_registrations_status_timestamp_ck",
+    sql`(${table.status} = 'active' AND ${table.revokedAt} IS NULL) OR (${table.status} = 'revoked' AND ${table.revokedAt} IS NOT NULL)`,
+  ),
+]);
+
+export const mobileTransportEvents = pgTable("mobile_transport_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  mobileIdentityId: uuid("mobile_identity_id").notNull(),
+  sessionId: uuid("session_id").notNull(),
+  tripId: uuid("trip_id"),
+  studentId: uuid("student_id"),
+  eventType: text("event_type").notNull(),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  accuracyMeters: doublePrecision("accuracy_meters"),
+  speedKph: doublePrecision("speed_kph"),
+  headingDegrees: doublePrecision("heading_degrees"),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  unique("mobile_transport_events_idempotency_uq").on(
+    table.tenantId,
+    table.mobileIdentityId,
+    table.idempotencyKey,
+  ),
+  index("mobile_transport_events_trip_idx").on(table.tenantId, table.tripId, table.capturedAt),
+  index("mobile_transport_events_identity_idx").on(
+    table.tenantId,
+    table.mobileIdentityId,
+    table.capturedAt,
+  ),
+  foreignKey({
+    name: "mobile_transport_events_identity_fk",
+    columns: [table.tenantId, table.mobileIdentityId],
+    foreignColumns: [mobileIdentities.tenantId, mobileIdentities.id],
+  }).onDelete("cascade"),
+  foreignKey({
+    name: "mobile_transport_events_session_fk",
+    columns: [table.tenantId, table.sessionId],
+    foreignColumns: [mobileSessions.tenantId, mobileSessions.id],
+  }).onDelete("cascade"),
+  foreignKey({
+    name: "mobile_transport_events_student_fk",
+    columns: [table.tenantId, table.studentId],
+    foreignColumns: [students.tenantId, students.id],
+  }).onDelete("set null"),
+  check("mobile_transport_events_type_ck", sql`${table.eventType} IN ('trip_started', 'trip_paused', 'trip_completed', 'location', 'student_boarded', 'student_dropped', 'sos')`),
+  check(
+    "mobile_transport_events_coordinates_ck",
+    sql`(${table.latitude} IS NULL OR ${table.latitude} BETWEEN -90 AND 90)
+      AND (${table.longitude} IS NULL OR ${table.longitude} BETWEEN -180 AND 180)
+      AND (${table.accuracyMeters} IS NULL OR ${table.accuracyMeters} BETWEEN 0 AND 10000)
+      AND (${table.speedKph} IS NULL OR ${table.speedKph} BETWEEN 0 AND 400)
+      AND (${table.headingDegrees} IS NULL OR ${table.headingDegrees} BETWEEN 0 AND 360)
+      AND (${table.eventType} <> 'location' OR (${table.latitude} IS NOT NULL AND ${table.longitude} IS NOT NULL))`,
+  ),
+  check(
+    "mobile_transport_events_boarding_student_ck",
+    sql`${table.eventType} NOT IN ('student_boarded', 'student_dropped') OR ${table.studentId} IS NOT NULL`,
+  ),
 ]);

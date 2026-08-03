@@ -1,28 +1,20 @@
-import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:hig_mobile_core/hig_mobile_core.dart';
 
-const apiBase=String.fromEnvironment('API_BASE_URL',defaultValue:'http://10.0.2.2:3002');
-const demoEmail=String.fromEnvironment('HIG_DEMO_EMAIL');
-const demoPassword=String.fromEnvironment('HIG_DEMO_PASSWORD');
-const modules=['My Attendance','Academics','Attendance','Marks','Exams','Library','PTM Meetings','Lesson Planner','Assessments','Fees Due','Homework','Gradebook','Students','My Logs','Leaves','Payroll'];
-void main()=>runApp(const StaffApp());
+const apiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'http://10.0.2.2:3002',
+);
 
-class Api {
-  String token='';
-  Future<String> login()async{if(demoEmail.isEmpty||demoPassword.isEmpty)throw Exception('Sales-demo credentials were not supplied at build time');final response=await http.post(Uri.parse('$apiBase/api/v1/demo/login'),headers:{'content-type':'application/json'},body:jsonEncode({'email':demoEmail,'password':demoPassword}));final data=jsonDecode(response.body);if(response.statusCode!=200)throw Exception(data['error']);token=data['token'];return data['user']['name'];}
-  Future<Map<String,dynamic>> state()async{final response=await http.get(Uri.parse('$apiBase/api/v1/demo/state'),headers:{'authorization':'Bearer $token'});return jsonDecode(response.body);}
-  Future<void> action(Map<String,dynamic> value)async{final response=await http.post(Uri.parse('$apiBase/api/v1/demo/action'),headers:{'content-type':'application/json','authorization':'Bearer $token'},body:jsonEncode(value));if(response.statusCode!=200)throw Exception(jsonDecode(response.body)['error']);}
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const HigMobileApp(
+    config: HigMobileAppConfig(
+      title: 'Hig Staff & Admin',
+      appId: 'com.higautomation.higschool.staffadmin',
+      allowedPrincipalTypes: ['school'],
+      apiBaseUrl: apiBaseUrl,
+      seedColor: Color(0xff1d4ed8),
+    ),
+  ));
 }
-class StaffApp extends StatelessWidget{const StaffApp({super.key});@override Widget build(BuildContext context)=>MaterialApp(debugShowCheckedModeBanner:false,theme:ThemeData(colorScheme:ColorScheme.fromSeed(seedColor:const Color(0xffe94e0c)),useMaterial3:true),home:const StaffHome());}
-class StaffHome extends StatefulWidget{const StaffHome({super.key});@override State<StaffHome> createState()=>_StaffHomeState();}
-class _StaffHomeState extends State<StaffHome>{final api=Api();Map<String,dynamic>? data;String name='Teacher';bool busy=false;Timer? timer;
-  @override void initState(){super.initState();start();}
-  Future<void> start()async{try{name=await api.login();await load();timer=Timer.periodic(const Duration(seconds:8),(_)=>load());}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$e')));}}
-  @override void dispose(){timer?.cancel();super.dispose();}
-  Future<void> load()async{final next=await api.state();if(mounted)setState(()=>data=next);}
-  Future<void> act(Map<String,dynamic> value,String message)async{setState(()=>busy=true);try{await api.action(value);await load();if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('$message synchronized')));}finally{if(mounted)setState(()=>busy=false);}}
-  void openModule(String module){showModalBottomSheet(context:context,showDragHandle:true,builder:(_)=>SafeArea(child:Padding(padding:const EdgeInsets.all(22),child:Column(mainAxisSize:MainAxisSize.min,crossAxisAlignment:CrossAxisAlignment.start,children:[Text(module,style:const TextStyle(fontSize:23,fontWeight:FontWeight.w800)),const SizedBox(height:10),Text('$module is connected to the same live school data and respects Company module access.'),const SizedBox(height:18),FilledButton(onPressed:()=>Navigator.pop(context),child:const Text('Done'))]))));}
-  @override Widget build(BuildContext context){final state=data;if(state==null)return const Scaffold(body:Center(child:CircularProgressIndicator()));final students=(state['students'] as List).cast<Map<String,dynamic>>(),attendance=(state['operations']['attendance'] as List).cast<Map<String,dynamic>>();return Scaffold(appBar:AppBar(title:Text(state['school']['name']),actions:[IconButton(onPressed:load,icon:const Icon(Icons.sync))]),body:ListView(padding:const EdgeInsets.all(16),children:[Container(padding:const EdgeInsets.all(22),decoration:BoxDecoration(borderRadius:BorderRadius.circular(18),gradient:const LinearGradient(colors:[Color(0xffbd3304),Color(0xffe94e0c)])),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('STAFF & ADMIN · 16 MODULES',style:TextStyle(color:Color(0xffffcfba),fontSize:10)),Text('Good morning, ${name.split(' ').first}',style:const TextStyle(color:Colors.white,fontSize:25,fontWeight:FontWeight.w800)),Text('Shared data version ${state['version']}',style:const TextStyle(color:Color(0xffffdfd2)))])),const SizedBox(height:16),const Text('Take attendance',style:TextStyle(fontSize:18,fontWeight:FontWeight.w800)),...students.map((student){final current=attendance.where((a)=>a['studentId']==student['id']&&a['attendanceDate']=='2026-07-26').firstOrNull?['status'];return Card(child:ListTile(title:Text(student['fullName']),subtitle:Text('${student['className']} · ${student['sectionName']}'),trailing:Wrap(spacing:4,children:['present','late','absent'].map((status)=>ChoiceChip(label:Text(status[0].toUpperCase()),selected:current==status,onSelected:busy?null:(_)=>act({'action':'mark_attendance','studentId':student['id'],'attendanceDate':'2026-07-26','status':status,'note':'Marked by $name in Flutter app'},'Attendance'))).toList())));}),const SizedBox(height:16),Card(child:Padding(padding:const EdgeInsets.all(15),child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[const Text('Publish homework',style:TextStyle(fontSize:17,fontWeight:FontWeight.w800)),const SizedBox(height:10),FilledButton.icon(onPressed:busy?null:()=>act({'action':'create_record','moduleKey':'Study Center','workflow':'Homework & Assignments','title':'Science: Light and Reflection','description':'Complete the worksheet shared in class.','recordDate':'2026-07-26','dueDate':'2026-07-31','assignee':'Grade 8 A','priority':'normal'},'Homework'),icon:const Icon(Icons.publish),label:const Text('Post sample assignment'))]))),const SizedBox(height:16),const Text('All 16 modules',style:TextStyle(fontSize:18,fontWeight:FontWeight.w800)),Wrap(spacing:8,runSpacing:8,children:modules.map((module)=>ActionChip(avatar:const Icon(Icons.apps,size:16),label:Text(module),onPressed:()=>openModule(module))).toList())]));}}
-extension FirstOrNull<E> on Iterable<E>{E? get firstOrNull=>isEmpty?null:first;}

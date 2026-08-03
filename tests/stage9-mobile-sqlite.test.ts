@@ -10,11 +10,13 @@ const sqliteMigration = [
   "drizzle/0010_mobile_identity_api.sql",
   "drizzle/0011_mobile_refresh_rotation_guard.sql",
   "drizzle/0012_mobile_token_locators.sql",
+  "drizzle/0013_mobile_app_completion.sql",
 ].map((path) => readFileSync(path, "utf8")).join("\n");
 
 const postgresMigration = [
   "drizzle-postgres/0008_mobile_identity_api.sql",
   "drizzle-postgres/0009_mobile_token_locators.sql",
+  "drizzle-postgres/0010_mobile_app_completion.sql",
 ].map((path) => readFileSync(path, "utf8")).join("\n");
 
 function applySqliteMigrations(
@@ -28,7 +30,7 @@ function applySqliteMigrations(
 
   assert.equal(
     migrations.at(-1),
-    "0012_mobile_token_locators.sql",
+    "0013_mobile_app_completion.sql",
   );
 
   for (const migration of migrations) {
@@ -315,7 +317,7 @@ function insertFoundationRecords(
   };
 }
 
-test("SQLite migrations through 0012 apply and create the mobile foundation", () => {
+test("SQLite migrations through 0013 apply and create the mobile application foundation", () => {
   const database = new DatabaseSync(":memory:");
 
   try {
@@ -332,11 +334,13 @@ test("SQLite migrations through 0012 apply and create the mobile foundation", ()
     assert.deepEqual(
       tables.map(({ name }) => name),
       [
+        "mobile_device_registrations",
         "mobile_identities",
         "mobile_identity_assignments",
         "mobile_refresh_token_uses",
         "mobile_sessions",
         "mobile_token_locators",
+        "mobile_transport_events",
       ],
     );
 
@@ -357,6 +361,7 @@ test("SQLite migrations through 0012 apply and create the mobile foundation", ()
         "mobile_sessions_locator_revoke",
         "mobile_sessions_locator_rotation",
         "mobile_sessions_record_refresh_use",
+        "mobile_sessions_revoke_device_registrations",
         "mobile_sessions_validate_insert",
         "mobile_sessions_validate_locator_rotation",
         "mobile_sessions_validate_refresh_rotation",
@@ -375,6 +380,8 @@ test("SQLite and PostgreSQL mobile schemas retain core parity", () => {
     "mobile_sessions",
     "mobile_refresh_token_uses",
     "mobile_token_locators",
+    "mobile_device_registrations",
+    "mobile_transport_events",
   ]) {
     assert.match(
       sqliteMigration,

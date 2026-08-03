@@ -5,6 +5,7 @@ import test from "node:test";
 const migration = [
   "drizzle-postgres/0008_mobile_identity_api.sql",
   "drizzle-postgres/0009_mobile_token_locators.sql",
+  "drizzle-postgres/0010_mobile_app_completion.sql",
 ].map((path) => readFileSync(path, "utf8")).join("\n");
 
 const contract = JSON.parse(
@@ -35,11 +36,11 @@ function escaped(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-test("PostgreSQL migration journal includes Stage 9 migrations through 0009", () => {
+test("PostgreSQL migration journal includes Stage 9 migrations through 0010", () => {
   const finalEntry = journal.entries.at(-1);
   assert.deepEqual(
     { idx: finalEntry?.idx, tag: finalEntry?.tag },
-    { idx: 9, tag: "0009_mobile_token_locators" },
+    { idx: 10, tag: "0010_mobile_app_completion" },
   );
 });
 
@@ -52,6 +53,8 @@ test("Stage 9 migrations create every contracted mobile table", () => {
       "mobile_sessions",
       "mobile_refresh_token_uses",
       "mobile_token_locators",
+      "mobile_device_registrations",
+      "mobile_transport_events",
     ],
   );
 
@@ -83,7 +86,7 @@ test("every mobile table enables and forces row-level security", () => {
   for (const table of contract.tables.slice(0, 4)) {
     assert.equal(table.tenantScoped, true);
   }
-  assert.equal(contract.tables.at(-1)?.tenantScoped, false);
+  assert.equal(contract.tables.find(({ name }) => name === "mobile_token_locators")?.tenantScoped, false);
 });
 
 test("tenant mobile RLS requires service and exact tenant context", () => {
@@ -123,6 +126,15 @@ test("tenant mobile RLS requires service and exact tenant context", () => {
   );
   assert.match(locatorPolicy, /app_mobile_auth_service_enabled\(\)/);
   assert.doesNotMatch(locatorPolicy, /app_current_tenant_id/);
+});
+
+
+test("mobile session revocation disables registered push devices", () => {
+  assert.match(migration, /mobile_sessions_revoke_device_registrations/);
+  assert.match(
+    migration,
+    /UPDATE "mobile_device_registrations"[\s\S]*"status" = 'revoked'/,
+  );
 });
 
 test("mobile bearer and refresh tokens are persisted only as hashes", () => {

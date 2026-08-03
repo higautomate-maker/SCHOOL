@@ -569,6 +569,24 @@ export async function rotateMobileRefreshToken(
            AND refresh_family_id = ?
       `).bind(detectedAt, locator.tenantId, locator.refreshFamilyId),
       database.prepare(`
+        UPDATE mobile_device_registrations
+           SET status = 'revoked',
+               revoked_at = COALESCE(revoked_at, ?),
+               updated_at = ?
+         WHERE tenant_id = ?
+           AND session_id IN (
+             SELECT id FROM mobile_sessions
+              WHERE tenant_id = ? AND refresh_family_id = ?
+           )
+           AND status = 'active'
+      `).bind(
+        detectedAt,
+        detectedAt,
+        locator.tenantId,
+        locator.tenantId,
+        locator.refreshFamilyId,
+      ),
+      database.prepare(`
         INSERT INTO audit_events (
           id, tenant_id, actor_id, action, resource_type, resource_id,
           reason, ip_hash, metadata_json, occurred_at
@@ -753,18 +771,25 @@ export async function revokeMobileSession(
   sessionId: string,
   reason: string,
 ): Promise<void> {
-  await database.prepare(`
-    UPDATE mobile_sessions
-       SET revoked_at = COALESCE(revoked_at, ?),
-           revoke_reason = COALESCE(revoke_reason, ?)
-     WHERE tenant_id = ?
-       AND id = ?
-  `).bind(
-    nowIso(),
-    safeReason(reason),
-    tenantId,
-    sessionId,
-  ).run();
+  const revokedAt = nowIso();
+  await database.batch([
+    database.prepare(`
+      UPDATE mobile_sessions
+         SET revoked_at = COALESCE(revoked_at, ?),
+             revoke_reason = COALESCE(revoke_reason, ?)
+       WHERE tenant_id = ?
+         AND id = ?
+    `).bind(revokedAt, safeReason(reason), tenantId, sessionId),
+    database.prepare(`
+      UPDATE mobile_device_registrations
+         SET status = 'revoked',
+             revoked_at = COALESCE(revoked_at, ?),
+             updated_at = ?
+       WHERE tenant_id = ?
+         AND session_id = ?
+         AND status = 'active'
+    `).bind(revokedAt, revokedAt, tenantId, sessionId),
+  ]);
 }
 
 export async function revokeMobileSessionByAccessToken(
@@ -776,40 +801,38 @@ export async function revokeMobileSessionByAccessToken(
   }
 
   const tokenHash = hashMobileToken(accessToken);
-  await database.prepare(`
-    UPDATE mobile_sessions
-       SET revoked_at = COALESCE(revoked_at, ?),
-           revoke_reason = COALESCE(revoke_reason, ?)
-     WHERE EXISTS (
-       SELECT 1 FROM mobile_token_locators locator
-        WHERE locator.token_hash = ?
-          AND locator.token_kind = 'access'
-          AND locator.state = 'active'
-          AND locator.tenant_id = mobile_sessions.tenant_id
-          AND locator.session_id = mobile_sessions.id
-     )
-  `).bind(
-    nowIso(),
-    safeReason(reason),
-    tokenHash,
-  ).run();
+  const locator = await database.prepare(`
+    SELECT tenant_id AS tenantId, session_id AS sessionId
+      FROM mobile_token_locators
+     WHERE token_hash = ? AND token_kind = 'access' AND state = 'active'
+     LIMIT 1
+  `).bind(tokenHash).first<{ tenantId: string; sessionId: string }>();
+  if (!locator) return;
+  await revokeMobileSession(locator.tenantId, locator.sessionId, reason);
 }
 
 export async function revokeMobileUserSessions(
   userId: string,
   reason: string,
 ): Promise<void> {
-  await database.prepare(`
-    UPDATE mobile_sessions
-       SET revoked_at = COALESCE(revoked_at, ?),
-           revoke_reason = COALESCE(revoke_reason, ?)
-     WHERE user_id = ?
-       AND revoked_at IS NULL
-  `).bind(
-    nowIso(),
-    safeReason(reason),
-    userId,
-  ).run();
+  const revokedAt = nowIso();
+  await database.batch([
+    database.prepare(`
+      UPDATE mobile_sessions
+         SET revoked_at = COALESCE(revoked_at, ?),
+             revoke_reason = COALESCE(revoke_reason, ?)
+       WHERE user_id = ?
+         AND revoked_at IS NULL
+    `).bind(revokedAt, safeReason(reason), userId),
+    database.prepare(`
+      UPDATE mobile_device_registrations
+         SET status = 'revoked',
+             revoked_at = COALESCE(revoked_at, ?),
+             updated_at = ?
+       WHERE user_id = ?
+         AND status = 'active'
+    `).bind(revokedAt, revokedAt, userId),
+  ]);
 }
 
 export async function listActiveMobileAssignments(
@@ -881,6 +904,9 @@ export async function mobileAccessForPrincipal(
         .map((entry) => ({
           key: entry.module.key,
           label: entry.module.label,
+          canManage: entry.module.requiredManagementPermissions.every((permission) =>
+            permissionRows.results.some((row) => row.permission === permission)
+          ),
         })),
       features: [],
       assignments: [],
