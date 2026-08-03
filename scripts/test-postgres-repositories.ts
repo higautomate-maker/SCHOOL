@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import {
+  defaultEnabledSchoolModuleKeys,
+  schoolModuleKeys,
+} from "../server/access/catalogue.ts";
+import {
   getPostgresPool,
   withPlatformReadDatabase,
   withTenantDatabase,
@@ -517,6 +521,7 @@ try {
         subscriptions: string;
         memberships: string;
         modules: string;
+        enabledModules: string;
         invitations: string;
         audits: string;
         replays: string;
@@ -526,6 +531,7 @@ try {
            (SELECT count(*)::text FROM subscriptions WHERE tenant_id = $1::uuid) AS subscriptions,
            (SELECT count(*)::text FROM memberships WHERE tenant_id = $1::uuid) AS memberships,
            (SELECT count(*)::text FROM module_policies WHERE tenant_id = $1::uuid) AS modules,
+           (SELECT count(*)::text FROM module_policies WHERE tenant_id = $1::uuid AND enabled = true) AS "enabledModules",
            (SELECT count(*)::text FROM school_invitations WHERE tenant_id = $1::uuid) AS invitations,
            (SELECT count(*)::text FROM audit_events WHERE tenant_id = $1::uuid AND action = 'school.create') AS audits,
            (SELECT count(*)::text FROM idempotency_records WHERE tenant_id = $1::uuid AND operation = 'school.create') AS replays`,
@@ -538,7 +544,8 @@ try {
     campuses: "1",
     subscriptions: "1",
     memberships: "1",
-    modules: "8",
+    modules: String(schoolModuleKeys.length),
+    enabledModules: String(defaultEnabledSchoolModuleKeys.size),
     invitations: "1",
     audits: "1",
     replays: "1",

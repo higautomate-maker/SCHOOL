@@ -166,7 +166,7 @@ try {
   const persistenceTitle = `Container persistence ${suffix}`;
   await measured("hostingerSmokeTests", async () => {
     const login = await expectOk(`${origin}/login`);
-    if (!(await login.text()).includes("Hig School")) throw new Error("Login page did not contain the Hig School identity.");
+    if (!(await login.text()).includes("HIG School")) throw new Error("Login page did not contain the HIG School identity.");
     await expectOk(`${origin}/api/v1/demo/action`, {
       method: "POST",
       headers: {

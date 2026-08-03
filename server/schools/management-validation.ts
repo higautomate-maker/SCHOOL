@@ -1,6 +1,12 @@
 import { z } from "zod";
+import { schoolModuleKeys } from "../access/catalogue.ts";
 
-export const moduleKeySchema = z.enum(["student_information", "fees_finance", "attendance", "examinations", "communication"]);
+const schoolModuleValues = [...schoolModuleKeys] as [
+  typeof schoolModuleKeys[number],
+  ...typeof schoolModuleKeys[number][],
+];
+
+export const moduleKeySchema = z.enum(schoolModuleValues);
 
 export const schoolActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("update_plan"), plan: z.enum(["Starter", "Growth", "Enterprise"]) }),

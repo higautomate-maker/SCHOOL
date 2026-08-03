@@ -1,5 +1,5 @@
 name: hig_student_parent
-description: Hig School Student and Parent app with 13 synchronized modules.
+description: Hig School Student and Parent app with secure mobile identity, offline sync, and push registration.
 publish_to: none
 version: 1.0.0+1
 environment:
@@ -7,7 +7,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.2.2
+  hig_mobile_core:
+    path: ../packages/hig_mobile_core
 dev_dependencies:
   flutter_test:
     sdk: flutter

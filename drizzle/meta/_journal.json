@@ -64,6 +64,41 @@
       "when": 1785561000000,
       "tag": "0008_auth_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1785628800000,
+      "tag": "0009_access_policy_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1785663460408,
+      "tag": "0010_mobile_identity_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1785664081563,
+      "tag": "0011_mobile_refresh_rotation_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1785665000000,
+      "tag": "0012_mobile_token_locators",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1785681000000,
+      "tag": "0013_mobile_app_completion",
+      "breakpoints": true
     }
   ]
 }

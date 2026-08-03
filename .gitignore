@@ -32,6 +32,7 @@ yarn-error.log*
 .env*
 !.env.example
 !.env.staging.example
+!.env.staging.operator.example
 
 # vercel
 .vercel
@@ -50,3 +51,14 @@ next-env.d.ts
 *.zip
 *.tar.gz
 /hig-school-hostinger-node-fixed*/
+
+# Flutter release credentials and generated platform state
+**/google-services.json
+**/GoogleService-Info.plist
+**/*.jks
+**/*.keystore
+**/key.properties
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/build/

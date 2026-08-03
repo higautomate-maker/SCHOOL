@@ -1,5 +1,5 @@
 name: hig_driver_gps
-description: Dedicated Hig School driver GPS app.
+description: Hig School driver app with secure transporter identity and foreground-only Stage 9 trip tracking.
 publish_to: none
 version: 1.0.0+1
 environment:
@@ -7,7 +7,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.2.2
+  hig_mobile_core:
+    path: ../packages/hig_mobile_core
   geolocator: ^13.0.2
 dev_dependencies:
   flutter_test:

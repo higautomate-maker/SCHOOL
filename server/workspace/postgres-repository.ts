@@ -41,6 +41,25 @@ export function getPostgresWorkspace(
   });
 }
 
+
+export function getPostgresWorkspaceRecordModuleKey(
+  tenantId: string,
+  recordId: string,
+): Promise<string | null> {
+  return withTenantDatabase(tenantId, async (_database, client) => {
+    await requirePostgresSchool(client, tenantId);
+    const result = await client.query<{ moduleKey: string }>(
+      `SELECT module_key AS "moduleKey"
+       FROM module_records
+       WHERE tenant_id = $1
+         AND id = $2
+       LIMIT 1`,
+      [tenantId, recordId],
+    );
+    return result.rows[0]?.moduleKey ?? null;
+  });
+}
+
 export function applyPostgresWorkspaceAction(
   tenantId: string,
   action: WorkspaceAction,

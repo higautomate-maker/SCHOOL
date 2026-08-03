@@ -21,6 +21,7 @@ test("safe migration command is ordered, checksummed, locked, and never seeds pr
   assert.match(source, /pg_advisory_lock/);
   assert.match(source, /migration ledger is not an ordered prefix/);
   assert.match(source, /Applied migration checksum mismatch/);
+  assert.match(source, /MIGRATION_DATABASE_URL \|\| process\.env\.DATABASE_URL/);
   assert.doesNotMatch(source, /seed-demo|db:seed/);
 });
 

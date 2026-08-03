@@ -22,6 +22,22 @@ export async function getWorkspace(tenantId:string,moduleKey:string,sessionId?:s
   return workspace;
 }
 
+
+export async function getWorkspaceRecordModuleKey(
+  tenantId: string,
+  recordId: string,
+): Promise<string | null> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts"))
+      .getPostgresWorkspaceRecordModuleKey(tenantId, recordId);
+  }
+  await requireSchool(tenantId);
+  const record = await database.prepare(
+    "SELECT module_key AS moduleKey FROM module_records WHERE id=? AND tenant_id=?",
+  ).bind(recordId, tenantId).first<{ moduleKey: string }>();
+  return record?.moduleKey ?? null;
+}
+
 export async function applyWorkspaceAction(tenantId:string,action:WorkspaceAction,actor:ChatGPTUser):Promise<WorkspaceState>{
   if(repositoryBackend()==="postgres"){return (await import("./postgres-repository.ts")).applyPostgresWorkspaceAction(tenantId,action,actor);}
   await requireSchool(tenantId);const now=new Date().toISOString(),actorId=await stableUserId(actor.email);await ensureUser(actorId,actor,now);let moduleKey="Dashboard",resourceId="";

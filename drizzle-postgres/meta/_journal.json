@@ -50,6 +50,34 @@
       "when": 1785607200000,
       "tag": "0006_notification_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785621600000,
+      "tag": "0007_access_policy_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785662172208,
+      "tag": "0008_mobile_identity_api",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785665000000,
+      "tag": "0009_mobile_token_locators",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785681000000,
+      "tag": "0010_mobile_app_completion",
+      "breakpoints": true
     }
   ]
 }

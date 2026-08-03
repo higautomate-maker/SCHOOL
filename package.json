@@ -34,6 +34,7 @@
     "test:readiness:production": "node --experimental-strip-types scripts/test-stage5-readiness.ts",
     "validate:production": "node --experimental-strip-types scripts/validate-production-environment.ts",
     "staging:validate": "node --experimental-strip-types scripts/validate-staging-environment.ts",
+    "staging:database-roles": "node --experimental-strip-types scripts/validate-staging-database-roles.ts",
     "staging:migrate": "node --experimental-strip-types scripts/migrate-staging-postgres.ts",
     "staging:initialize": "node --experimental-strip-types scripts/initialize-staging-greenfield.ts",
     "staging:smoke": "node --experimental-strip-types scripts/test-staging-smoke.ts",
@@ -47,7 +48,9 @@
     "auth:bootstrap-platform-admin": "node --experimental-strip-types scripts/bootstrap-platform-admin.ts",
     "stage8:test": "node --experimental-strip-types --test tests/stage8-*.test.ts",
     "stage8:worker": "node --experimental-strip-types scripts/stage8-worker.ts",
-    "stage8:worker:health": "node --experimental-strip-types scripts/stage8-worker-health.ts"
+    "stage8:worker:health": "node --experimental-strip-types scripts/stage8-worker-health.ts",
+    "stage9:test": "node --experimental-strip-types --test tests/stage9-*.test.ts",
+    "stage9:mobile:validate": "bash mobile/scripts/validate_flutter_apps.sh"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.49.0",

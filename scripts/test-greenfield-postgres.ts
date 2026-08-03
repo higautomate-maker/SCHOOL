@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  defaultEnabledSchoolModuleKeys,
+  permissionCatalogue,
+  schoolModuleKeys,
+} from "../server/access/catalogue.ts";
+import {
   getPostgresPool,
   withPlatformReadDatabase,
   withTenantDatabase,
@@ -85,7 +90,8 @@ try {
     campuses: "1",
     subscriptions: "1",
     memberships: "1",
-    modules: "8",
+    modules: String(schoolModuleKeys.length),
+    enabledModules: String(defaultEnabledSchoolModuleKeys.size),
     invitations: "1",
     schoolAudits: "1",
     schoolReplays: "1",
@@ -454,6 +460,7 @@ try {
         subscriptions: string;
         memberships: string;
         modules: string;
+        enabledModules: string;
         invitations: string;
         configurations: string;
         sessions: string;
@@ -481,6 +488,7 @@ try {
            (SELECT count(*)::text FROM subscriptions WHERE tenant_id = $1::uuid) AS subscriptions,
            (SELECT count(*)::text FROM memberships WHERE tenant_id = $1::uuid) AS memberships,
            (SELECT count(*)::text FROM module_policies WHERE tenant_id = $1::uuid) AS modules,
+           (SELECT count(*)::text FROM module_policies WHERE tenant_id = $1::uuid AND enabled = true) AS "enabledModules",
            (SELECT count(*)::text FROM school_invitations WHERE tenant_id = $1::uuid) AS invitations,
            (SELECT count(*)::text FROM school_configurations WHERE tenant_id = $1::uuid) AS configurations,
            (SELECT count(*)::text FROM academic_sessions WHERE tenant_id = $1::uuid) AS sessions,
@@ -511,7 +519,8 @@ try {
     campuses: "1",
     subscriptions: "1",
     memberships: "1",
-    modules: "8",
+    modules: String(schoolModuleKeys.length),
+    enabledModules: String(defaultEnabledSchoolModuleKeys.size),
     invitations: "1",
     configurations: "1",
     sessions: "1",
@@ -519,7 +528,7 @@ try {
     sections: "1",
     subjects: "1",
     roles: "2",
-    permissions: "22",
+    permissions: String(permissionCatalogue.length + createdTeacher.permissions.length),
     students: "1",
     attendance: "1",
     invoices: "1",
@@ -549,6 +558,7 @@ async function tenantCounts(tenantId: string) {
       subscriptions: string;
       memberships: string;
       modules: string;
+      enabledModules: string;
       invitations: string;
       schoolAudits: string;
       schoolReplays: string;
@@ -559,6 +569,7 @@ async function tenantCounts(tenantId: string) {
          (SELECT count(*)::text FROM subscriptions WHERE tenant_id = $1::uuid) AS subscriptions,
          (SELECT count(*)::text FROM memberships WHERE tenant_id = $1::uuid) AS memberships,
          (SELECT count(*)::text FROM module_policies WHERE tenant_id = $1::uuid) AS modules,
+         (SELECT count(*)::text FROM module_policies WHERE tenant_id = $1::uuid AND enabled = true) AS "enabledModules",
          (SELECT count(*)::text FROM school_invitations WHERE tenant_id = $1::uuid) AS invitations,
          (SELECT count(*)::text FROM audit_events WHERE tenant_id = $1::uuid AND action = 'school.create') AS "schoolAudits",
          (SELECT count(*)::text FROM idempotency_records WHERE tenant_id = $1::uuid AND operation = 'school.create') AS "schoolReplays"`,

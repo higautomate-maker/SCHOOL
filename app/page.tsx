@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogoutButton } from "./components/logout-button";
@@ -28,41 +28,212 @@ type SchoolDetail = {
   modules: Array<{ key: string; label: string; enabled: boolean }>;
   audit: Array<{ id: string; action: string; occurredAt: string }>;
 };
-type AccessRole = { id: string; name: string; key: string; system: boolean; description: string; permissions: string[] };
+type AppAudience = "parent" | "student" | "transporter";
+type AccessAudienceTab = "school" | AppAudience;
+type CompanyModulePolicy = {
+  key: string;
+  label: string;
+  category: string;
+  description: string;
+  displayOrder: number;
+  enabled: boolean;
+  source: "plan" | "override" | "missing";
+};
+type CompanyAppFeaturePolicy = {
+  key: string;
+  audience: AppAudience;
+  label: string;
+  description: string;
+  displayOrder: number;
+  requiredSchoolModule: string | null;
+  requiredSchoolModuleLabel: string | null;
+  policyEnabled: boolean;
+  effectiveEnabled: boolean;
+  dependencySatisfied: boolean;
+  source: "tenant" | "plan" | "missing";
+  blockedReason: string | null;
+};
+type CompanyAccessConfiguration = {
+  tenantId: string;
+  schoolName: string;
+  plan: string;
+  modules: CompanyModulePolicy[];
+  appFeatures: Record<AppAudience, CompanyAppFeaturePolicy[]>;
+};
 
-const navItems = [
-  ["Overview", "⌂"],
-  ["Schools", "▦"],
-  ["Plans & billing", "₹"],
-  ["Modules", "◫"],
-  ["Access control", "◇"],
-  ["Audit log", "≡"],
-] as const;
+const accessTabLabels: Record<AccessAudienceTab, string> = {
+  school: "School Web Modules",
+  parent: "Parent App",
+  student: "Student App",
+  transporter: "Transporter App",
+};
 
-const initialSchools: School[] = [
-  { id: "HIG-001", name: "Northfield Public School", code: "NPS", location: "New Delhi", students: 1842, plan: "Enterprise", status: "Active", renewal: "12 Aug 2026", color: "mint", invitation: "Accepted" },
-  { id: "HIG-002", name: "Riverdale International", code: "RI", location: "Bengaluru", students: 1256, plan: "Enterprise", status: "Active", renewal: "28 Aug 2026", color: "peach" },
-  { id: "HIG-003", name: "Sunrise Academy", code: "SA", location: "Jaipur", students: 684, plan: "Starter", status: "Trial", renewal: "Trial · 8 days", color: "lilac" },
-  { id: "HIG-004", name: "Starlight Senior School", code: "SS", location: "Pune", students: 2190, plan: "Growth", status: "Attention", renewal: "Payment due", color: "yellow" },
+type CompanySection = "Overview" | "Schools" | "Modules" | "Access control";
+
+type CompanyNavigationItem = {
+  label: CompanySection | "Plans & billing" | "Audit log";
+  icon: string;
+  disabledReason?: string;
+};
+
+const navItems: readonly CompanyNavigationItem[] = [
+  { label: "Overview", icon: "⌂" },
+  { label: "Schools", icon: "▦" },
+  {
+    label: "Plans & billing",
+    icon: "₹",
+    disabledReason: "Platform-wide billing requires the billing ledger API. School plan changes remain available in School controls.",
+  },
+  { label: "Modules", icon: "◫" },
+  { label: "Access control", icon: "◇" },
+  {
+    label: "Audit log",
+    icon: "≡",
+    disabledReason: "Platform-wide audit search is not available yet. Tenant audit history remains available in School controls.",
+  },
 ];
 
-const metrics = [
-  { label: "Active schools", value: "94", delta: "+6.8%", note: "of 112 total", tone: "green", spark: [24, 30, 28, 40, 39, 52, 56, 68] },
-  { label: "Students managed", value: "86,420", delta: "+4.2%", note: "across 182 campuses", tone: "navy", spark: [25, 31, 35, 37, 45, 43, 51, 59] },
-  { label: "Monthly revenue", value: "₹28.4L", delta: "+12.4%", note: "ARR ₹3.41 Cr", tone: "orange", spark: [20, 26, 23, 38, 35, 44, 47, 64] },
-  { label: "Platform health", value: "99.98%", delta: "Healthy", note: "All systems operational", tone: "teal", spark: [52, 54, 51, 55, 53, 55, 54, 58] },
-];
-
-const modules = [
-  ["Student Information", "112 schools", "100%"],
-  ["Fees & Finance", "98 schools", "87%"],
-  ["Attendance", "104 schools", "93%"],
-  ["Examinations", "89 schools", "79%"],
-  ["Transport", "61 schools", "54%"],
-];
+const initialSchools: School[] = [];
 
 function Sparkline({ points, tone }: { points: number[]; tone: string }) {
   return <div className={`spark spark-${tone}`} aria-hidden="true">{points.map((point, index) => <i key={index} style={{ height: `${point}%` }} />)}</div>;
+}
+
+function CompanyAccessWorkspace({
+  access,
+  schools,
+  loading,
+  pendingKey,
+  audience,
+  onAudienceChange,
+  onSchoolChange,
+  onToggleModule,
+  onToggleFeature,
+  onOpenSchool,
+}: {
+  access: CompanyAccessConfiguration | null;
+  schools: School[];
+  loading: boolean;
+  pendingKey: string;
+  audience: AccessAudienceTab;
+  onAudienceChange: (audience: AccessAudienceTab) => void;
+  onSchoolChange: (tenantId: string) => void;
+  onToggleModule: (moduleKey: string, enabled: boolean) => void;
+  onToggleFeature: (audience: AppAudience, featureKey: string, enabled: boolean) => void;
+  onOpenSchool: () => void;
+}) {
+  const enabledModules = access?.modules.filter((moduleDefinition) => moduleDefinition.enabled).length ?? 0;
+  const currentFeatures = audience === "school" || !access ? [] : access.appFeatures[audience];
+  const enabledFeatures = currentFeatures.filter((feature) => feature.effectiveEnabled).length;
+  const selectedSchool = schools.find((school) => school.tenantId === access?.tenantId);
+
+  return (
+    <section className="policy-workspace" aria-label="School and app access control">
+      <div className="policy-hero">
+        <div>
+          <p className="eyebrow">COMPANY ACCESS POLICY</p>
+          <h2>Control each school and linked app</h2>
+          <p>Company settings are the upper access boundary. School roles can only narrow School web access, while app features also require a valid user relationship or assignment.</p>
+        </div>
+        <label className="policy-school-selector">
+          <small>SELECT LIVE SCHOOL</small>
+          <select
+            value={access?.tenantId ?? ""}
+            disabled={loading || schools.length === 0}
+            onChange={(event) => onSchoolChange(event.target.value)}
+          >
+            <option value="" disabled>{schools.length ? "Choose a school" : "No live school available"}</option>
+            {schools.filter((school) => school.tenantId).map((school) => (
+              <option key={school.tenantId} value={school.tenantId}>{school.name} · {school.plan}</option>
+            ))}
+          </select>
+          {access && <em>{access.plan} · tenant-specific policy</em>}
+        </label>
+      </div>
+
+      {!access ? (
+        <div className="policy-empty">
+          <b>{loading ? "Loading access configuration…" : "Select a live school"}</b>
+          <span>Only persisted tenant schools can receive module and app policies.</span>
+        </div>
+      ) : (
+        <>
+          <div className="policy-summary">
+            <article><span>School modules</span><b>{enabledModules}</b><small>of {access.modules.length} enabled</small></article>
+            <article><span>{audience === "school" ? "Disabled" : "Effective app features"}</span><b>{audience === "school" ? access.modules.length - enabledModules : enabledFeatures}</b><small>{audience === "school" ? "hidden and API-blocked" : `of ${currentFeatures.length} available`}</small></article>
+            <article><span>Selected school</span><b className="policy-school-name">{selectedSchool?.code ?? access.schoolName.slice(0, 2).toUpperCase()}</b><small>{access.schoolName}</small></article>
+            <article><span>Policy changes</span><b>Audited</b><small>company administrator</small></article>
+          </div>
+
+          <div className="policy-card">
+            <header className="policy-card-header">
+              <div>
+                <h3>Access configuration</h3>
+                <p>School Web Modules and app personas are managed independently for {access.schoolName}.</p>
+              </div>
+              <button onClick={onOpenSchool}>Open school controls →</button>
+            </header>
+            <div className="access-tabs" role="tablist" aria-label="Access policy audience">
+              {(["school", "parent", "student", "transporter"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  role="tab"
+                  aria-selected={audience === tab}
+                  className={audience === tab ? "selected" : ""}
+                  onClick={() => onAudienceChange(tab)}
+                >
+                  {accessTabLabels[tab]}
+                </button>
+              ))}
+            </div>
+
+            {audience === "school" ? (
+              <div className="policy-grid">
+                {access.modules.map((moduleDefinition) => (
+                  <label className={moduleDefinition.enabled ? "policy-module enabled" : "policy-module"} key={moduleDefinition.key} data-testid={`company-module-${moduleDefinition.key}`}>
+                    <span className="policy-icon">{moduleIcons[moduleDefinition.label] ?? "◫"}</span>
+                    <span>
+                      <b>{moduleDefinition.label}</b>
+                      <small>{moduleDefinition.enabled ? `Enabled · ${moduleDefinition.category}` : "Hidden from School navigation and blocked by API"}</small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={moduleDefinition.enabled}
+                      disabled={Boolean(pendingKey)}
+                      aria-label={`${moduleDefinition.enabled ? "Disable" : "Enable"} ${moduleDefinition.label} for ${access.schoolName}`}
+                      onChange={(event) => onToggleModule(moduleDefinition.key, event.target.checked)}
+                    />
+                    <i className="policy-switch" />
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="app-policy-grid">
+                {currentFeatures.map((feature) => (
+                  <label className={feature.effectiveEnabled ? "app-policy enabled" : feature.policyEnabled ? "app-policy blocked" : "app-policy"} key={`${feature.audience}-${feature.key}`}>
+                    <span>
+                      <b>{feature.label}</b>
+                      <small>{feature.blockedReason ?? feature.description}</small>
+                      <em>{feature.source === "tenant" ? "School override" : feature.source === "plan" ? "Plan default" : "Disabled by default"}{feature.requiredSchoolModuleLabel ? ` · requires ${feature.requiredSchoolModuleLabel}` : ""}</em>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={feature.policyEnabled}
+                      disabled={Boolean(pendingKey)}
+                      aria-label={`${feature.policyEnabled ? "Disable" : "Enable"} ${feature.label} for ${access.schoolName}`}
+                      onChange={(event) => onToggleFeature(feature.audience, feature.key, event.target.checked)}
+                    />
+                    <i className="policy-switch" />
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="policy-explainer"><span>COMPANY</span><i>enables School or app capability</i><b>→</b><span>SCHOOL</span><i>grants role subset</i><b>→</b><span>USER</span><i>must have valid relationship</i></div>
+        </>
+      )}
+    </section>
+  );
 }
 
 const moduleIcons: Record<string, string> = {
@@ -79,24 +250,50 @@ const moduleIcons: Record<string, string> = {
 
 export default function Home() {
   const pathname = usePathname();
-  const [active, setActive] = useState("Overview");
+  const [active, setActive] = useState<CompanySection>("Overview");
   const [schools, setSchools] = useState(initialSchools);
   const [query, setQuery] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [notice, setNotice] = useState("3 schools need your attention");
+  const [notice, setNotice] = useState("Select a school to review its plan, module access and app policies.");
   const [submitting, setSubmitting] = useState(false);
   const [actorName, setActorName] = useState("Ankit Yadav");
   const [selectedSchool, setSelectedSchool] = useState<SchoolDetail | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [schoolActionPending, setSchoolActionPending] = useState(false);
-  const [roles, setRoles] = useState<AccessRole[]>([]);
-  const [permissionCatalogue, setPermissionCatalogue] = useState<Array<[string, string, string]>>([]);
-  const [activeRoleId, setActiveRoleId] = useState<string | null>(null);
-  const [rolePending, setRolePending] = useState(false);
-  const [newRoleName, setNewRoleName] = useState("");
-  const [companyPolicies] = useState<SchoolDetail["modules"]>(modules.map(([label]) => ({ key: label.toLowerCase().replace(/[^a-z0-9]+/g, "_"), label, enabled: true })));
+  const [accessConfiguration, setAccessConfiguration] = useState<CompanyAccessConfiguration | null>(null);
+  const [accessAudience, setAccessAudience] = useState<AccessAudienceTab>("school");
+  const [accessLoading, setAccessLoading] = useState(false);
   const [policyPending, setPolicyPending] = useState("");
+
+  const loadAccessConfiguration = useCallback(async (
+    tenantId: string,
+  ): Promise<CompanyAccessConfiguration | null> => {
+    setAccessLoading(true);
+    try {
+      const response = await authenticatedFetch(
+        `/api/v1/schools/${encodeURIComponent(tenantId)}/access`,
+      );
+      const result = await response.json() as {
+        access?: CompanyAccessConfiguration;
+        error?: string;
+      };
+      if (!response.ok || !result.access) {
+        throw new Error(result.error || "Access configuration could not be loaded");
+      }
+      setAccessConfiguration(result.access);
+      return result.access;
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Access configuration could not be loaded",
+      );
+      return null;
+    } finally {
+      setAccessLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (pathname === "/") {
@@ -109,18 +306,35 @@ export default function Home() {
       .then((data) => {
         if (!activeRequest || !data) return;
         setActorName(data.actor.displayName);
-        if (data.schools.length) {
-          const persistentIds = new Set(data.schools.map((school) => school.id));
-          setSchools([...data.schools, ...initialSchools.filter((school) => !persistentIds.has(school.id))]);
-        }
+        setSchools(data.schools);
+        const firstLiveSchool = data.schools.find((school) => school.tenantId);
+        if (firstLiveSchool?.tenantId) void loadAccessConfiguration(firstLiveSchool.tenantId);
       })
       .catch(() => undefined);
     return () => { activeRequest = false; };
-  }, [pathname]);
+  }, [loadAccessConfiguration, pathname]);
 
   const filteredSchools = useMemo(
     () => schools.filter((school) => `${school.name} ${school.location} ${school.plan}`.toLowerCase().includes(query.toLowerCase())),
     [schools, query],
+  );
+
+  const overviewMetrics = useMemo(() => {
+    const activeSchools = schools.filter((school) => school.status === "Active").length;
+    const trialSchools = schools.filter((school) => school.status === "Trial").length;
+    const attentionSchools = schools.filter((school) => school.status === "Attention").length;
+    const studentsManaged = schools.reduce((total, school) => total + school.students, 0);
+    return [
+      { label: "Active schools", value: activeSchools.toLocaleString("en-IN"), delta: "LIVE", note: `of ${schools.length} tenants`, tone: "green", spark: [24, 30, 28, 40, 39, 52, 56, 68] },
+      { label: "Students managed", value: studentsManaged.toLocaleString("en-IN"), delta: "LIVE", note: "from tenant records", tone: "navy", spark: [25, 31, 35, 37, 45, 43, 51, 59] },
+      { label: "Trial schools", value: trialSchools.toLocaleString("en-IN"), delta: "TRIAL", note: "onboarding in progress", tone: "orange", spark: [20, 26, 23, 38, 35, 44, 47, 64] },
+      { label: "Needs attention", value: attentionSchools.toLocaleString("en-IN"), delta: attentionSchools ? "REVIEW" : "CLEAR", note: "tenant status", tone: "teal", spark: [52, 54, 51, 55, 53, 55, 54, 58] },
+    ];
+  }, [schools]);
+
+  const selectedModuleSnapshot = useMemo(
+    () => accessConfiguration?.modules.slice(0, 6) ?? [],
+    [accessConfiguration],
   );
 
   async function addSchool(event: FormEvent<HTMLFormElement>) {
@@ -145,15 +359,19 @@ export default function Home() {
 
   async function openSchool(school: School) {
     if (!school.tenantId) {
-      setNotice("This seeded example is read-only. Add a school to manage live tenant settings.");
+      setNotice("Only a persisted tenant school can be managed.");
       return;
     }
     setDrawerLoading(true);
     try {
-      const detailResponse = await authenticatedFetch(`/api/v1/schools/${encodeURIComponent(school.tenantId)}`);
+      const [detailResponse, access] = await Promise.all([
+        authenticatedFetch(`/api/v1/schools/${encodeURIComponent(school.tenantId)}`),
+        loadAccessConfiguration(school.tenantId),
+      ]);
       const result = await detailResponse.json() as { school?: SchoolDetail; error?: string };
       if (!detailResponse.ok || !result.school) throw new Error(result.error || "School details could not be loaded");
-      setSelectedSchool(result.school); setRoles([]); setPermissionCatalogue([]); setActiveRoleId(null);
+      setSelectedSchool(result.school);
+      if (!access) setAccessAudience("school");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "School details could not be loaded");
     } finally {
@@ -171,6 +389,7 @@ export default function Home() {
       const updatedSchool = result.school;
       setSelectedSchool(updatedSchool);
       setSchools((items) => items.map((school) => school.tenantId === updatedSchool.tenantId ? { ...school, plan: updatedSchool.plan, invitation: updatedSchool.invitationStatus === "accepted" ? "Accepted" : "Pending" } : school));
+      await loadAccessConfiguration(updatedSchool.tenantId);
       setNotice(`${updatedSchool.name} settings updated and audited`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "School update failed");
@@ -179,44 +398,95 @@ export default function Home() {
     }
   }
 
-  async function manageRole(_action: Record<string, unknown>) {
-    if (!selectedSchool) return;
-    void _action;
-    setRolePending(true);
-    setNotice("Sign in through the school workspace to manage tenant roles");
-    setRolePending(false);
-  }
-
-  async function updateCompanyPolicy(moduleKey: string, enabled: boolean) {
-    setPolicyPending(moduleKey);
+  async function updateCompanyAccess(action: Record<string, unknown>, pendingKey: string) {
+    if (!accessConfiguration) return;
+    setPolicyPending(pendingKey);
     try {
-      setNotice(`Open a live school and use its audited tenant drawer to ${enabled ? "enable" : "disable"} this module.`);
+      const response = await authenticatedFetch(
+        `/api/v1/schools/${encodeURIComponent(accessConfiguration.tenantId)}/access`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+            "idempotency-key": crypto.randomUUID(),
+          },
+          body: JSON.stringify(action),
+        },
+      );
+      const result = await response.json() as { access?: CompanyAccessConfiguration; error?: string };
+      if (!response.ok || !result.access) throw new Error(result.error || "Access policy update failed");
+      setAccessConfiguration(result.access);
+      if (selectedSchool?.tenantId === result.access.tenantId) {
+        setSelectedSchool((school) => school ? {
+          ...school,
+          modules: result.access!.modules.map((moduleDefinition) => ({
+            key: moduleDefinition.key,
+            label: moduleDefinition.label,
+            enabled: moduleDefinition.enabled,
+          })),
+        } : school);
+      }
+      setNotice(`${result.access.schoolName} access policy updated and audited`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Module policy update failed");
+      setNotice(error instanceof Error ? error.message : "Access policy update failed");
     } finally {
       setPolicyPending("");
     }
   }
 
-  const activeRole = roles.find((role) => role.id === activeRoleId) ?? null;
+  function updateCompanyModule(moduleKey: string, enabled: boolean) {
+    return updateCompanyAccess({ action: "set_module", moduleKey, enabled }, `module:${moduleKey}`);
+  }
 
-  const displayTitle = active === "Overview" ? "Good morning, Ankit." : active;
-  const displaySubtitle = active === "Overview" ? "Here’s what’s happening across your school network today." : `Manage ${active.toLowerCase()} across every tenant from one secure workspace.`;
+  function updateCompanyAppFeature(audience: AppAudience, featureKey: string, enabled: boolean) {
+    return updateCompanyAccess(
+      { action: "set_app_feature", audience, featureKey, enabled },
+      `${audience}:${featureKey}`,
+    );
+  }
+
+  function navigateCompany(section: CompanySection) {
+    setActive(section);
+    setMenuOpen(false);
+    if (section === "Modules") setAccessAudience("school");
+    if (section === "Access control" && accessAudience === "school") setAccessAudience("parent");
+  }
+
+  const displayTitle = active === "Overview" ? `Good morning, ${actorName.split(/\s+/)[0] || "Administrator"}.` : active;
+  const displaySubtitle = active === "Overview"
+    ? "Live tenant information and access controls for your school network."
+    : active === "Schools"
+      ? "Open a persisted tenant to manage its plan, invitation and module access."
+      : `Manage ${active.toLowerCase()} for the selected tenant.`;
+  const todayLabel = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(new Date()).toUpperCase();
 
   return (
     <main className="app-shell">
       <aside className={menuOpen ? "sidebar open" : "sidebar"}>
         <div className="brand">
           <div className="brand-mark" aria-hidden="true"><span>H</span></div>
-          <div><strong>Hig School</strong><small>COMMAND CENTER</small></div>
+          <div><strong>HIG School</strong><small>COMMAND CENTER</small></div>
         </div>
 
         <nav aria-label="Primary navigation">
           <p className="nav-label">WORKSPACE</p>
-          {navItems.map(([label, icon]) => (
-            <button key={label} className={active === label ? "nav-item active" : "nav-item"} onClick={() => { setActive(label); setMenuOpen(false); }}>
-              <span className="nav-icon">{icon}</span>{label}
-              {label === "Schools" && <span className="nav-count">{schools.length}</span>}
+          {navItems.map((item) => (
+            <button
+              key={item.label}
+              className={`${active === item.label ? "nav-item active" : "nav-item"}${item.disabledReason ? " nav-item-disabled" : ""}`}
+              disabled={Boolean(item.disabledReason)}
+              title={item.disabledReason}
+              onClick={() => {
+                if (!item.disabledReason) navigateCompany(item.label as CompanySection);
+              }}
+            >
+              <span className="nav-icon">{item.icon}</span>{item.label}
+              {item.label === "Schools" && <span className="nav-count">{schools.length}</span>}
+              {item.disabledReason && <span className="nav-planned">PLANNED</span>}
             </button>
           ))}
         </nav>
@@ -226,8 +496,8 @@ export default function Home() {
             <div className="signal-top"><span className="pulse-dot" /> All systems operational</div>
             <div className="signal-meta"><span>Last check</span><b>just now</b></div>
           </div>
-          <button className="profile-button" onClick={() => setNotice("Profile controls are ready for secure identity integration")}>
-            <span className="avatar">{actorName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span><b>{actorName}</b><small>Platform Super Admin</small></span><span className="more">•••</span>
+          <button className="profile-button" disabled title="Profile management requires secure identity integration.">
+            <span className="avatar">{actorName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span><b>{actorName}</b><small>Platform Super Admin</small></span><span className="more">LOCKED</span>
           </button>
         </div>
       </aside>
@@ -239,97 +509,86 @@ export default function Home() {
           <div className="top-actions">
             <Link className="workspace-link" href="/school">School workspace <span>→</span></Link>
             <LogoutButton className="workspace-link" />
-            <button className="icon-button" aria-label="Help" onClick={() => setNotice("Hig School support center is ready")}>?</button>
-            <button className="icon-button notification" aria-label="Notifications" onClick={() => setNotice("No new critical security alerts")}>♢<span /></button>
+            <button className="icon-button" aria-label="Help" disabled title="The Company support center is planned for a later stage.">?</button>
+            <button className="icon-button notification" aria-label="Notifications" disabled title="Company notification inbox is not connected yet.">♢</button>
             <button className="primary-button compact" onClick={() => setModalOpen(true)}><span>＋</span> Add school</button>
           </div>
         </header>
 
         <div className="content">
           <div className="heading-row">
-            <div><p className="eyebrow">22 JULY 2026 · PLATFORM OVERVIEW</p><h1>{displayTitle}</h1><p>{displaySubtitle}</p></div>
-            <div className="period-switch"><button className="selected" onClick={() => setNotice("Dashboard period set to this month")}>This month</button><button onClick={() => setNotice("Dashboard period set to this year")}>This year</button></div>
+            <div><p className="eyebrow">{todayLabel} · COMPANY PLATFORM</p><h1>{displayTitle}</h1><p>{displaySubtitle}</p></div>
+            <span className="live-context"><i /> LIVE TENANT DATA</span>
           </div>
 
-          <div className="notice-bar"><span className="notice-symbol">!</span><p><b>{notice}</b><small> Review billing, trial and security events to keep every school running smoothly.</small></p><button onClick={() => setActive("Schools")}>Review now <span>→</span></button></div>
+          <div className="notice-bar"><span className="notice-symbol">!</span><p><b>{notice}</b><small> Every change made through live controls is tenant-scoped and audited.</small></p><button onClick={() => navigateCompany("Schools")}>Review schools <span>→</span></button></div>
 
-          {active === "Modules" && (
-            <section className="policy-workspace" aria-label="School module access control">
-              <div className="policy-hero">
-                <div><p className="eyebrow">LIVE TENANT POLICY</p><h2>Control what each school can use</h2><p>Company access is the source of truth. Disabled modules disappear from the School workspace and remain blocked for its users.</p></div>
-                <div className="policy-school"><small>SELECTED SCHOOL</small><b><span>NPS</span> Northfield Public School</b><em>Enterprise · Active</em></div>
-              </div>
-              <div className="policy-summary">
-                <article><span>Enabled</span><b>{companyPolicies.filter((module) => module.enabled).length}</b><small>of {companyPolicies.length} modules</small></article>
-                <article><span>Disabled</span><b>{companyPolicies.filter((module) => !module.enabled).length}</b><small>hidden from school</small></article>
-                <article><span>Synchronization</span><b className="policy-live"><i /> Live</b><small>applies immediately</small></article>
-                <article><span>Policy changes</span><b>Audited</b><small>company administrator</small></article>
-              </div>
-              <div className="policy-card">
-                <header><div><h3>Module access</h3><p>Toggle optional capabilities for Northfield Public School.</p></div><button onClick={() => openSchool(initialSchools[0])}>Advanced tenant settings →</button></header>
-                <div className="policy-grid">
-                  {companyPolicies.map((module) => (
-                    <label className={module.enabled ? "policy-module enabled" : "policy-module"} key={module.key} data-testid={`company-module-${module.key}`}>
-                      <span className="policy-icon">{moduleIcons[module.label] ?? "◫"}</span>
-                      <span><b>{module.label}</b><small>{module.enabled ? "Available in School portal" : "Hidden and blocked"}</small></span>
-                      <input type="checkbox" checked={module.enabled} disabled={Boolean(policyPending)} aria-label={`${module.enabled ? "Disable" : "Enable"} ${module.label} for Northfield Public School`} onChange={(event) => updateCompanyPolicy(module.key, event.target.checked)} />
-                      <i className="policy-switch" />
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="policy-explainer"><span>COMPANY</span><i>selects school & modules</i><b>→</b><span>SCHOOL PORTAL</span><i>shows enabled modules</i><b>→</b><span>USERS</span><i>follow role permissions</i></div>
-            </section>
+          {(active === "Modules" || active === "Access control") && (
+            <CompanyAccessWorkspace
+              access={accessConfiguration}
+              schools={schools.filter((school) => school.tenantId)}
+              loading={accessLoading}
+              pendingKey={policyPending}
+              audience={accessAudience}
+              onAudienceChange={setAccessAudience}
+              onSchoolChange={(tenantId) => { void loadAccessConfiguration(tenantId); }}
+              onToggleModule={(moduleKey, enabled) => { void updateCompanyModule(moduleKey, enabled); }}
+              onToggleFeature={(audience, featureKey, enabled) => { void updateCompanyAppFeature(audience, featureKey, enabled); }}
+              onOpenSchool={() => {
+                const school = schools.find((item) => item.tenantId === accessConfiguration?.tenantId);
+                if (school) void openSchool(school);
+              }}
+            />
           )}
 
-          {active !== "Modules" && <>
-          <section className="metrics-grid" aria-label="Platform metrics">
-              {metrics.map((metric) => <article className="metric-card" key={metric.label}><div className="metric-copy"><p>{metric.label}</p><strong>{metric.value}</strong><div><span className={`delta ${metric.tone}`}>{metric.delta}</span><small>{metric.note}</small></div></div><Sparkline points={metric.spark} tone={metric.tone} /></article>)}
-          </section>
+          {active === "Overview" && <>
+            <section className="metrics-grid" aria-label="Live platform metrics">
+              {overviewMetrics.map((metric) => <article className="metric-card" key={metric.label}><div className="metric-copy"><p>{metric.label}</p><strong>{metric.value}</strong><div><span className={`delta ${metric.tone}`}>{metric.delta}</span><small>{metric.note}</small></div></div><Sparkline points={metric.spark} tone={metric.tone} /></article>)}
+            </section>
 
-          <section className="dashboard-grid">
-            <article className="card school-card">
-              <div className="card-heading"><div><h2>Schools at a glance</h2><p>Recent tenant activity and subscription status.</p></div><button onClick={() => setActive("Schools")}>View all schools <span>→</span></button></div>
-              <div className="school-table" role="table" aria-label="Recent schools">
-                <div className="school-row school-header" role="row"><span>SCHOOL</span><span>STUDENTS</span><span>PLAN</span><span>STATUS</span><span>RENEWAL</span><span /></div>
-                {filteredSchools.slice(0, active === "Schools" ? 8 : 4).map((school) => (
-                  <div className="school-row" role="row" key={school.id}>
-                    <div className="school-name"><span className={`school-badge ${school.color}`}>{school.code}</span><span><b>{school.name}</b><small>{school.location} · {school.id}</small></span></div>
-                    <span className="numeric">{school.students.toLocaleString("en-IN")}</span><span className="plan">{school.plan}</span><span><i className={`status-dot ${school.status.toLowerCase()}`} />{school.status}</span><span className={school.status === "Attention" ? "renewal warning" : "renewal"}>{school.renewal}</span><button className="row-action" disabled={drawerLoading} aria-label={`Open ${school.name}`} onClick={() => openSchool(school)}>›</button>
-                  </div>
-                ))}
-              </div>
-            </article>
+            <section className="dashboard-grid">
+              <article className="card school-card">
+                <div className="card-heading"><div><h2>Schools at a glance</h2><p>Live tenant and subscription status.</p></div><button onClick={() => navigateCompany("Schools")}>View all schools <span>→</span></button></div>
+                <div className="school-table" role="table" aria-label="Recent schools">
+                  <div className="school-row school-header" role="row"><span>SCHOOL</span><span>STUDENTS</span><span>PLAN</span><span>STATUS</span><span>RENEWAL</span><span /></div>
+                  {filteredSchools.slice(0, 4).map((school) => (
+                    <div className="school-row" role="row" key={school.id}>
+                      <div className="school-name"><span className={`school-badge ${school.color}`}>{school.code}</span><span><b>{school.name}</b><small>{school.location} · {school.id}</small></span></div>
+                      <span className="numeric">{school.students.toLocaleString("en-IN")}</span><span className="plan">{school.plan}</span><span><i className={`status-dot ${school.status.toLowerCase()}`} />{school.status}</span><span className={school.status === "Attention" ? "renewal warning" : "renewal"}>{school.renewal}</span><button className="row-action" disabled={drawerLoading} aria-label={`Open ${school.name}`} onClick={() => openSchool(school)}>›</button>
+                    </div>
+                  ))}
+                  {!filteredSchools.length && <div className="company-empty-state"><b>No schools found</b><span>Create a school or change the search term.</span></div>}
+                </div>
+              </article>
 
-            <article className="card module-card">
-              <div className="card-heading"><div><h2>Module adoption</h2><p>Usage across active schools.</p></div><button className="dots" aria-label="Module options" onClick={() => setActive("Modules")}>•••</button></div>
-              <div className="module-list">{modules.map(([name, count, value]) => <div className="module-row" key={name}><div><b>{name}</b><span>{count}</span></div><div className="progress"><i style={{ width: value }} /></div><strong>{value}</strong></div>)}</div>
-              <button className="secondary-button" onClick={() => setActive("Modules")}>Manage module policies</button>
-            </article>
-
-            <article className="card revenue-card">
-              <div className="card-heading"><div><h2>Revenue trajectory</h2><p>Recurring revenue for the last 6 months.</p></div><span className="live-pill"><i /> LIVE</span></div>
-              <div className="revenue-summary"><div><small>CURRENT MRR</small><strong>₹28.4L</strong></div><div><small>NET GROWTH</small><strong className="positive">+₹3.1L</strong></div><div><small>FAILED PAYMENTS</small><strong className="negative">₹42K</strong></div></div>
-              <div className="bar-chart" aria-label="Monthly recurring revenue chart">{[["Feb",40],["Mar",48],["Apr",54],["May",61],["Jun",73],["Jul",88]].map(([month, height]) => <div key={month}><span style={{ height: `${height}%` }} /><small>{month}</small></div>)}</div>
-            </article>
-
-            <article className="card activity-card">
-              <div className="card-heading"><div><h2>Recent activity</h2><p>Platform-wide audit stream.</p></div><button onClick={() => setActive("Audit log")}>Open audit log <span>→</span></button></div>
-              <div className="timeline">
-                <div><span className="activity-icon green">＋</span><p><b>New school onboarded</b><small>Sunrise Academy · by Ankit Yadav</small></p><time>18 min</time></div>
-                <div><span className="activity-icon orange">₹</span><p><b>Subscription upgraded</b><small>Riverdale International · Growth → Enterprise</small></p><time>1 hr</time></div>
-                <div><span className="activity-icon blue">◇</span><p><b>Role policy updated</b><small>School Admin · 3 permissions changed</small></p><time>3 hrs</time></div>
-                <div><span className="activity-icon gray">!</span><p><b>Payment retry scheduled</b><small>Starlight Senior School · invoice #HS-8042</small></p><time>5 hrs</time></div>
-              </div>
-            </article>
-          </section>
+              <article className="card module-card">
+                <div className="card-heading"><div><h2>Selected tenant access</h2><p>{accessConfiguration ? accessConfiguration.schoolName : "Choose a live school"}</p></div><button className="dots" aria-label="Open module controls" onClick={() => navigateCompany("Modules")}>•••</button></div>
+                <div className="module-list">{selectedModuleSnapshot.map((moduleDefinition) => <div className="module-row" key={moduleDefinition.key}><div><b>{moduleDefinition.label}</b><span>{moduleDefinition.enabled ? "Enabled" : "Disabled"}</span></div><div className="progress"><i style={{ width: moduleDefinition.enabled ? "100%" : "0%" }} /></div><strong>{moduleDefinition.enabled ? "ON" : "OFF"}</strong></div>)}</div>
+                {!selectedModuleSnapshot.length && <div className="company-compact-empty">No persisted tenant access policy is loaded.</div>}
+                <button className="secondary-button" onClick={() => navigateCompany("Modules")}>Manage module policies</button>
+              </article>
+            </section>
           </>}
+
+          {active === "Schools" && <section className="card school-card company-schools-page">
+            <div className="card-heading"><div><h2>All schools</h2><p>{filteredSchools.length} matching persisted tenant{filteredSchools.length === 1 ? "" : "s"}.</p></div><button onClick={() => setModalOpen(true)}>Add school <span>＋</span></button></div>
+            <div className="school-table" role="table" aria-label="All schools">
+              <div className="school-row school-header" role="row"><span>SCHOOL</span><span>STUDENTS</span><span>PLAN</span><span>STATUS</span><span>RENEWAL</span><span /></div>
+              {filteredSchools.map((school) => (
+                <div className="school-row" role="row" key={school.id}>
+                  <div className="school-name"><span className={`school-badge ${school.color}`}>{school.code}</span><span><b>{school.name}</b><small>{school.location} · {school.id}</small></span></div>
+                  <span className="numeric">{school.students.toLocaleString("en-IN")}</span><span className="plan">{school.plan}</span><span><i className={`status-dot ${school.status.toLowerCase()}`} />{school.status}</span><span className={school.status === "Attention" ? "renewal warning" : "renewal"}>{school.renewal}</span><button className="row-action" disabled={drawerLoading} aria-label={`Open ${school.name}`} onClick={() => openSchool(school)}>›</button>
+                </div>
+              ))}
+              {!filteredSchools.length && <div className="company-empty-state"><b>No schools match this search</b><span>Clear the search or create a new tenant.</span></div>}
+            </div>
+          </section>}
 
           <footer><span>© 2026 HIG Automation India Private Limited</span><span><i className="footer-dot" /> Data protected · India region</span></footer>
         </div>
       </section>
 
-      {selectedSchool && <div className="drawer-backdrop" role="presentation" onMouseDown={() => !schoolActionPending && !rolePending && setSelectedSchool(null)}><aside className="school-drawer" role="dialog" aria-modal="true" aria-labelledby="school-drawer-title" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="eyebrow">TENANT CONTROL</p><h2 id="school-drawer-title">{selectedSchool.name}</h2><span>{selectedSchool.city} · {selectedSchool.status}</span></div><button disabled={schoolActionPending || rolePending} onClick={() => setSelectedSchool(null)} aria-label="Close school settings">×</button></div><section className="drawer-section"><div className="drawer-section-title"><div><h3>Subscription plan</h3><p>Changes apply immediately to module entitlements.</p></div><span className="audit-chip">AUDITED</span></div><div className="plan-options">{["Starter","Growth","Enterprise"].map((plan) => <button disabled={schoolActionPending} className={selectedSchool.plan === plan ? "selected" : ""} key={plan} onClick={() => manageSchool({ action: "update_plan", plan })}><b>{plan}</b><small>{plan === "Starter" ? "₹1,499" : plan === "Growth" ? "₹3,499" : "₹7,999"}/mo</small></button>)}</div></section><section className="drawer-section"><div className="drawer-section-title"><div><h3>Enabled modules</h3><p>School-specific overrides take precedence over plan defaults.</p></div></div><div className="toggle-list">{selectedSchool.modules.map((module) => <label key={module.key}><span><b>{module.label}</b><small>{module.enabled ? "Available to authorized roles" : "Hidden for this tenant"}</small></span><input type="checkbox" checked={module.enabled} disabled={schoolActionPending} onChange={(event) => manageSchool({ action: "set_module", moduleKey: module.key, enabled: event.target.checked })} /><i /></label>)}</div></section><section className="drawer-section role-section"><div className="drawer-section-title"><div><h3>Roles & permissions</h3><p>Granular tenant-scoped access. System safeguards cannot be removed.</p></div><span className="audit-chip">TENANT SAFE</span></div><div className="role-tabs">{roles.map((role) => <button className={activeRoleId === role.id ? "selected" : ""} key={role.id} onClick={() => setActiveRoleId(role.id)}>{role.name}{role.system && <small>SYSTEM</small>}</button>)}</div><div className="new-role"><input aria-label="New role name" value={newRoleName} onChange={(event) => setNewRoleName(event.target.value)} placeholder="New custom role" maxLength={50} /><button disabled={rolePending || newRoleName.trim().length < 2} onClick={() => manageRole({ action: "create", name: newRoleName, permissions: ["students.view"] })}>Add role</button></div>{activeRole && <div className="permission-matrix">{permissionCatalogue.map(([permission,label,group]) => <label key={permission}><span><small>{group}</small><b>{label}</b></span><input type="checkbox" checked={activeRole.permissions.includes(permission)} disabled={rolePending || (activeRole.system && permission === "roles.manage")} onChange={(event) => { const next = event.target.checked ? [...activeRole.permissions,permission] : activeRole.permissions.filter((item) => item !== permission); manageRole({ action: "update_permissions", roleId: activeRole.id, permissions: next }); }} /><i /></label>)}</div>}</section><section className="drawer-section invitation-box"><div><span className={`invitation-state ${selectedSchool.invitationStatus}`}>{selectedSchool.invitationStatus ?? "Not created"}</span><h3>School Admin invitation</h3><p>{selectedSchool.adminEmail ?? "No administrator email"}</p><small>{selectedSchool.invitationExpiresAt ? `Expires ${new Date(selectedSchool.invitationExpiresAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : "No active invitation"}</small></div><div className="invitation-actions"><button disabled={schoolActionPending} onClick={() => manageSchool({ action: "resend_invitation" })}>Rotate & resend</button><button className="danger" disabled={schoolActionPending || selectedSchool.invitationStatus === "revoked"} onClick={() => manageSchool({ action: "revoke_invitation" })}>Revoke</button></div></section><section className="drawer-section"><div className="drawer-section-title"><div><h3>Recent tenant audit</h3><p>Newest security-sensitive changes for this school.</p></div></div><div className="drawer-audit">{selectedSchool.audit.map((event) => <div key={event.id}><span className="activity-icon green">✓</span><p><b>{event.action.replaceAll(".", " ")}</b><small>{new Date(event.occurredAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small></p></div>)}</div></section></aside></div>}
+      {selectedSchool && <div className="drawer-backdrop" role="presentation" onMouseDown={() => !schoolActionPending && setSelectedSchool(null)}><aside className="school-drawer" role="dialog" aria-modal="true" aria-labelledby="school-drawer-title" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="eyebrow">TENANT CONTROL</p><h2 id="school-drawer-title">{selectedSchool.name}</h2><span>{selectedSchool.city} · {selectedSchool.status}</span></div><button disabled={schoolActionPending} onClick={() => setSelectedSchool(null)} aria-label="Close school settings">×</button></div><section className="drawer-section"><div className="drawer-section-title"><div><h3>Subscription plan</h3><p>Changes apply immediately to module entitlements.</p></div><span className="audit-chip">AUDITED</span></div><div className="plan-options">{["Starter","Growth","Enterprise"].map((plan) => <button disabled={schoolActionPending} className={selectedSchool.plan === plan ? "selected" : ""} key={plan} onClick={() => manageSchool({ action: "update_plan", plan })}><b>{plan}</b><small>{plan === "Starter" ? "₹1,499" : plan === "Growth" ? "₹3,499" : "₹7,999"}/mo</small></button>)}</div></section><section className="drawer-section"><div className="drawer-section-title"><div><h3>Enabled modules</h3><p>School-specific overrides take precedence over plan defaults.</p></div></div><div className="toggle-list">{(accessConfiguration?.tenantId === selectedSchool.tenantId ? accessConfiguration.modules : selectedSchool.modules).map((moduleDefinition) => <label key={moduleDefinition.key}><span><b>{moduleDefinition.label}</b><small>{moduleDefinition.enabled ? "Available to authorized roles" : "Hidden for this tenant"}</small></span><input type="checkbox" checked={moduleDefinition.enabled} disabled={schoolActionPending} onChange={(event) => { void updateCompanyModule(moduleDefinition.key, event.target.checked); }} /><i /></label>)}</div></section><section className="drawer-section school-role-boundary"><div className="drawer-section-title"><div><h3>School role boundary</h3><p>Company enables the maximum module set. The School administrator manages staff roles only inside these enabled modules.</p></div><span className="audit-chip">SCHOOL CONTROL</span></div><button className="drawer-access-button" onClick={() => { navigateCompany("Access control"); setSelectedSchool(null); }}>Open full app access configuration →</button></section><section className="drawer-section invitation-box"><div><span className={`invitation-state ${selectedSchool.invitationStatus}`}>{selectedSchool.invitationStatus ?? "Not created"}</span><h3>School Admin invitation</h3><p>{selectedSchool.adminEmail ?? "No administrator email"}</p><small>{selectedSchool.invitationExpiresAt ? `Expires ${new Date(selectedSchool.invitationExpiresAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : "No active invitation"}</small></div><div className="invitation-actions"><button disabled={schoolActionPending} onClick={() => manageSchool({ action: "resend_invitation" })}>Rotate & resend</button><button className="danger" disabled={schoolActionPending || selectedSchool.invitationStatus === "revoked"} onClick={() => manageSchool({ action: "revoke_invitation" })}>Revoke</button></div></section><section className="drawer-section"><div className="drawer-section-title"><div><h3>Recent tenant audit</h3><p>Newest security-sensitive changes for this school.</p></div></div><div className="drawer-audit">{selectedSchool.audit.map((event) => <div key={event.id}><span className="activity-icon green">✓</span><p><b>{event.action.replaceAll(".", " ")}</b><small>{new Date(event.occurredAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small></p></div>)}</div></section></aside></div>}
 
       {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => !submitting && setModalOpen(false)}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="add-school-title" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" disabled={submitting} onClick={() => setModalOpen(false)}>×</button><p className="eyebrow">TENANT ONBOARDING</p><h2 id="add-school-title">Add a new school</h2><p>Create an isolated tenant workspace with a secure trial plan.</p><form onSubmit={addSchool}><label>School name<input name="name" required minLength={3} maxLength={120} placeholder="e.g. Greenfield Academy" /></label><div className="form-row"><label>City<input name="city" required minLength={2} maxLength={80} placeholder="Mumbai" /></label><label>Plan<select name="plan" defaultValue="Growth"><option>Starter</option><option>Growth</option><option>Enterprise</option></select></label></div><label>School Admin email<input name="adminEmail" required type="email" autoComplete="email" placeholder="admin@greenfield.edu" /></label><div className="tenant-preview"><span className="pulse-dot" /><div><b>Tenant isolation enabled</b><small>The campus, plan, module policy, scoped admin membership and immutable audit event are created together.</small></div></div><button className="primary-button" disabled={submitting} type="submit">{submitting ? "Creating secure workspace…" : "Create school & invitation"} {!submitting && <span>→</span>}</button></form></div></div>}
     </main>

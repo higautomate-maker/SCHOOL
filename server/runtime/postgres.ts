@@ -112,6 +112,22 @@ export function withPlatformSchoolCreationDatabase<Result>(
   );
 }
 
+export function withPlatformPolicyManagementDatabase<Result>(
+  tenantId: string,
+  operation: (database: HigPostgresDatabase, client: PoolClient) => Promise<Result>,
+): Promise<Result> {
+  assertTenantUuid(tenantId);
+  return inDatabaseTransaction(
+    async (client) => {
+      await client.query("SELECT set_config('app.tenant_id', $1, true)", [tenantId]);
+      await client.query(
+        "SELECT set_config('app.platform_policy_management', 'true', true)",
+      );
+    },
+    operation,
+  );
+}
+
 function assertTenantUuid(tenantId: string): void {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(tenantId)) {
     throw new Error("tenantId must be a valid UUID");

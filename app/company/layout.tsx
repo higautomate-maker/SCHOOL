@@ -10,5 +10,5 @@ export default function CompanyLayout({ children }: { children: ReactNode }) {
       else globalThis.location.replace("/login");
     }).catch(() => globalThis.location.replace("/login"));
   }, []);
-  return ready ? children : <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", fontFamily: "Arial", color: "#556273" }}>Opening Company workspace…</main>;
+  return ready ? children : <main className="portal-loading">Opening Company workspace…</main>;
 }
