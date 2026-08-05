@@ -1,4 +1,4 @@
-package com.higautomation.hig_driver_gps
+package com.higautomation.higschool.studentparent
 
 import io.flutter.embedding.android.FlutterActivity
 
