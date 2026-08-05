@@ -58,6 +58,7 @@ export type DriverTransportSnapshot = {
 };
 
 export type TransportAdminSnapshot = {
+  staffUsers: Record<string, unknown>[];
   drivers: Record<string, unknown>[];
   vehicles: Record<string, unknown>[];
   routes: Record<string, unknown>[];
@@ -65,4 +66,6 @@ export type TransportAdminSnapshot = {
   driverAssignments: Record<string, unknown>[];
   studentAssignments: Record<string, unknown>[];
   trips: Record<string, unknown>[];
+  latestLocations: Record<string, unknown>[];
+  recentEvents: Record<string, unknown>[];
 };

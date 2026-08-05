@@ -22,6 +22,9 @@ export async function listTransportAdminSnapshot(
     driverAssignments: [],
     studentAssignments: [],
     trips: [],
+    staffUsers: [],
+    latestLocations: [],
+    recentEvents: [],
   };
 }
 

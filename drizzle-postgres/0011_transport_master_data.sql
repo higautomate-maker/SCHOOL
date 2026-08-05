@@ -84,6 +84,8 @@ CREATE TABLE "transport_route_stops" (
   CONSTRAINT "transport_route_stops_status_ck"
     CHECK ("status" IN ('active', 'inactive')),
   CONSTRAINT "transport_route_stops_tenant_id_id_uq" UNIQUE ("tenant_id", "id"),
+  CONSTRAINT "transport_route_stops_tenant_route_id_uq"
+    UNIQUE ("tenant_id", "route_id", "id"),
   CONSTRAINT "transport_route_stops_route_sequence_uq"
     UNIQUE ("tenant_id", "route_id", "sequence_number")
 );
@@ -113,7 +115,9 @@ CREATE TABLE "transport_driver_assignments" (
   CONSTRAINT "transport_driver_assignments_status_ck"
     CHECK ("status" IN ('active', 'inactive')),
   CONSTRAINT "transport_driver_assignments_tenant_id_id_uq"
-    UNIQUE ("tenant_id", "id")
+    UNIQUE ("tenant_id", "id"),
+  CONSTRAINT "transport_driver_assignments_tenant_route_id_uq"
+    UNIQUE ("tenant_id", "route_id", "id")
 );
 
 CREATE UNIQUE INDEX "transport_driver_assignments_active_driver_uq"
@@ -143,11 +147,13 @@ CREATE TABLE "transport_student_assignments" (
     FOREIGN KEY ("tenant_id", "route_id")
     REFERENCES "transport_routes"("tenant_id", "id") ON DELETE CASCADE,
   CONSTRAINT "transport_student_assignments_pickup_stop_fk"
-    FOREIGN KEY ("tenant_id", "pickup_stop_id")
-    REFERENCES "transport_route_stops"("tenant_id", "id") ON DELETE SET NULL,
+    FOREIGN KEY ("tenant_id", "route_id", "pickup_stop_id")
+    REFERENCES "transport_route_stops"("tenant_id", "route_id", "id")
+    ON DELETE RESTRICT,
   CONSTRAINT "transport_student_assignments_drop_stop_fk"
-    FOREIGN KEY ("tenant_id", "drop_stop_id")
-    REFERENCES "transport_route_stops"("tenant_id", "id") ON DELETE SET NULL,
+    FOREIGN KEY ("tenant_id", "route_id", "drop_stop_id")
+    REFERENCES "transport_route_stops"("tenant_id", "route_id", "id")
+    ON DELETE RESTRICT,
   CONSTRAINT "transport_student_assignments_dates_ck"
     CHECK ("effective_to" IS NULL OR "effective_to" >= "effective_from"),
   CONSTRAINT "transport_student_assignments_status_ck"
@@ -174,8 +180,9 @@ CREATE TABLE "transport_trips" (
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
   CONSTRAINT "transport_trips_driver_assignment_fk"
-    FOREIGN KEY ("tenant_id", "driver_assignment_id")
-    REFERENCES "transport_driver_assignments"("tenant_id", "id") ON DELETE CASCADE,
+    FOREIGN KEY ("tenant_id", "route_id", "driver_assignment_id")
+    REFERENCES "transport_driver_assignments"("tenant_id", "route_id", "id")
+    ON DELETE CASCADE,
   CONSTRAINT "transport_trips_route_fk"
     FOREIGN KEY ("tenant_id", "route_id")
     REFERENCES "transport_routes"("tenant_id", "id") ON DELETE RESTRICT,
@@ -235,6 +242,10 @@ CREATE POLICY "transport_student_assignments_isolation"
 CREATE POLICY "transport_trips_isolation" ON "transport_trips"
   USING ("tenant_id" = app_current_tenant_id())
   WITH CHECK ("tenant_id" = app_current_tenant_id());
+
+CREATE POLICY "mobile_transport_events_transport_admin_read"
+  ON "mobile_transport_events" FOR SELECT
+  USING ("tenant_id" = app_current_tenant_id());
 
 REVOKE ALL ON "transport_drivers" FROM PUBLIC;
 REVOKE ALL ON "transport_vehicles" FROM PUBLIC;

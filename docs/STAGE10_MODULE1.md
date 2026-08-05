@@ -29,3 +29,20 @@ Then run `scripts/stage10-greenfield-transport-seed.sql`.
 - `npm run build`
 - `cd mobile/driver_gps_app && flutter analyze`
 - Build/install the Driver APK with the existing staging dart-defines.
+
+## Production admin completion
+
+- The School Transport workspace reads and writes the authenticated
+  `/api/v1/schools/:schoolId/transport` endpoint.
+- Preview vehicles, routes, locations and timelines were removed from the
+  authenticated Transport UI.
+- Active school users can be registered as drivers without entering UUIDs.
+- Administrators can create vehicles, routes and ordered stops; assign drivers,
+  vehicles and students; and schedule trips.
+- The live tracking screen reads the latest foreground location per trip and
+  recent trip, boarding, drop and SOS events.
+- `mobile_transport_events` retains mobile-service-only writes while adding a
+  tenant-scoped SELECT policy for the separately authorized Transport admin API.
+- Same-route foreign keys prevent stop and trip assignment mismatches, while
+  API guards require active tenant users and active transport resources.
+- Dedicated validation is available through `npm run stage10:test`.

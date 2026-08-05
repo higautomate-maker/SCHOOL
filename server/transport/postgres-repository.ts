@@ -242,86 +242,133 @@ export async function listTransportAdminSnapshot(
   tenantId: string,
 ): Promise<TransportAdminSnapshot> {
   return transaction(tenantId, async (client) => {
-    const [
-      drivers,
-      vehicles,
-      routes,
-      stops,
-      driverAssignments,
-      studentAssignments,
-      trips,
-    ] = await Promise.all([
-      client.query(`
-        SELECT driver.id, driver.user_id AS "userId",
-          users.full_name AS name, users.email,
-          driver.employee_code AS "employeeCode",
-          driver.mobile_number AS "mobileNumber",
-          driver.license_number AS "licenseNumber",
-          driver.license_expiry::text AS "licenseExpiry",
-          driver.status
-        FROM transport_drivers driver
-        JOIN users ON users.id = driver.user_id
-        WHERE driver.tenant_id = $1::uuid
-        ORDER BY users.full_name
-      `, [tenantId]),
-      client.query(`
-        SELECT id, vehicle_number AS "vehicleNumber",
-          registration_number AS "registrationNumber",
-          vehicle_type AS "vehicleType", capacity,
-          gps_device_id AS "gpsDeviceId", status
-        FROM transport_vehicles
-        WHERE tenant_id = $1::uuid
-        ORDER BY vehicle_number
-      `, [tenantId]),
-      client.query(`
-        SELECT id, route_name AS "routeName", route_code AS "routeCode",
-          direction, shift, status
-        FROM transport_routes
-        WHERE tenant_id = $1::uuid
-        ORDER BY route_name
-      `, [tenantId]),
-      client.query(`
-        SELECT id, route_id AS "routeId", stop_name AS "stopName",
-          sequence_number AS "sequenceNumber", latitude, longitude,
-          pickup_time::text AS "pickupTime",
-          drop_time::text AS "dropTime",
-          geofence_radius_meters AS "geofenceRadiusMeters", status
-        FROM transport_route_stops
-        WHERE tenant_id = $1::uuid
-        ORDER BY route_id, sequence_number
-      `, [tenantId]),
-      client.query(`
-        SELECT id, driver_id AS "driverId", vehicle_id AS "vehicleId",
-          route_id AS "routeId", effective_from::text AS "effectiveFrom",
-          effective_to::text AS "effectiveTo", status
-        FROM transport_driver_assignments
-        WHERE tenant_id = $1::uuid
-        ORDER BY effective_from DESC
-      `, [tenantId]),
-      client.query(`
-        SELECT id, student_id AS "studentId", route_id AS "routeId",
-          pickup_stop_id AS "pickupStopId",
-          drop_stop_id AS "dropStopId",
-          effective_from::text AS "effectiveFrom",
-          effective_to::text AS "effectiveTo", status
-        FROM transport_student_assignments
-        WHERE tenant_id = $1::uuid
-        ORDER BY effective_from DESC
-      `, [tenantId]),
-      client.query(`
-        SELECT id, driver_assignment_id AS "driverAssignmentId",
-          route_id AS "routeId", service_date::text AS "serviceDate",
-          direction, scheduled_start_at::text AS "scheduledStartAt",
-          status, started_at::text AS "startedAt",
-          completed_at::text AS "completedAt"
-        FROM transport_trips
-        WHERE tenant_id = $1::uuid
-        ORDER BY service_date DESC, scheduled_start_at DESC
-        LIMIT 200
-      `, [tenantId]),
-    ]);
+    const staffUsers = await client.query(`
+      SELECT DISTINCT users.id, users.full_name AS name, users.email,
+        users.status
+      FROM memberships membership
+      JOIN users ON users.id = membership.user_id
+      WHERE membership.tenant_id = $1::uuid
+        AND users.status = 'active'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM transport_drivers driver
+          WHERE driver.tenant_id = $1::uuid
+            AND driver.user_id = users.id
+        )
+      ORDER BY users.full_name
+    `, [tenantId]);
+
+    const drivers = await client.query(`
+      SELECT driver.id, driver.user_id AS "userId",
+        users.full_name AS name, users.email,
+        driver.employee_code AS "employeeCode",
+        driver.mobile_number AS "mobileNumber",
+        driver.license_number AS "licenseNumber",
+        driver.license_expiry::text AS "licenseExpiry",
+        driver.status
+      FROM transport_drivers driver
+      JOIN users ON users.id = driver.user_id
+      WHERE driver.tenant_id = $1::uuid
+      ORDER BY users.full_name
+    `, [tenantId]);
+
+    const vehicles = await client.query(`
+      SELECT id, vehicle_number AS "vehicleNumber",
+        registration_number AS "registrationNumber",
+        vehicle_type AS "vehicleType", capacity,
+        gps_device_id AS "gpsDeviceId", status
+      FROM transport_vehicles
+      WHERE tenant_id = $1::uuid
+      ORDER BY vehicle_number
+    `, [tenantId]);
+
+    const routes = await client.query(`
+      SELECT id, route_name AS "routeName", route_code AS "routeCode",
+        direction, shift, status
+      FROM transport_routes
+      WHERE tenant_id = $1::uuid
+      ORDER BY route_name
+    `, [tenantId]);
+
+    const stops = await client.query(`
+      SELECT id, route_id AS "routeId", stop_name AS "stopName",
+        sequence_number AS "sequenceNumber", latitude, longitude,
+        pickup_time::text AS "pickupTime",
+        drop_time::text AS "dropTime",
+        geofence_radius_meters AS "geofenceRadiusMeters", status
+      FROM transport_route_stops
+      WHERE tenant_id = $1::uuid
+      ORDER BY route_id, sequence_number
+    `, [tenantId]);
+
+    const driverAssignments = await client.query(`
+      SELECT id, driver_id AS "driverId", vehicle_id AS "vehicleId",
+        route_id AS "routeId", effective_from::text AS "effectiveFrom",
+        effective_to::text AS "effectiveTo", status
+      FROM transport_driver_assignments
+      WHERE tenant_id = $1::uuid
+      ORDER BY effective_from DESC
+    `, [tenantId]);
+
+    const studentAssignments = await client.query(`
+      SELECT id, student_id AS "studentId", route_id AS "routeId",
+        pickup_stop_id AS "pickupStopId",
+        drop_stop_id AS "dropStopId",
+        effective_from::text AS "effectiveFrom",
+        effective_to::text AS "effectiveTo", status
+      FROM transport_student_assignments
+      WHERE tenant_id = $1::uuid
+      ORDER BY effective_from DESC
+    `, [tenantId]);
+
+    const trips = await client.query(`
+      SELECT id, driver_assignment_id AS "driverAssignmentId",
+        route_id AS "routeId", service_date::text AS "serviceDate",
+        direction, scheduled_start_at::text AS "scheduledStartAt",
+        status, started_at::text AS "startedAt",
+        completed_at::text AS "completedAt"
+      FROM transport_trips
+      WHERE tenant_id = $1::uuid
+      ORDER BY service_date DESC, scheduled_start_at DESC
+      LIMIT 200
+    `, [tenantId]);
+
+    const latestLocations = await client.query(`
+      SELECT DISTINCT ON (event.trip_id)
+        event.id,
+        event.trip_id AS "tripId",
+        event.latitude,
+        event.longitude,
+        event.accuracy_meters AS "accuracyMeters",
+        event.speed_kph AS "speedKph",
+        event.heading_degrees AS "headingDegrees",
+        event.captured_at::text AS "capturedAt"
+      FROM mobile_transport_events event
+      WHERE event.tenant_id = $1::uuid
+        AND event.event_type = 'location'
+        AND event.trip_id IS NOT NULL
+      ORDER BY event.trip_id, event.captured_at DESC
+      LIMIT 100
+    `, [tenantId]);
+
+    const recentEvents = await client.query(`
+      SELECT event.id,
+        event.trip_id AS "tripId",
+        event.student_id AS "studentId",
+        event.event_type AS "eventType",
+        event.latitude,
+        event.longitude,
+        event.captured_at::text AS "capturedAt",
+        event.metadata
+      FROM mobile_transport_events event
+      WHERE event.tenant_id = $1::uuid
+        AND event.event_type <> 'location'
+      ORDER BY event.captured_at DESC
+      LIMIT 50
+    `, [tenantId]);
 
     return {
+      staffUsers: staffUsers.rows,
       drivers: drivers.rows,
       vehicles: vehicles.rows,
       routes: routes.rows,
@@ -329,6 +376,8 @@ export async function listTransportAdminSnapshot(
       driverAssignments: driverAssignments.rows,
       studentAssignments: studentAssignments.rows,
       trips: trips.rows,
+      latestLocations: latestLocations.rows,
+      recentEvents: recentEvents.rows,
     };
   });
 }
@@ -360,6 +409,19 @@ export async function applyTransportAction(
         return result.rows[0] ?? {};
       }
       case "create_driver": {
+        const eligibleUser = await client.query(`
+          SELECT 1
+          FROM memberships membership
+          JOIN users ON users.id = membership.user_id
+          WHERE membership.tenant_id = $1::uuid
+            AND membership.user_id = $2::uuid
+            AND users.status = 'active'
+          LIMIT 1
+        `, [tenantId, action.userId]);
+        if (!eligibleUser.rowCount) {
+          throw new Error("Selected driver must be an active school user");
+        }
+
         const result = await client.query(`
           INSERT INTO transport_drivers (
             tenant_id, user_id, employee_code, mobile_number,
@@ -397,6 +459,18 @@ export async function applyTransportAction(
         return result.rows[0] ?? {};
       }
       case "create_stop": {
+        const activeRoute = await client.query(`
+          SELECT 1
+          FROM transport_routes
+          WHERE tenant_id = $1::uuid
+            AND id = $2::uuid
+            AND status = 'active'
+          LIMIT 1
+        `, [tenantId, action.routeId]);
+        if (!activeRoute.rowCount) {
+          throw new Error("Selected route is unavailable");
+        }
+
         const result = await client.query(`
           INSERT INTO transport_route_stops (
             tenant_id, route_id, stop_name, sequence_number,
@@ -428,6 +502,31 @@ export async function applyTransportAction(
         return result.rows[0] ?? {};
       }
       case "assign_driver": {
+        const activeResources = await client.query(`
+          SELECT 1
+          FROM transport_drivers driver
+          JOIN transport_vehicles vehicle
+            ON vehicle.tenant_id = driver.tenant_id
+           AND vehicle.id = $3::uuid
+           AND vehicle.status = 'active'
+          JOIN transport_routes route
+            ON route.tenant_id = driver.tenant_id
+           AND route.id = $4::uuid
+           AND route.status = 'active'
+          WHERE driver.tenant_id = $1::uuid
+            AND driver.id = $2::uuid
+            AND driver.status = 'active'
+          LIMIT 1
+        `, [
+          tenantId,
+          action.driverId,
+          action.vehicleId,
+          action.routeId,
+        ]);
+        if (!activeResources.rowCount) {
+          throw new Error("Driver, vehicle, or route is unavailable");
+        }
+
         await client.query(`
           UPDATE transport_driver_assignments
              SET status = 'inactive',
@@ -461,6 +560,52 @@ export async function applyTransportAction(
         return result.rows[0] ?? {};
       }
       case "assign_student": {
+        const validAssignment = await client.query(`
+          SELECT 1
+          FROM students student
+          JOIN transport_routes route
+            ON route.tenant_id = student.tenant_id
+           AND route.id = $3::uuid
+           AND route.status = 'active'
+          WHERE student.tenant_id = $1::uuid
+            AND student.id = $2::uuid
+            AND student.status = 'active'
+            AND (
+              $4::uuid IS NULL
+              OR EXISTS (
+                SELECT 1
+                FROM transport_route_stops pickup
+                WHERE pickup.tenant_id = student.tenant_id
+                  AND pickup.route_id = route.id
+                  AND pickup.id = $4::uuid
+                  AND pickup.status = 'active'
+              )
+            )
+            AND (
+              $5::uuid IS NULL
+              OR EXISTS (
+                SELECT 1
+                FROM transport_route_stops drop_stop
+                WHERE drop_stop.tenant_id = student.tenant_id
+                  AND drop_stop.route_id = route.id
+                  AND drop_stop.id = $5::uuid
+                  AND drop_stop.status = 'active'
+              )
+            )
+          LIMIT 1
+        `, [
+          tenantId,
+          action.studentId,
+          action.routeId,
+          action.pickupStopId ?? null,
+          action.dropStopId ?? null,
+        ]);
+        if (!validAssignment.rowCount) {
+          throw new Error(
+            "Selected stops must belong to the assigned route",
+          );
+        }
+
         await client.query(`
           UPDATE transport_student_assignments
              SET status = 'inactive',
@@ -500,6 +645,31 @@ export async function applyTransportAction(
         return result.rows[0] ?? {};
       }
       case "schedule_trip": {
+        const validAssignment = await client.query(`
+          SELECT 1
+          FROM transport_driver_assignments assignment
+          WHERE assignment.tenant_id = $1::uuid
+            AND assignment.id = $2::uuid
+            AND assignment.route_id = $3::uuid
+            AND assignment.status = 'active'
+            AND assignment.effective_from <= $4::date
+            AND (
+              assignment.effective_to IS NULL
+              OR assignment.effective_to >= $4::date
+            )
+          LIMIT 1
+        `, [
+          tenantId,
+          action.driverAssignmentId,
+          action.routeId,
+          action.serviceDate,
+        ]);
+        if (!validAssignment.rowCount) {
+          throw new Error(
+            "Driver assignment does not match the scheduled route",
+          );
+        }
+
         const result = await client.query(`
           INSERT INTO transport_trips (
             tenant_id, driver_assignment_id, route_id,
