@@ -239,7 +239,7 @@ CREATE POLICY "transport_trips_isolation" ON "transport_trips"
 CREATE OR REPLACE FUNCTION validate_mobile_identity_assignment()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $$
+AS '
 DECLARE
   identity_audience "app_audience";
 BEGIN
@@ -250,13 +250,13 @@ BEGIN
      AND "id" = NEW."mobile_identity_id";
 
   IF identity_audience IS NULL THEN
-    RAISE EXCEPTION 'Mobile identity is unavailable';
+    RAISE EXCEPTION ''Mobile identity is unavailable'';
   END IF;
 
-  IF identity_audience IN ('parent', 'student') THEN
-    IF NEW."resource_type" <> 'student' THEN
+  IF identity_audience IN (''parent'', ''student'') THEN
+    IF NEW."resource_type" <> ''student'' THEN
       RAISE EXCEPTION
-        'Parent and Student identities require a Student assignment';
+        ''Parent and Student identities require a Student assignment'';
     END IF;
 
     IF NOT EXISTS (
@@ -266,40 +266,39 @@ BEGIN
          AND "id" = NEW."resource_id"
     ) THEN
       RAISE EXCEPTION
-        'Assigned Student is unavailable in this tenant';
+        ''Assigned Student is unavailable in this tenant'';
     END IF;
-  ELSIF identity_audience = 'transporter' THEN
-    IF NEW."resource_type" = 'student' AND NOT EXISTS (
+  ELSIF identity_audience = ''transporter'' THEN
+    IF NEW."resource_type" = ''student'' AND NOT EXISTS (
       SELECT 1 FROM "students"
        WHERE "tenant_id" = NEW."tenant_id"
          AND "id" = NEW."resource_id"
     ) THEN
-      RAISE EXCEPTION 'Assigned Student is unavailable in this tenant';
-    ELSIF NEW."resource_type" = 'vehicle' AND NOT EXISTS (
+      RAISE EXCEPTION ''Assigned Student is unavailable in this tenant'';
+    ELSIF NEW."resource_type" = ''vehicle'' AND NOT EXISTS (
       SELECT 1 FROM "transport_vehicles"
        WHERE "tenant_id" = NEW."tenant_id"
          AND "id" = NEW."resource_id"
     ) THEN
-      RAISE EXCEPTION 'Assigned Vehicle is unavailable in this tenant';
-    ELSIF NEW."resource_type" = 'route' AND NOT EXISTS (
+      RAISE EXCEPTION ''Assigned Vehicle is unavailable in this tenant'';
+    ELSIF NEW."resource_type" = ''route'' AND NOT EXISTS (
       SELECT 1 FROM "transport_routes"
        WHERE "tenant_id" = NEW."tenant_id"
          AND "id" = NEW."resource_id"
     ) THEN
-      RAISE EXCEPTION 'Assigned Route is unavailable in this tenant';
-    ELSIF NEW."resource_type" = 'trip' AND NOT EXISTS (
+      RAISE EXCEPTION ''Assigned Route is unavailable in this tenant'';
+    ELSIF NEW."resource_type" = ''trip'' AND NOT EXISTS (
       SELECT 1 FROM "transport_trips"
        WHERE "tenant_id" = NEW."tenant_id"
          AND "id" = NEW."resource_id"
     ) THEN
-      RAISE EXCEPTION 'Assigned Trip is unavailable in this tenant';
+      RAISE EXCEPTION ''Assigned Trip is unavailable in this tenant'';
     END IF;
   END IF;
 
   RETURN NEW;
 END
-$$;
-
+';
 REVOKE ALL ON "transport_drivers" FROM PUBLIC;
 REVOKE ALL ON "transport_vehicles" FROM PUBLIC;
 REVOKE ALL ON "transport_routes" FROM PUBLIC;
