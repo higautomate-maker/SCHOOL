@@ -196,39 +196,6 @@ ON CONFLICT (tenant_id, route_id, service_date, direction) DO UPDATE SET
   END,
   updated_at = now();
 
-INSERT INTO mobile_identity_assignments (
-  tenant_id, mobile_identity_id, resource_type, resource_id,
-  status, revoked_at, revoked_reason, created_at, updated_at
-)
-SELECT
-  '1c602856-3fec-486f-b18d-a791f124b206'::uuid,
-  identity.id,
-  item.resource_type,
-  item.resource_id,
-  'active',
-  NULL,
-  NULL,
-  now(),
-  now()
-FROM mobile_identities identity
-JOIN users driver ON driver.id = identity.user_id
-CROSS JOIN (
-  VALUES
-    ('vehicle'::text, '42000000-0000-4000-8000-000000000001'::uuid),
-    ('route'::text, '43000000-0000-4000-8000-000000000001'::uuid),
-    ('trip'::text, '47000000-0000-4000-8000-000000000001'::uuid)
-) AS item(resource_type, resource_id)
-WHERE identity.tenant_id =
-      '1c602856-3fec-486f-b18d-a791f124b206'::uuid
-  AND identity.audience::text = 'transporter'
-  AND lower(driver.email) = 'greenfield.driver.test@higschool.test'
-ON CONFLICT (
-  tenant_id, mobile_identity_id, resource_type, resource_id
-)
-DO UPDATE SET
-  status = 'active',
-  revoked_at = NULL,
-  revoked_reason = NULL,
-  updated_at = now();
+-- Driver access is resolved from transport_driver_assignments.
 
 COMMIT;
