@@ -37,9 +37,11 @@ function escaped(value: string): string {
 }
 
 test("PostgreSQL migration journal includes Stage 9 migrations through 0010", () => {
-  const finalEntry = journal.entries.at(-1);
+  const stage9FinalEntry = journal.entries.find(
+    (entry) => entry.tag === "0010_mobile_app_completion",
+  );
   assert.deepEqual(
-    { idx: finalEntry?.idx, tag: finalEntry?.tag },
+    { idx: stage9FinalEntry?.idx, tag: stage9FinalEntry?.tag },
     { idx: 10, tag: "0010_mobile_app_completion" },
   );
 });
