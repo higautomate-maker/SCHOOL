@@ -13,6 +13,8 @@ export const policies = {
   rolesManage: { scope: "tenant", permission: "roles.manage", module: "access_control", stepUp: true },
   studentsView: { scope: "tenant", permission: "students.view", module: "student_information" },
   studentsManage: { scope: "tenant", permission: "students.manage", module: "student_information" },
+  transportView: { scope: "tenant", permission: "transport.view", module: "transport" },
+  transportManage: { scope: "tenant", permission: "transport.manage", module: "transport" },
   operationsView: { scope: "tenant", permission: "resolved_from_operation", module: null },
   operationsManage: { scope: "tenant", permission: "resolved_from_operation", module: null },
   notificationsView: { scope: "tenant", permission: "communication.view", module: "communication" },

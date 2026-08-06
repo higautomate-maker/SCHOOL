@@ -1,4 +1,4 @@
-package com.higautomation.hig_student_parent
+package com.higautomation.higschool.driver
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -21,6 +21,7 @@ import {
 import { operationActionSchema } from "../operations/validation.ts";
 import { privacyHash } from "../auth/crypto.ts";
 import { listStudents, type StudentRecord } from "../students/repository.ts";
+import { loadDriverTransportSnapshot } from "../transport/repository.ts";
 import {
   applyWorkspaceAction,
   getWorkspace,
@@ -331,8 +332,17 @@ export async function mobileTransportSnapshot(principal: MobileAuthenticatedPrin
   if (principal.principalType !== "transporter") throw new Error("Transporter identity required");
   const access = await effectiveAccessForPrincipal(principal);
   requireFeature(access, "assigned_route");
+  const assignments = await activeAssignmentsForPrincipal(principal);
+  const assignment = await loadDriverTransportSnapshot(principal);
+  const students = assignment?.students ?? await allowedStudents(
+    principal,
+    access,
+    assignments,
+  );
   return {
-    assignments: await activeAssignmentsForPrincipal(principal),
+    assignment,
+    assignments,
+    students,
     events: await listMobileTransportEvents(principal, 100),
     trackingPolicy: {
       mode: "foreground_only",
@@ -367,12 +377,16 @@ export async function performMobileTransportEvent(
         : "trip_control";
   requireFeature(access, requiredFeature);
   const assignments = await activeAssignmentsForPrincipal(principal);
-  if (input.tripId && !hasAssignment(assignments, "trip", input.tripId)) {
-    throw new Error("Trip assignment required");
-  }
-  if (input.studentId && !hasAssignment(assignments, "student", input.studentId)) {
-    throw new Error("Student assignment required");
-  }
+  const transport = await loadDriverTransportSnapshot(principal);
+  const tripAllowed = !input.tripId ||
+    hasAssignment(assignments, "trip", input.tripId) ||
+    transport?.trip?.id === input.tripId;
+  if (!tripAllowed) throw new Error("Trip assignment required");
+
+  const studentAllowed = !input.studentId ||
+    hasAssignment(assignments, "student", input.studentId) ||
+    transport?.students.some((student) => student.id === input.studentId) === true;
+  if (!studentAllowed) throw new Error("Student assignment required");
   return recordMobileTransportEvent(principal, { ...input, idempotencyKey });
 }
 

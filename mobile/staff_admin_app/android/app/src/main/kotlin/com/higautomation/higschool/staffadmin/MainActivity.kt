@@ -1,4 +1,4 @@
-package com.higautomation.hig_staff_admin
+package com.higautomation.higschool.staffadmin
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -50,7 +50,8 @@
     "stage8:worker": "node --experimental-strip-types scripts/stage8-worker.ts",
     "stage8:worker:health": "node --experimental-strip-types scripts/stage8-worker-health.ts",
     "stage9:test": "node --experimental-strip-types --test tests/stage9-*.test.ts",
-    "stage9:mobile:validate": "bash mobile/scripts/validate_flutter_apps.sh"
+    "stage9:mobile:validate": "bash mobile/scripts/validate_flutter_apps.sh",
+    "stage10:test": "node --experimental-strip-types --test tests/stage10-*.test.ts"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.49.0",
@@ -87,10 +88,14 @@
     "#db-runtime": "./db/adapters/node-sqlite.ts"
   },
   "overrides": {
-    "fast-uri": "3.1.4",
+    "fast-uri": "4.1.2",
     "sharp": "0.35.3",
     "react-server-dom-webpack": "$react-server-dom-webpack",
-    "postcss": "8.5.18",
-    "workerd": "1.20260730.1"
+    "postcss": "8.5.23",
+    "workerd": "1.20260730.1",
+    "undici": "7.29.0",
+    "@esbuild-kit/core-utils": {
+      "esbuild": "0.25.12"
+    }
   }
 }
