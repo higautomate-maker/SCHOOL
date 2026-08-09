@@ -1,5 +1,5 @@
 name: hig_driver_gps
-description: Hig School driver app with secure transporter identity and foreground-only Stage 9 trip tracking.
+description: Hig School driver app with secure transporter identity and active-trip Android background GPS.
 publish_to: none
 version: 1.0.0+1
 environment:

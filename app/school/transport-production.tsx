@@ -489,11 +489,11 @@ export function TransportProductionPage({
     <section className={styles.workspace}>
       <header className={styles.header}>
         <div>
-          <span>STAGE 10 · MODULE 1</span>
+          <span>STAGE 10 · GPS PRODUCTIONIZATION</span>
           <h1>Transport & GPS Command Center</h1>
           <p>
             Production fleet records, route assignments, scheduled trips and
-            foreground driver GPS updates.
+            Android active-trip background GPS and automatic stop geofence updates.
           </p>
         </div>
         <div className={styles.headerActions}>
@@ -1867,6 +1867,12 @@ function LiveTracking({
             const route = snapshot.routes.find(
               (item) => item.id === trip?.routeId,
             );
+            const driverAssignment = snapshot.driverAssignments.find(
+              (item) => item.id === trip?.driverAssignmentId,
+            );
+            const vehicle = snapshot.vehicles.find(
+              (item) => item.id === driverAssignment?.vehicleId,
+            );
             return (
               <div
                 className={
@@ -1878,9 +1884,21 @@ function LiveTracking({
                 <span>
                   <b>{formatEventName(event.eventType)}</b>
                   <small>
-                    {route?.routeName ?? "Transport event"} ·{" "}
+                    {route?.routeName ?? "Transport event"}
+                    {vehicle ? ` · Vehicle ${vehicle.vehicleNumber}` : ""} ·{" "}
                     {formatDateTime(event.capturedAt)}
                   </small>
+                  {event.eventType === "sos" &&
+                  event.latitude != null &&
+                  event.longitude != null ? (
+                    <a
+                      href={`https://www.openstreetmap.org/?mlat=${event.latitude}&mlon=${event.longitude}#map=17/${event.latitude}/${event.longitude}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open emergency location ↗
+                    </a>
+                  ) : null}
                 </span>
               </div>
             );
@@ -1895,11 +1913,12 @@ function LiveTracking({
       </article>
 
       <aside className={styles.scopeNotice}>
-        <b>Module 1 tracking boundary</b>
+        <b>Stage 10 transport safety status</b>
         <p>
-          GPS is foreground-only: the Driver app must remain open during the
-          trip. Battery-safe background tracking, automated geofence
-          notifications and parent live maps remain later Stage 10 modules.
+          Active-trip Android GPS, parent live tracking, boarding/drop,
+          approach/arrival alerts and School SOS escalation are enabled in the
+          development branch. iOS background validation and location retention
+          automation remain pending.
         </p>
       </aside>
     </section>

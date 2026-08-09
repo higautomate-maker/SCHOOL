@@ -4,7 +4,7 @@ The repository contains three Flutter products that use the dedicated mobile bea
 
 - `student_parent_app` — Student and Parent identities, role-enabled modules, attendance, fees, homework, examinations, notices, requests, notifications, secure session restoration, offline cache, and queued writes.
 - `staff_admin_app` — School staff/admin identity, Company-entitled modules, role permissions, attendance and fee actions, module record publishing, notifications, secure session restoration, offline cache, and queued writes.
-- `driver_gps_app` — Transporter identity, assignment view, foreground trip/location events, offline event queue, push registration, and SOS. Background tracking, geofencing, live parent maps, and location-retention automation remain Stage 10.
+- `driver_gps_app` — Transporter identity, assignment view, Android active-trip background GPS, trip/location events, offline event queue, push registration, and SOS. GPS-derived stop geofencing is also implemented for Android active trips. iOS background GPS, live parent maps, and location-retention automation remain Stage 10.
 - `packages/hig_mobile_core` — shared secure token store, refresh rotation, API client, offline cache/queue, Firebase token registration, and shared UI.
 
 ## Required toolchain
@@ -22,7 +22,7 @@ Run once from the repository root:
 bash mobile/scripts/bootstrap_flutter_platforms.sh
 ```
 
-The script creates standard Android/iOS runner folders without replacing the checked-in Dart source. It adds foreground location permissions only to the Driver app. Stage 9 deliberately does not add Android background-location permission or iOS continuous-background location mode.
+The script creates standard Android/iOS runner folders without replacing the checked-in Dart source. It adds active-trip Android foreground-service location permissions only to the Driver app. It does not request Android always-on background-location permission; iOS continuous-background location mode remains a later Stage 10 item.
 
 ## Local run
 

@@ -4,7 +4,7 @@ const credentialValue = z.string().trim().max(2000);
 
 export const gatewaySettingsSchema = z.object({
   enabled: z.boolean(),
-  gatewayId: z.string().trim().max(8),
+  gatewayId: z.enum(["", "3", "7", "12"]),
   paymentMode: z.enum(["sandbox", "live"]),
   credentials: z.record(z.string().trim().min(1).max(80), credentialValue).default({}),
   surchargeEnabled: z.boolean().default(false),

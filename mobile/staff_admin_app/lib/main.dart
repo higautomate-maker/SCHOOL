@@ -8,13 +8,15 @@ const apiBaseUrl = String.fromEnvironment(
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const HigMobileApp(
-    config: HigMobileAppConfig(
-      title: 'Hig Staff & Admin',
-      appId: 'com.higautomation.higschool.staffadmin',
-      allowedPrincipalTypes: ['school'],
-      apiBaseUrl: apiBaseUrl,
-      seedColor: Color(0xff1d4ed8),
+  runApp(
+    const HigMobileApp(
+      config: HigMobileAppConfig(
+        title: 'Hig Staff & Admin',
+        appId: 'com.higautomation.higschool.staffadmin',
+        allowedPrincipalTypes: ['school'],
+        apiBaseUrl: apiBaseUrl,
+        seedColor: Color(0xff1d4ed8),
+      ),
     ),
-  ));
+  );
 }

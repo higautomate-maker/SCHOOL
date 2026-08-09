@@ -53,13 +53,15 @@ permissions = ['<uses-permission android:name="android.permission.INTERNET" />',
                '<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />']
 if location_mode == 'foreground':
     permissions += ['<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />',
-                    '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />']
+                    '<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />',
+                    '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
+                    '<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />']
 for permission in reversed(permissions):
     if permission not in text:
         text = text.replace('<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
                             '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    ' + permission,
                             1)
-# Stage 9 must not request background location.
+# Active-trip Android GPS uses a visible foreground service; do not request always-on background location.
 text = text.replace('<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />', '')
 manifest.write_text(text)
 

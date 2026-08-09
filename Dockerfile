@@ -13,6 +13,10 @@ FROM builder AS staging-operator
 RUN apk add --no-cache postgresql16-client
 CMD ["npm", "run", "staging:validate"]
 
+FROM builder AS production-operator
+RUN apk add --no-cache postgresql16-client
+CMD ["npm", "run", "production:validate"]
+
 FROM builder AS notification-worker
 ENV NODE_ENV=production
 ENV HIG_RUNTIME=node

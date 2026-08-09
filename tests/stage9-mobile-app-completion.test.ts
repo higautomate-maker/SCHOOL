@@ -137,11 +137,7 @@ test("Flutter apps use secure sessions, refresh rotation, offline queueing, and 
   }
 });
 
-test("driver tracking is foreground-only until Stage 10", () => {
-  assert.match(driverApp, /distanceFilter: 25/);
-  assert.match(driverApp, /'background': false/);
-  assert.match(driverApp, /Stage 10/);
-  assert.doesNotMatch(driverApp, /AndroidSettings\([\s\S]*foregroundNotificationConfig/);
+test("Stage 9 historical contract defers production background GPS to Stage 10", () => {
   for (const item of [
     "background_location_tracking",
     "geofencing_and_parent_live_map",
@@ -149,6 +145,7 @@ test("driver tracking is foreground-only until Stage 10", () => {
   ]) {
     assert.ok(contract.deferred.includes(item));
   }
+  assert.doesNotMatch(driverApp, /HIG_DEMO_PASSWORD|\/api\/v1\/demo/);
 });
 
 

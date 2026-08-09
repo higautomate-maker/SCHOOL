@@ -1,3 +1,4 @@
+import { mobileTransportLocationRetentionDays } from "./retention.ts";
 import type { ChatGPTUser } from "../../app/chatgpt-auth.ts";
 import { validIdempotencyKey } from "../http/idempotency.ts";
 import {
@@ -36,6 +37,7 @@ import {
   recordMobileTransportEvent,
   registerMobileDevice,
   revokeMobileDevice,
+  loadParentTransportTracking,
 } from "./repository.ts";
 import {
   mobileContentActionSchema,
@@ -328,27 +330,70 @@ export async function unregisterMobilePushDevice(
   return revokeMobileDevice(principal, privacyHash(parsed.token));
 }
 
-export async function mobileTransportSnapshot(principal: MobileAuthenticatedPrincipal) {
-  if (principal.principalType !== "transporter") throw new Error("Transporter identity required");
+export async function mobileTransportSnapshot(
+  principal: MobileAuthenticatedPrincipal,
+) {
   const access = await effectiveAccessForPrincipal(principal);
-  requireFeature(access, "assigned_route");
   const assignments = await activeAssignmentsForPrincipal(principal);
+
+  if (principal.principalType === "parent") {
+    requireFeature(access, "transport_tracking");
+    const linkedStudents = await allowedStudents(
+      principal,
+      access,
+      assignments,
+    );
+    const parentTracking = await loadParentTransportTracking(
+      principal,
+      linkedStudents.map((student) => student.id),
+    );
+
+    return {
+      audience: "parent",
+      parentTracking,
+      trackingPolicy: {
+        scope: "linked_students_only",
+        latestLocationOnly: true,
+        activeTripOnly: true,
+        locationHistoryExposed: false,
+        driverContactExposed: false,
+        refreshSeconds: 15,
+      },
+    };
+  }
+
+  if (principal.principalType !== "transporter") {
+    throw new Error("Parent or Transporter identity required");
+  }
+
+  requireFeature(access, "assigned_route");
   const assignment = await loadDriverTransportSnapshot(principal);
   const students = assignment?.students ?? await allowedStudents(
     principal,
     access,
     assignments,
   );
+
   return {
+    audience: "transporter",
     assignment,
     assignments,
     students,
     events: await listMobileTransportEvents(principal, 100),
     trackingPolicy: {
-      mode: "foreground_only",
-      backgroundTracking: false,
-      geofencing: false,
-      retentionAutomation: false,
+      mode: "android_active_trip_foreground_service",
+      backgroundTracking: true,
+      backgroundLocationPermissionRequired: false,
+      iosBackgroundTracking: true,
+      iosAlwaysLocationPermissionRequired: true,
+      iosBackgroundMode: "location",
+      iosTrackingScope: "assigned_active_trip_only",
+      geofencing: true,
+      geofenceSource: "active_trip_gps",
+      retentionAutomation: true,
+      retentionMode: "tenant_activity_triggered",
+      locationRetentionDays: mobileTransportLocationRetentionDays(),
+      locationEventOnly: true,
       stage10Required: true,
     },
   };
@@ -364,11 +409,25 @@ export async function performMobileTransportEvent(
     throw new Error("A valid Idempotency-Key header is required");
   }
   const input = mobileTransportEventSchema.parse(value);
-  if (input.metadata.background === true) {
-    throw new Error("Background tracking is reserved for Stage 10");
+  const geofenceEvent =
+    input.eventType === "stop_arrived"
+    || input.eventType === "stop_departed"
+    || input.eventType === "stop_approaching";
+  const studentJourneyEvent =
+    input.eventType === "student_boarded" || input.eventType === "student_dropped";
+  const sosEvent = input.eventType === "sos";
+  const backgroundLocation = input.metadata.background === true;
+  const backgroundSafeEvent = input.eventType === "location" || geofenceEvent;
+  if (backgroundLocation && !backgroundSafeEvent) {
+    throw new Error(
+      "Background events are restricted to active-trip GPS and geofencing",
+    );
+  }
+  if (geofenceEvent && input.metadata.automatic !== true) {
+    throw new Error("Geofence transitions must be GPS-derived");
   }
   const access = await effectiveAccessForPrincipal(principal);
-  const requiredFeature = input.eventType === "location"
+  const requiredFeature = input.eventType === "location" || geofenceEvent
     ? "gps_tracking"
     : input.eventType === "student_boarded" || input.eventType === "student_dropped"
       ? "boarding"
@@ -387,6 +446,34 @@ export async function performMobileTransportEvent(
     hasAssignment(assignments, "student", input.studentId) ||
     transport?.students.some((student) => student.id === input.studentId) === true;
   if (!studentAllowed) throw new Error("Student assignment required");
+
+  const stopAllowed = !input.stopId ||
+    transport?.stops.some((stop) => stop.id === input.stopId) === true;
+  if (!stopAllowed) throw new Error("Route stop assignment required");
+
+  if (input.eventType === "location" || geofenceEvent || studentJourneyEvent) {
+    if (
+      !input.tripId ||
+      !transport?.trip ||
+      transport.trip.id !== input.tripId ||
+      transport.trip.status !== "active"
+    ) {
+      throw new Error("Active assigned trip required for GPS location");
+    }
+  }
+
+  if (
+    sosEvent &&
+    (
+      !input.tripId ||
+      !transport?.trip ||
+      transport.trip.id !== input.tripId ||
+      (transport.trip.status !== "active" && transport.trip.status !== "paused")
+    )
+  ) {
+    throw new Error("Active or paused assigned trip required for emergency SOS");
+  }
+
   return recordMobileTransportEvent(principal, { ...input, idempotencyKey });
 }
 
