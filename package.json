@@ -21,6 +21,7 @@
     "verify": "npm run lint && npm run typecheck && npm test && npm run build",
     "security:secrets": "node scripts/check-secrets.mjs",
     "security:licenses": "node scripts/check-licenses.mjs",
+    "security:audit": "node scripts/check-dependency-audit.mjs",
     "sbom": "npm sbom --sbom-format cyclonedx",
     "db:generate": "drizzle-kit generate",
     "db:pg:generate": "drizzle-kit generate --config drizzle.postgres.config.ts",
