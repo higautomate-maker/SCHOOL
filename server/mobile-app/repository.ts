@@ -3,6 +3,7 @@ import type { MobileAuthenticatedPrincipal } from "../mobile-auth/types.ts";
 import type {
   MobileDeviceRegistration,
   MobileTransportEvent,
+  ParentTransportTrackingSnapshot,
 } from "./types.ts";
 import type {
   mobileDeviceRegistrationSchema,
@@ -50,4 +51,14 @@ export async function listMobileTransportEvents(
   limit = 50,
 ): Promise<MobileTransportEvent[]> {
   return (await implementation()).listMobileTransportEvents(principal, limit);
+}
+
+export async function loadParentTransportTracking(
+  principal: MobileAuthenticatedPrincipal,
+  studentIds: readonly string[],
+): Promise<ParentTransportTrackingSnapshot> {
+  return (await implementation()).loadParentTransportTracking(
+    principal,
+    studentIds,
+  );
 }

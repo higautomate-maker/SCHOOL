@@ -355,12 +355,22 @@ export async function listTransportAdminSnapshot(
       SELECT event.id,
         event.trip_id AS "tripId",
         event.student_id AS "studentId",
+        concat_ws(' ', student.first_name, student.last_name)
+          AS "studentName",
+        event.stop_id AS "stopId",
+        stop.stop_name AS "stopName",
         event.event_type AS "eventType",
         event.latitude,
         event.longitude,
         event.captured_at::text AS "capturedAt",
         event.metadata
       FROM mobile_transport_events event
+      LEFT JOIN transport_route_stops stop
+        ON stop.tenant_id = event.tenant_id
+       AND stop.id = event.stop_id
+      LEFT JOIN students student
+        ON student.tenant_id = event.tenant_id
+       AND student.id = event.student_id
       WHERE event.tenant_id = $1::uuid
         AND event.event_type <> 'location'
       ORDER BY event.captured_at DESC

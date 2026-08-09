@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:hig_mobile_core/hig_mobile_core.dart';
@@ -29,10 +30,7 @@ class DriverApp extends StatelessWidget {
             brightness: Brightness.light,
           ),
           scaffoldBackgroundColor: const Color(0xfff4f6fb),
-          cardTheme: const CardThemeData(
-            elevation: 0,
-            margin: EdgeInsets.zero,
-          ),
+          cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
         ),
         home: const DriverRoot(),
       );
@@ -85,7 +83,8 @@ class _DriverRootState extends State<DriverRoot> {
     final response = await api.transport();
     if (mounted) {
       setState(() {
-        transport = (response['transport'] as Map).cast<String, dynamic>();
+        final source = response['transport'];
+        transport = source is Map ? source.cast<String, dynamic>() : null;
         error = null;
       });
     }
@@ -96,16 +95,10 @@ class _DriverRootState extends State<DriverRoot> {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (api.session == null) {
-      return DriverLogin(
-        api: api,
-        error: error,
-        onAuthenticated: load,
-      );
+      return DriverLogin(api: api, error: error, onAuthenticated: load);
     }
     return DriverDashboard(
       api: api,
@@ -231,9 +224,8 @@ class _DriverLoginState extends State<DriverLogin> {
                   padding: const EdgeInsets.only(top: 12),
                   child: Text(
                     message ?? widget.error!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
                   ),
                 ),
               const SizedBox(height: 18),
@@ -249,10 +241,6 @@ class _DriverLoginState extends State<DriverLogin> {
         ),
       );
 }
-
-// Stage 10 Module 1 keeps GPS tracking foreground-only.
-// Battery-safe background tracking, geofencing, and parent live maps
-// will be enabled in the later Stage 10 transport modules.
 
 enum DriverTripState { ready, active, paused, completed }
 
@@ -274,12 +262,27 @@ class DriverDashboard extends StatefulWidget {
   State<DriverDashboard> createState() => _DriverDashboardState();
 }
 
-class _DriverDashboardState extends State<DriverDashboard> {
+class _DriverDashboardState extends State<DriverDashboard>
+    with WidgetsBindingObserver {
+  static const offlineLocationSampleInterval = Duration(minutes: 3);
+
   StreamSubscription<Position>? positions;
   DriverTripState tripState = DriverTripState.ready;
   String syncMessage = 'Ready to start';
   Position? lastPosition;
+  Position? pendingPosition;
   int selectedTab = 0;
+  bool startingTracking = false;
+  bool sendingLocation = false;
+  bool offlineLocationMode = false;
+  DateTime? lastOfflineLocationAttempt;
+  Position? pendingGeofencePosition;
+  bool processingGeofences = false;
+  bool sendingSos = false;
+  String? geofenceStateTripId;
+  final Set<String> insideStopGeofences = {};
+  final Set<String> emittedGeofenceEvents = {};
+  AppLifecycleState lifecycleState = AppLifecycleState.resumed;
   final Map<String, String> studentStatuses = {};
 
   JsonMap? get assignment {
@@ -305,7 +308,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
   JsonMap? get vehicle => mapValue(assignment, 'vehicle');
   JsonMap? get driver => mapValue(assignment, 'driver');
   JsonMap? get trip => mapValue(assignment, 'trip');
-
   List<JsonMap> get stops => listValue(assignment, 'stops');
 
   List<JsonMap> get students {
@@ -319,35 +321,55 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   String? legacyAssignmentId(String type) {
     for (final item in legacyAssignments) {
-      if (item['resourceType'] == type) {
-        return item['resourceId']?.toString();
-      }
+      if (item['resourceType'] == type) return item['resourceId']?.toString();
     }
     return null;
   }
 
   String? get tripId => trip?['id']?.toString() ?? legacyAssignmentId('trip');
-
   String? get routeId =>
       route?['id']?.toString() ?? legacyAssignmentId('route');
-
   String? get vehicleId =>
       vehicle?['id']?.toString() ?? legacyAssignmentId('vehicle');
 
   bool get tracking => tripState == DriverTripState.active;
+  bool get appVisible => lifecycleState == AppLifecycleState.resumed;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    lifecycleState =
+        WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
     tripState = stateFromSnapshot();
+    restoreGeofenceStateFromSnapshot();
+    restoreStudentStatusesFromSnapshot();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(restoreActiveTracking());
+    });
   }
 
   @override
   void didUpdateWidget(covariant DriverDashboard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.transport != widget.transport &&
-        tripState != DriverTripState.active) {
-      tripState = stateFromSnapshot();
+    if (oldWidget.transport == widget.transport) return;
+    final snapshotState = stateFromSnapshot();
+    restoreGeofenceStateFromSnapshot();
+    restoreStudentStatusesFromSnapshot();
+    if (positions == null) tripState = snapshotState;
+    if (snapshotState == DriverTripState.active && positions == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(restoreActiveTracking());
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    lifecycleState = state;
+    if (state == AppLifecycleState.resumed) {
+      if (mounted) setState(() {});
+      unawaited(restoreActiveTracking());
     }
   }
 
@@ -368,15 +390,23 @@ class _DriverDashboardState extends State<DriverDashboard> {
     return DriverTripState.ready;
   }
 
-  Future<void> event(
+  void updateMessage(String message) {
+    syncMessage = message;
+    if (mounted && appVisible) setState(() {});
+  }
+
+  Future<JsonMap> event(
     String eventType, {
     Position? position,
     String? studentId,
+    String? stopId,
+    JsonMap metadata = const {},
   }) async {
     final result = await widget.api.transportEvent({
       'eventType': eventType,
       'tripId': tripId,
       'studentId': studentId,
+      'stopId': stopId,
       'latitude': position?.latitude,
       'longitude': position?.longitude,
       'accuracyMeters': position?.accuracy,
@@ -384,19 +414,23 @@ class _DriverDashboardState extends State<DriverDashboard> {
       'headingDegrees': position?.heading,
       'capturedAt': DateTime.now().toUtc().toIso8601String(),
       'metadata': {
-        'background': false,
+        'background': !appVisible,
         'routeId': routeId,
         'vehicleId': vehicleId,
+        ...metadata,
       },
     });
-    if (mounted && result['queued'] == true) {
-      setState(() => syncMessage = 'Saved offline · pending sync');
-    }
+    if (result['queued'] == true) updateMessage('Saved offline · pending sync');
+    return result;
   }
 
   Future<bool> ensurePermission() async {
+    if (!appVisible) {
+      updateMessage('Open Hig Driver to start GPS tracking');
+      return false;
+    }
     if (!await Geolocator.isLocationServiceEnabled()) {
-      setState(() => syncMessage = 'Please enable location services');
+      updateMessage('Please enable location services');
       return false;
     }
     var permission = await Geolocator.checkPermission();
@@ -405,51 +439,358 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      setState(() => syncMessage = 'Location permission is required');
+      updateMessage('Location permission is required');
+      return false;
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS &&
+        permission == LocationPermission.whileInUse) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS &&
+        permission != LocationPermission.always) {
+      updateMessage(
+        'Set iPhone Location access to Always for active-trip tracking',
+      );
       return false;
     }
     return true;
   }
 
+  LocationSettings trackingSettings() {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 25,
+        intervalDuration: const Duration(seconds: 15),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'Hig Driver · Trip tracking active',
+          notificationText:
+              'Location is being shared with your school for the active trip.',
+          notificationChannelName: 'Active school trip location',
+          enableWifiLock: false,
+          enableWakeLock: false,
+          setOngoing: true,
+        ),
+      );
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.high,
+        activityType: ActivityType.automotiveNavigation,
+        distanceFilter: 25,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+        allowBackgroundLocationUpdates: true,
+      );
+    }
+    return const LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 25,
+    );
+  }
+
+  Future<void> restoreActiveTracking() async {
+    if (!mounted || !appVisible || positions != null || startingTracking) {
+      return;
+    }
+    if (tripState != DriverTripState.active) return;
+    if (!await ensurePermission()) return;
+    await startTracking(emitTripStarted: false, restored: true);
+  }
+
   Future<void> start() async {
     if (assignment == null) {
-      setState(() => syncMessage = 'School transport assignment is pending');
+      updateMessage('School transport assignment is pending');
+      return;
+    }
+    if (!appVisible) {
+      updateMessage('Open Hig Driver to start or resume the trip');
       return;
     }
     if (!await ensurePermission()) return;
-
-    await event(
-      tripState == DriverTripState.paused ? 'trip_started' : 'trip_started',
+    await startTracking(
+      emitTripStarted: true,
+      restored: false,
+      resumed: tripState == DriverTripState.paused,
     );
+  }
 
-    await positions?.cancel();
-    positions = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 25,
-      ),
-    ).listen((position) async {
-      lastPosition = position;
-      if (mounted) {
-        setState(() => syncMessage = 'GPS active · location updated');
+  Future<void> startTracking({
+    required bool emitTripStarted,
+    required bool restored,
+    bool resumed = false,
+  }) async {
+    if (startingTracking || positions != null) return;
+    startingTracking = true;
+    try {
+      if (emitTripStarted) {
+        await event(
+          'trip_started',
+          metadata: {'tripAction': resumed ? 'resume' : 'start'},
+        );
       }
-      await event('location', position: position);
-    });
-
-    setState(() {
+      positions = Geolocator.getPositionStream(
+        locationSettings: trackingSettings(),
+      ).listen(onPosition, onError: onPositionError, cancelOnError: false);
       tripState = DriverTripState.active;
-      syncMessage = 'GPS active · foreground tracking';
-    });
+      updateMessage(
+        restored
+            ? 'GPS restored · active-trip tracking'
+            : 'GPS active · background-safe tracking',
+      );
+    } catch (_) {
+      positions = null;
+      updateMessage('GPS temporarily unavailable');
+    } finally {
+      startingTracking = false;
+    }
+  }
+
+  void onPosition(Position position) {
+    lastPosition = position;
+    pendingPosition = position;
+    pendingGeofencePosition = position;
+    if (appVisible) updateMessage('GPS active · location updated');
+    if (!sendingLocation) unawaited(drainPendingLocation());
+    if (!processingGeofences) unawaited(drainPendingGeofences());
+  }
+
+  void restoreGeofenceStateFromSnapshot() {
+    final currentTripId = tripId;
+    if (geofenceStateTripId != currentTripId) {
+      geofenceStateTripId = currentTripId;
+      insideStopGeofences.clear();
+      emittedGeofenceEvents.clear();
+    }
+    if (currentTripId == null) return;
+
+    final latestByStop = <String, String>{};
+    for (final item in listValue(widget.transport, 'events')) {
+      if (item['tripId']?.toString() != currentTripId) continue;
+      final eventType = item['eventType']?.toString();
+      if (eventType != 'stop_arrived' &&
+          eventType != 'stop_departed' &&
+          eventType != 'stop_approaching') {
+        continue;
+      }
+      final stopId = item['stopId']?.toString();
+      if (stopId == null || stopId.isEmpty) continue;
+      emittedGeofenceEvents.add('$eventType:$currentTripId:$stopId');
+      if (eventType == 'stop_approaching') continue;
+      latestByStop.putIfAbsent(stopId, () => eventType!);
+    }
+
+    for (final entry in latestByStop.entries) {
+      if (entry.value == 'stop_arrived') {
+        insideStopGeofences.add(entry.key);
+      } else {
+        insideStopGeofences.remove(entry.key);
+      }
+    }
+  }
+
+  double? stopNumber(JsonMap stop, String key) {
+    final value = stop[key];
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  double geofenceHysteresis(double radiusMeters) =>
+      (radiusMeters * 0.25).clamp(25.0, 100.0).toDouble();
+
+  double stopApproachThresholdMeters(double radiusMeters) {
+    final leadMeters = (radiusMeters * 1.5).clamp(300.0, 1500.0).toDouble();
+    return radiusMeters + leadMeters;
+  }
+
+  String geofenceEventKey(String eventType, String stopId) =>
+      '$eventType:${tripId ?? ''}:$stopId';
+
+  Future<void> drainPendingGeofences() async {
+    if (processingGeofences) return;
+    processingGeofences = true;
+    try {
+      while (pendingGeofencePosition != null && tracking) {
+        final position = pendingGeofencePosition!;
+        pendingGeofencePosition = null;
+        await processGeofences(position);
+      }
+    } finally {
+      processingGeofences = false;
+    }
+  }
+
+  Future<void> processGeofences(Position position) async {
+    final currentTripId = tripId;
+    if (!tracking || currentTripId == null) return;
+
+    for (final stop in stops) {
+      if (!tracking) return;
+      final stopId = stop['id']?.toString();
+      final latitude = stopNumber(stop, 'latitude');
+      final longitude = stopNumber(stop, 'longitude');
+      final radius = stopNumber(stop, 'geofenceRadiusMeters');
+      if (stopId == null ||
+          stopId.isEmpty ||
+          latitude == null ||
+          longitude == null ||
+          radius == null ||
+          radius < 25) {
+        continue;
+      }
+
+      final distanceMeters = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        latitude,
+        longitude,
+      );
+      final approachingKey = geofenceEventKey('stop_approaching', stopId);
+      final arrivedKey = geofenceEventKey('stop_arrived', stopId);
+      final departedKey = geofenceEventKey('stop_departed', stopId);
+      final approachThreshold = stopApproachThresholdMeters(radius);
+
+      if (distanceMeters > radius &&
+          distanceMeters <= approachThreshold &&
+          !insideStopGeofences.contains(stopId) &&
+          !emittedGeofenceEvents.contains(approachingKey)) {
+        try {
+          await event(
+            'stop_approaching',
+            position: position,
+            stopId: stopId,
+            metadata: {
+              'automatic': true,
+              'distanceMeters': distanceMeters,
+              'geofenceRadiusMeters': radius,
+              'approachThresholdMeters': approachThreshold,
+            },
+          );
+          emittedGeofenceEvents.add(approachingKey);
+          if (appVisible) {
+            updateMessage(
+              'Approaching · ${stop['name']?.toString() ?? 'route stop'}',
+            );
+          }
+        } catch (_) {
+          updateMessage('Stop approach sync temporarily unavailable');
+        }
+      }
+
+      if (distanceMeters <= radius &&
+          !insideStopGeofences.contains(stopId) &&
+          !emittedGeofenceEvents.contains(arrivedKey)) {
+        try {
+          await event(
+            'stop_arrived',
+            position: position,
+            stopId: stopId,
+            metadata: {
+              'automatic': true,
+              'distanceMeters': distanceMeters,
+              'geofenceRadiusMeters': radius,
+            },
+          );
+          emittedGeofenceEvents.add(arrivedKey);
+          insideStopGeofences.add(stopId);
+          if (appVisible) {
+            updateMessage(
+              'Arrived · ${stop['name']?.toString() ?? 'route stop'}',
+            );
+          }
+        } catch (_) {
+          updateMessage('Stop arrival sync temporarily unavailable');
+        }
+        continue;
+      }
+
+      final departureThreshold = radius + geofenceHysteresis(radius);
+      if (insideStopGeofences.contains(stopId) &&
+          distanceMeters > departureThreshold &&
+          !emittedGeofenceEvents.contains(departedKey)) {
+        try {
+          await event(
+            'stop_departed',
+            position: position,
+            stopId: stopId,
+            metadata: {
+              'automatic': true,
+              'distanceMeters': distanceMeters,
+              'geofenceRadiusMeters': radius,
+              'departureThresholdMeters': departureThreshold,
+            },
+          );
+          emittedGeofenceEvents.add(departedKey);
+          insideStopGeofences.remove(stopId);
+          if (appVisible) {
+            updateMessage(
+              'Departed · ${stop['name']?.toString() ?? 'route stop'}',
+            );
+          }
+        } catch (_) {
+          updateMessage('Stop departure sync temporarily unavailable');
+        }
+      }
+    }
+  }
+
+  void onPositionError(Object error) {
+    updateMessage('GPS temporarily unavailable');
+  }
+
+  Future<void> drainPendingLocation() async {
+    if (sendingLocation) return;
+    sendingLocation = true;
+    try {
+      while (pendingPosition != null && tracking) {
+        final next = pendingPosition!;
+        pendingPosition = null;
+        await sendLocation(next);
+      }
+    } finally {
+      sendingLocation = false;
+    }
+  }
+
+  Future<void> sendLocation(Position position) async {
+    final now = DateTime.now().toUtc();
+    if (offlineLocationMode &&
+        lastOfflineLocationAttempt != null &&
+        now.difference(lastOfflineLocationAttempt!) <
+            offlineLocationSampleInterval) {
+      return;
+    }
+
+    try {
+      final result = await event('location', position: position);
+      if (result['queued'] == true) {
+        offlineLocationMode = true;
+        lastOfflineLocationAttempt = now;
+      } else {
+        final wasOffline = offlineLocationMode;
+        offlineLocationMode = false;
+        lastOfflineLocationAttempt = null;
+        if (wasOffline) unawaited(widget.api.flushQueue());
+      }
+    } catch (_) {
+      updateMessage('GPS sync temporarily unavailable');
+    }
+  }
+
+  Future<void> stopTracking() async {
+    final subscription = positions;
+    positions = null;
+    pendingPosition = null;
+    pendingGeofencePosition = null;
+    if (subscription != null) await subscription.cancel();
   }
 
   Future<void> pause() async {
-    await positions?.cancel();
-    positions = null;
+    await stopTracking();
     await event('trip_paused', position: lastPosition);
-    setState(() {
-      tripState = DriverTripState.paused;
-      syncMessage = 'Trip paused';
-    });
+    tripState = DriverTripState.paused;
+    updateMessage('Trip paused · GPS stopped');
+    unawaited(widget.api.flushQueue());
   }
 
   Future<void> complete() async {
@@ -478,24 +819,47 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
     if (confirmed != true) return;
 
-    await positions?.cancel();
-    positions = null;
+    await stopTracking();
     await event('trip_completed', position: lastPosition);
-    setState(() {
-      tripState = DriverTripState.completed;
-      syncMessage = 'Trip completed';
-    });
+    tripState = DriverTripState.completed;
+    updateMessage('Trip completed · GPS stopped');
+    await widget.api.flushQueue();
     await widget.onRefresh();
   }
 
+  Future<void> logout() async {
+    await stopTracking();
+    try {
+      await widget.api.flushQueue();
+    } catch (_) {
+      // Logout remains authoritative and clears identity-scoped offline data.
+    }
+    await widget.onLogout();
+  }
+
   Future<void> sos() async {
+    if (sendingSos) return;
+    if (tripId == null ||
+        (tripState != DriverTripState.active &&
+            tripState != DriverTripState.paused)) {
+      if (mounted && appVisible) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Start the assigned trip before sending SOS'),
+          ),
+        );
+      }
+      return;
+    }
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         icon: const Icon(Icons.sos, color: Colors.red, size: 42),
         title: const Text('Send emergency alert?'),
         content: const Text(
-          'The school will receive an SOS event with your latest location.',
+          'The school will receive an emergency SOS with your trip, vehicle '
+          'and latest available location.',
         ),
         actions: [
           TextButton(
@@ -512,32 +876,133 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
     if (confirmed != true) return;
 
-    Position? position;
-    if (await ensurePermission()) {
-      position = await Geolocator.getCurrentPosition();
-    }
-    await event('sos', position: position);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Emergency alert sent to the school'),
-        ),
+    sendingSos = true;
+    if (mounted && appVisible) setState(() {});
+
+    try {
+      Position? position = lastPosition;
+      if (position == null) {
+        try {
+          if (await ensurePermission()) {
+            position = await Geolocator.getCurrentPosition();
+          }
+        } catch (_) {
+          // Emergency transmission must continue even if GPS is unavailable.
+        }
+      }
+
+      final result = await event(
+        'sos',
+        position: position,
+        metadata: const {'emergency': true, 'source': 'driver_sos_button'},
       );
+      final replayed = result['replayed'] == true;
+
+      if (mounted && appVisible) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              replayed
+                  ? 'Emergency SOS already sent recently'
+                  : 'Emergency SOS sent to the school',
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted && appVisible) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Emergency SOS could not sync. Check connectivity and retry.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      sendingSos = false;
+      if (mounted && appVisible) setState(() {});
     }
   }
 
-  Future<void> recordStudent(
-    String eventType,
-    JsonMap student,
-  ) async {
+  void restoreStudentStatusesFromSnapshot() {
+    studentStatuses.clear();
+
+    final currentTripId = tripId;
+    if (currentTripId == null) return;
+
+    for (final item in listValue(widget.transport, 'events')) {
+      if (item['tripId']?.toString() != currentTripId) continue;
+
+      final eventType = item['eventType']?.toString();
+
+      if (eventType != 'student_boarded' && eventType != 'student_dropped') {
+        continue;
+      }
+
+      final studentId = item['studentId']?.toString();
+
+      if (studentId == null || studentId.isEmpty) continue;
+
+      // Events are newest-first. The latest student transition wins.
+      if (studentStatuses.containsKey(studentId)) continue;
+
+      studentStatuses[studentId] =
+          eventType == 'student_dropped' ? 'Dropped' : 'Boarded';
+    }
+  }
+
+  Future<void> recordStudent(String eventType, JsonMap student) async {
     final id = student['id']?.toString();
+
     if (id == null || id.isEmpty) return;
-    await event(eventType, position: lastPosition, studentId: id);
-    if (mounted) {
-      setState(() {
-        studentStatuses[id] =
-            eventType == 'student_boarded' ? 'Boarded' : 'Dropped';
-      });
+
+    if (!tracking || tripId == null) {
+      if (mounted && appVisible) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Start the active trip before marking students'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final current = studentStatuses[id] ?? 'Waiting';
+
+    if (eventType == 'student_boarded' && current != 'Waiting') {
+      if (mounted && appVisible) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Student is already $current')));
+      }
+      return;
+    }
+
+    if (eventType == 'student_dropped' && current != 'Boarded') {
+      if (mounted && appVisible) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Mark the student boarded before drop')),
+        );
+      }
+      return;
+    }
+
+    try {
+      await event(eventType, position: lastPosition, studentId: id);
+
+      if (mounted && appVisible) {
+        setState(() {
+          studentStatuses[id] =
+              eventType == 'student_boarded' ? 'Boarded' : 'Dropped';
+        });
+      }
+    } catch (exception) {
+      if (mounted && appVisible) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(exception.toString())));
+      }
     }
   }
 
@@ -585,14 +1050,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   @override
   void dispose() {
-    positions?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(stopTracking());
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final driverName = driver?['name']?.toString() ?? 'Driver';
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -609,7 +1074,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           ),
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'logout') widget.onLogout();
+              if (value == 'logout') unawaited(logout());
             },
             itemBuilder: (context) => const [
               PopupMenuItem(value: 'logout', child: Text('Sign out')),
@@ -624,10 +1089,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           children: [
             Text(
               'Hello, $driverName',
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w900,
-              ),
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 4),
             Text(
@@ -645,11 +1107,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ),
             const SizedBox(height: 16),
             if (assignment != null)
-              _AssignmentCard(
-                route: route!,
-                vehicle: vehicle!,
-                trip: trip,
-              ),
+              _AssignmentCard(route: route!, vehicle: vehicle!, trip: trip),
             if (assignment == null) const _PendingAssignmentCard(),
             const SizedBox(height: 16),
             SegmentedButton<int>(
@@ -671,14 +1129,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 ),
               ],
               selected: {selectedTab},
-              onSelectionChanged: (value) {
-                setState(() => selectedTab = value.first);
-              },
+              onSelectionChanged: (value) =>
+                  setState(() => selectedTab = value.first),
             ),
             const SizedBox(height: 16),
-            if (selectedTab == 0) _homeContent(),
-            if (selectedTab == 1) _stopsContent(),
-            if (selectedTab == 2) _studentsContent(),
+            if (selectedTab == 0) homeContent(),
+            if (selectedTab == 1) stopsContent(),
+            if (selectedTab == 2) studentsContent(),
           ],
         ),
       ),
@@ -723,8 +1180,22 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 minimumSize: const Size(54, 54),
               ),
               tooltip: 'Emergency SOS',
-              onPressed: sos,
-              icon: const Icon(Icons.sos),
+              onPressed: !sendingSos &&
+                      tripId != null &&
+                      (tripState == DriverTripState.active ||
+                          tripState == DriverTripState.paused)
+                  ? sos
+                  : null,
+              icon: sendingSos
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.sos),
             ),
           ],
         ),
@@ -732,7 +1203,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _homeContent() {
+  Widget homeContent() {
     final nextStop = stops.isEmpty ? null : stops.first;
     return Column(
       children: [
@@ -754,7 +1225,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
         _InfoTile(
           icon: tracking ? Icons.gps_fixed : Icons.gps_not_fixed,
           title: 'GPS status',
-          value: tracking ? 'Tracking active' : 'Tracking inactive',
+          value: tracking
+              ? appVisible
+                  ? 'Tracking active'
+                  : 'Tracking active in background'
+              : 'Tracking inactive',
           trailing: lastPosition == null
               ? null
               : '${lastPosition!.accuracy.toStringAsFixed(0)} m',
@@ -775,7 +1250,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _stopsContent() {
+  Widget stopsContent() {
     if (stops.isEmpty) {
       return const _EmptyCard(
         icon: Icons.route_outlined,
@@ -803,9 +1278,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   stop['name']?.toString() ?? 'Route stop',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-                subtitle: Text(
-                  '${stop['studentCount'] ?? 0} students',
-                ),
+                subtitle: Text('${stop['studentCount'] ?? 0} students'),
                 trailing: Text(
                   stop['pickupTime']?.toString() ?? '',
                   style: const TextStyle(fontWeight: FontWeight.w700),
@@ -817,7 +1290,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _studentsContent() {
+  Widget studentsContent() {
     if (students.isEmpty) {
       return const _EmptyCard(
         icon: Icons.people_outline,
@@ -832,14 +1305,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
             child: _StudentCard(
               student: student,
               status: studentStatuses[student['id']?.toString()],
-              onBoarded: () => recordStudent(
-                'student_boarded',
-                student,
-              ),
-              onDropped: () => recordStudent(
-                'student_dropped',
-                student,
-              ),
+              canBoard: tracking &&
+                  studentStatuses[student['id']?.toString()] == null,
+              canDrop: tracking &&
+                  studentStatuses[student['id']?.toString()] == 'Boarded',
+              onBoarded: () => recordStudent('student_boarded', student),
+              onDropped: () => recordStudent('student_dropped', student),
             ),
           ),
       ],
@@ -880,11 +1351,8 @@ class _StatusCard extends StatelessWidget {
         ),
         child: Column(
           children: [
-            const Icon(
-              Icons.directions_bus_rounded,
-              size: 48,
-              color: Colors.white,
-            ),
+            const Icon(Icons.directions_bus_rounded,
+                size: 48, color: Colors.white),
             const SizedBox(height: 12),
             Text(
               title,
@@ -893,7 +1361,6 @@ class _StatusCard extends StatelessWidget {
                 color: Colors.white,
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
-                letterSpacing: .4,
               ),
             ),
             const SizedBox(height: 5),
@@ -936,7 +1403,6 @@ class _StatusCard extends StatelessWidget {
 
 class _StatusStat extends StatelessWidget {
   const _StatusStat({required this.label, required this.value});
-
   final String label;
   final String value;
 
@@ -973,7 +1439,6 @@ class _AssignmentCard extends StatelessWidget {
     required this.vehicle,
     required this.trip,
   });
-
   final JsonMap route;
   final JsonMap vehicle;
   final JsonMap? trip;
@@ -1051,7 +1516,6 @@ class _AssignmentRow extends StatelessWidget {
     required this.label,
     required this.value,
   });
-
   final IconData icon;
   final String label;
   final String value;
@@ -1067,15 +1531,10 @@ class _AssignmentRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: Colors.black54,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: Colors.black54, fontSize: 12),
                 ),
-                Text(
-                  value,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
+                Text(value,
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
               ],
             ),
           ),
@@ -1091,7 +1550,6 @@ class _InfoTile extends StatelessWidget {
     this.trailing,
     this.onTap,
   });
-
   final IconData icon;
   final String title;
   final String value;
@@ -1132,12 +1590,15 @@ class _StudentCard extends StatelessWidget {
   const _StudentCard({
     required this.student,
     required this.status,
+    required this.canBoard,
+    required this.canDrop,
     required this.onBoarded,
     required this.onDropped,
   });
-
   final JsonMap student;
   final String? status;
+  final bool canBoard;
+  final bool canDrop;
   final VoidCallback onBoarded;
   final VoidCallback onDropped;
 
@@ -1145,9 +1606,10 @@ class _StudentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final className = student['className']?.toString() ?? '';
     final section = student['sectionName']?.toString() ?? '';
-    final classLabel =
-        [className, section].where((value) => value.isNotEmpty).join(' · ');
-
+    final classLabel = [
+      className,
+      section,
+    ].where((value) => value.isNotEmpty).join(' · ');
     return Card(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
@@ -1157,7 +1619,7 @@ class _StudentCard extends StatelessWidget {
               radius: 25,
               backgroundColor: const Color(0xffe8eaf6),
               child: Text(
-                _initials(student['fullName']?.toString() ?? 'Student'),
+                initials(student['fullName']?.toString() ?? 'Student'),
                 style: const TextStyle(
                   color: Color(0xff3949ab),
                   fontWeight: FontWeight.w900,
@@ -1206,22 +1668,16 @@ class _StudentCard extends StatelessWidget {
                 if (value == 'boarded') onBoarded();
                 if (value == 'dropped') onDropped();
               },
-              itemBuilder: (context) => const [
+              itemBuilder: (context) => [
                 PopupMenuItem(
                   value: 'boarded',
-                  child: ListTile(
-                    leading: Icon(Icons.login),
-                    title: Text('Mark boarded'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
+                  enabled: canBoard,
+                  child: const Text('Mark boarded'),
                 ),
                 PopupMenuItem(
                   value: 'dropped',
-                  child: ListTile(
-                    leading: Icon(Icons.logout),
-                    title: Text('Mark dropped'),
-                    contentPadding: EdgeInsets.zero,
-                  ),
+                  enabled: canDrop,
+                  child: const Text('Mark dropped'),
                 ),
               ],
             ),
@@ -1231,7 +1687,7 @@ class _StudentCard extends StatelessWidget {
     );
   }
 
-  static String _initials(String name) {
+  static String initials(String name) {
     final parts = name
         .trim()
         .split(RegExp(r'\s+'))
@@ -1245,7 +1701,6 @@ class _StudentCard extends StatelessWidget {
 
 class _EmptyCard extends StatelessWidget {
   const _EmptyCard({required this.icon, required this.text});
-
   final IconData icon;
   final String text;
 

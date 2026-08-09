@@ -51,7 +51,8 @@
     "stage8:worker:health": "node --experimental-strip-types scripts/stage8-worker-health.ts",
     "stage9:test": "node --experimental-strip-types --test tests/stage9-*.test.ts",
     "stage9:mobile:validate": "bash mobile/scripts/validate_flutter_apps.sh",
-    "stage10:test": "node --experimental-strip-types --test tests/stage10-*.test.ts"
+    "stage10:test": "node --experimental-strip-types --test tests/stage10-*.test.ts",
+    "stage11:test": "node --experimental-strip-types --test tests/stage11-*.test.ts"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.49.0",
@@ -88,6 +89,7 @@
     "#db-runtime": "./db/adapters/node-sqlite.ts"
   },
   "overrides": {
+    "nanoid": "3.3.18",
     "fast-uri": "4.1.2",
     "sharp": "0.35.3",
     "react-server-dom-webpack": "$react-server-dom-webpack",

@@ -122,8 +122,9 @@ class OfflineStore {
     try {
       return (jsonDecode(raw) as List<dynamic>)
           .map((entry) => QueuedWrite.fromJson(entry as JsonMap))
-          .where((entry) =>
-              DateTime.now().difference(entry.createdAt).inHours <= 72)
+          .where(
+            (entry) => DateTime.now().difference(entry.createdAt).inHours <= 72,
+          )
           .toList();
     } catch (_) {
       return [];
@@ -231,12 +232,15 @@ class HigMobileApi {
         'principalType': principalType,
         'deviceId': await _deviceId(),
         'devicePlatform': _platform,
-        'appVersion':
-            const String.fromEnvironment('APP_VERSION', defaultValue: '1.0.0'),
+        'appVersion': const String.fromEnvironment(
+          'APP_VERSION',
+          defaultValue: '1.0.0',
+        ),
       },
     );
     final next = MobileSession.fromJson(
-        (body['session'] as Map).cast<String, dynamic>());
+      (body['session'] as Map).cast<String, dynamic>(),
+    );
     session = next;
     await sessionStore.write(next);
     return next;
@@ -270,12 +274,15 @@ class HigMobileApi {
           'refreshToken': current.refreshToken,
           'deviceId': await _deviceId(),
           'devicePlatform': _platform,
-          'appVersion': const String.fromEnvironment('APP_VERSION',
-              defaultValue: '1.0.0'),
+          'appVersion': const String.fromEnvironment(
+            'APP_VERSION',
+            defaultValue: '1.0.0',
+          ),
         },
       );
       final next = MobileSession.fromJson(
-          (body['session'] as Map).cast<String, dynamic>());
+        (body['session'] as Map).cast<String, dynamic>(),
+      );
       session = next;
       await sessionStore.write(next);
       return true;
@@ -320,8 +327,10 @@ class HigMobileApi {
     final query = <String, String>{};
     if (featureKey != null) query['featureKey'] = featureKey;
     if (moduleKey != null) query['moduleKey'] = moduleKey;
-    final path =
-        Uri(path: '/api/v1/mobile/content', queryParameters: query).toString();
+    final path = Uri(
+      path: '/api/v1/mobile/content',
+      queryParameters: query,
+    ).toString();
     return _cachedGet(path, 'content:${Uri.encodeComponent(path)}');
   }
 
@@ -330,14 +339,15 @@ class HigMobileApi {
         'notifications:$unreadOnly',
       );
 
-  Future<JsonMap> markNotificationRead(String id) => write(
-        '/api/v1/mobile/notifications/$id/read',
-        const {},
-      );
+  Future<JsonMap> markNotificationRead(String id) =>
+      write('/api/v1/mobile/notifications/$id/read', const {});
 
   Future<JsonMap> operation(JsonMap body, {bool queueWhenOffline = true}) =>
-      write('/api/v1/mobile/operations', body,
-          queueWhenOffline: queueWhenOffline);
+      write(
+        '/api/v1/mobile/operations',
+        body,
+        queueWhenOffline: queueWhenOffline,
+      );
 
   Future<JsonMap> contentAction(JsonMap body, {bool queueWhenOffline = true}) =>
       write('/api/v1/mobile/content', body, queueWhenOffline: queueWhenOffline);
@@ -345,10 +355,15 @@ class HigMobileApi {
   Future<JsonMap> transport() =>
       _cachedGet('/api/v1/mobile/transport', 'transport');
 
-  Future<JsonMap> transportEvent(JsonMap body,
-          {bool queueWhenOffline = true}) =>
-      write('/api/v1/mobile/transport/events', body,
-          queueWhenOffline: queueWhenOffline);
+  Future<JsonMap> transportEvent(
+    JsonMap body, {
+    bool queueWhenOffline = true,
+  }) =>
+      write(
+        '/api/v1/mobile/transport/events',
+        body,
+        queueWhenOffline: queueWhenOffline,
+      );
 
   Future<JsonMap> _cachedGet(String path, String cacheKey) async {
     try {
@@ -398,14 +413,16 @@ class HigMobileApi {
     String idempotencyKey,
   ) async {
     final queue = await offlineStore.readQueue();
-    queue.add(QueuedWrite(
-      id: _uuid.v4(),
-      method: method,
-      path: path,
-      body: body,
-      idempotencyKey: idempotencyKey,
-      createdAt: DateTime.now().toUtc(),
-    ));
+    queue.add(
+      QueuedWrite(
+        id: _uuid.v4(),
+        method: method,
+        path: path,
+        body: body,
+        idempotencyKey: idempotencyKey,
+        createdAt: DateTime.now().toUtc(),
+      ),
+    );
     final bounded =
         queue.length <= 100 ? queue : queue.sublist(queue.length - 100);
     await offlineStore.writeQueue(bounded);
@@ -447,8 +464,10 @@ class HigMobileApi {
         'provider': 'firebase',
         'token': token,
         'appId': appId,
-        'appVersion':
-            const String.fromEnvironment('APP_VERSION', defaultValue: '1.0.0'),
+        'appVersion': const String.fromEnvironment(
+          'APP_VERSION',
+          defaultValue: '1.0.0',
+        ),
       },
     );
     return true;
@@ -555,17 +574,16 @@ class PushRegistrationService {
 
       final previous = _refreshSubscriptions.remove(api.appId);
       if (previous != null) await previous.cancel();
-      _refreshSubscriptions[api.appId] = messaging.onTokenRefresh.listen(
-        (nextToken) async {
-          if (api.session == null) return;
-          try {
-            await api.registerPushToken(nextToken);
-          } catch (_) {
-            // A later app resume or token refresh will retry registration.
-          }
-        },
-        onError: (_) {},
-      );
+      _refreshSubscriptions[api.appId] = messaging.onTokenRefresh.listen((
+        nextToken,
+      ) async {
+        if (api.session == null) return;
+        try {
+          await api.registerPushToken(nextToken);
+        } catch (_) {
+          // A later app resume or token refresh will retry registration.
+        }
+      }, onError: (_) {});
       return true;
     } catch (_) {
       return false;
@@ -629,7 +647,9 @@ class _HigMobileRootState extends State<HigMobileRoot> {
   void initState() {
     super.initState();
     api = HigMobileApi(
-        baseUrl: widget.config.apiBaseUrl, appId: widget.config.appId);
+      baseUrl: widget.config.apiBaseUrl,
+      appId: widget.config.appId,
+    );
     offlineSync.start(api);
     _restore();
   }
@@ -757,15 +777,19 @@ class _LoginViewState extends State<LoginView> {
               const SizedBox(height: 30),
               CircleAvatar(
                 radius: 34,
-                child: Text(widget.config.title.characters.first,
-                    style: const TextStyle(
-                        fontSize: 30, fontWeight: FontWeight.w900)),
+                child: Text(
+                  widget.config.title.characters.first,
+                  style: const TextStyle(
+                      fontSize: 30, fontWeight: FontWeight.w900),
+                ),
               ),
               const SizedBox(height: 20),
-              Text(widget.config.title,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontSize: 27, fontWeight: FontWeight.w800)),
+              Text(
+                widget.config.title,
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(fontSize: 27, fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 28),
               TextField(
                 controller: tenant,
@@ -779,10 +803,16 @@ class _LoginViewState extends State<LoginView> {
               DropdownButtonFormField<String>(
                 initialValue: principalType,
                 decoration: const InputDecoration(
-                    labelText: 'Sign in as', border: OutlineInputBorder()),
+                  labelText: 'Sign in as',
+                  border: OutlineInputBorder(),
+                ),
                 items: widget.config.allowedPrincipalTypes
-                    .map((entry) => DropdownMenuItem(
-                        value: entry, child: Text(_title(entry))))
+                    .map(
+                      (entry) => DropdownMenuItem(
+                        value: entry,
+                        child: Text(_title(entry)),
+                      ),
+                    )
                     .toList(),
                 onChanged: busy
                     ? null
@@ -794,21 +824,27 @@ class _LoginViewState extends State<LoginView> {
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
                 decoration: const InputDecoration(
-                    labelText: 'Email', border: OutlineInputBorder()),
+                  labelText: 'Email',
+                  border: OutlineInputBorder(),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: password,
                 obscureText: true,
                 decoration: const InputDecoration(
-                    labelText: 'Password', border: OutlineInputBorder()),
+                  labelText: 'Password',
+                  border: OutlineInputBorder(),
+                ),
               ),
               if ((message ?? widget.error) != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
-                  child: Text(message ?? widget.error!,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error)),
+                  child: Text(
+                    message ?? widget.error!,
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
                 ),
               const SizedBox(height: 18),
               FilledButton(
@@ -853,9 +889,11 @@ class _HomeViewState extends State<HomeView> {
       return Scaffold(
         appBar: AppBar(title: Text(widget.config.title)),
         body: Center(
-            child: FilledButton(
-                onPressed: widget.onRefresh,
-                child: const Text('Load dashboard'))),
+          child: FilledButton(
+            onPressed: widget.onRefresh,
+            child: const Text('Load dashboard'),
+          ),
+        ),
       );
     }
     final home = wrapper.cast<String, dynamic>();
@@ -869,7 +907,10 @@ class _HomeViewState extends State<HomeView> {
     final pages = [
       DashboardPage(home: home, api: widget.api, onRefresh: widget.onRefresh),
       ModulesPage(
-          api: widget.api, principalType: principalType, modules: modules),
+        api: widget.api,
+        principalType: principalType,
+        modules: modules,
+      ),
       NotificationsPage(api: widget.api),
       ProfilePage(home: home, onLogout: widget.onLogout),
     ];
@@ -877,7 +918,7 @@ class _HomeViewState extends State<HomeView> {
       appBar: AppBar(
         title: Text(widget.config.title),
         actions: [
-          IconButton(onPressed: widget.onRefresh, icon: const Icon(Icons.sync))
+          IconButton(onPressed: widget.onRefresh, icon: const Icon(Icons.sync)),
         ],
       ),
       body: IndexedStack(index: index, children: pages),
@@ -886,21 +927,25 @@ class _HomeViewState extends State<HomeView> {
         onDestinationSelected: (value) => setState(() => index = value),
         destinations: const [
           NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Home'),
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.apps_outlined),
-              selectedIcon: Icon(Icons.apps),
-              label: 'Modules'),
+            icon: Icon(Icons.apps_outlined),
+            selectedIcon: Icon(Icons.apps),
+            label: 'Modules',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.notifications_outlined),
-              selectedIcon: Icon(Icons.notifications),
-              label: 'Alerts'),
+            icon: Icon(Icons.notifications_outlined),
+            selectedIcon: Icon(Icons.notifications),
+            label: 'Alerts',
+          ),
           NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
-              label: 'Profile'),
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
         ],
       ),
     );
@@ -908,11 +953,12 @@ class _HomeViewState extends State<HomeView> {
 }
 
 class DashboardPage extends StatelessWidget {
-  const DashboardPage(
-      {super.key,
-      required this.home,
-      required this.api,
-      required this.onRefresh});
+  const DashboardPage({
+    super.key,
+    required this.home,
+    required this.api,
+    required this.onRefresh,
+  });
   final JsonMap home;
   final HigMobileApi api;
   final Future<void> Function() onRefresh;
@@ -935,26 +981,36 @@ class DashboardPage extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
               gradient: const LinearGradient(
-                  colors: [Color(0xffbd3304), Color(0xffe94e0c)]),
+                colors: [Color(0xffbd3304), Color(0xffe94e0c)],
+              ),
             ),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   'WELCOME · ${_title(home['principalType']?.toString() ?? '')}',
-                  style:
-                      const TextStyle(color: Color(0xffffcfba), fontSize: 11)),
-              const SizedBox(height: 8),
-              Text(user['name']?.toString() ?? 'Hig School user',
                   style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 25,
-                      fontWeight: FontWeight.w800)),
-              Text(
+                    color: Color(0xffffcfba),
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  user['name']?.toString() ?? 'Hig School user',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 25,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
                   home['offline'] == true
                       ? 'Showing securely cached data'
                       : 'Connected to school API',
-                  style: const TextStyle(color: Color(0xffffdfd2))),
-            ]),
+                  style: const TextStyle(color: Color(0xffffdfd2)),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -968,16 +1024,19 @@ class DashboardPage extends StatelessWidget {
           ),
           if (students.isNotEmpty) ...[
             const SizedBox(height: 20),
-            const Text('Linked students',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const Text(
+              'Linked students',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
             ...students.take(10).map((item) {
               final student = (item as Map).cast<String, dynamic>();
               return ListTile(
                 leading: const CircleAvatar(child: Icon(Icons.school_outlined)),
                 title: Text(student['fullName']?.toString() ?? 'Student'),
                 subtitle: Text(
-                    '${student['className'] ?? ''} ${student['sectionName'] ?? ''}'
-                        .trim()),
+                  '${student['className'] ?? ''} ${student['sectionName'] ?? ''}'
+                      .trim(),
+                ),
               );
             }),
           ],
@@ -995,22 +1054,27 @@ class _Metric extends StatelessWidget {
   Widget build(BuildContext context) => Card(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          child: Column(children: [
-            Text(value,
+          child: Column(
+            children: [
+              Text(
+                value,
                 style:
-                    const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-            Text(label)
-          ]),
+                    const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+              ),
+              Text(label),
+            ],
+          ),
         ),
       );
 }
 
 class ModulesPage extends StatelessWidget {
-  const ModulesPage(
-      {super.key,
-      required this.api,
-      required this.principalType,
-      required this.modules});
+  const ModulesPage({
+    super.key,
+    required this.api,
+    required this.principalType,
+    required this.modules,
+  });
   final HigMobileApi api;
   final String principalType;
   final List<JsonMap> modules;
@@ -1027,19 +1091,24 @@ class ModulesPage extends StatelessWidget {
               leading: const CircleAvatar(child: Icon(Icons.apps)),
               title: Text(item['label']?.toString() ?? item['key'].toString()),
               subtitle: principalType == 'school'
-                  ? Text(item['canManage'] == true
-                      ? 'View and manage'
-                      : 'View only')
+                  ? Text(
+                      item['canManage'] == true
+                          ? 'View and manage'
+                          : 'View only',
+                    )
                   : const Text('Role and school policy enabled'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ModuleDetailPage(
-                    api: api,
-                    principalType: principalType,
-                    item: item,
-                  ),
+                  builder: (_) => principalType == 'parent' &&
+                          item['key']?.toString() == 'transport_tracking'
+                      ? ParentTransportTrackingPage(api: api)
+                      : ModuleDetailPage(
+                          api: api,
+                          principalType: principalType,
+                          item: item,
+                        ),
                 ),
               ),
             ),
@@ -1048,12 +1117,299 @@ class ModulesPage extends StatelessWidget {
       );
 }
 
+class ParentTransportTrackingPage extends StatefulWidget {
+  const ParentTransportTrackingPage({super.key, required this.api});
+
+  final HigMobileApi api;
+
+  @override
+  State<ParentTransportTrackingPage> createState() =>
+      _ParentTransportTrackingPageState();
+}
+
+class _ParentTransportTrackingPageState
+    extends State<ParentTransportTrackingPage> {
+  JsonMap? data;
+  String? error;
+  bool loading = true;
+  Timer? refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    load();
+    refreshTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => load(silent: true),
+    );
+  }
+
+  @override
+  void dispose() {
+    refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> load({bool silent = false}) async {
+    if (!silent && mounted) {
+      setState(() {
+        loading = true;
+        error = null;
+      });
+    }
+
+    try {
+      final next = await widget.api.transport();
+      if (mounted) {
+        setState(() {
+          data = next;
+          error = null;
+          loading = false;
+        });
+      }
+    } catch (exception) {
+      if (mounted) {
+        setState(() {
+          error = exception.toString();
+          loading = false;
+        });
+      }
+    }
+  }
+
+  String freshnessLabel(JsonMap live) {
+    final capturedAt = DateTime.tryParse(live['capturedAt']?.toString() ?? '');
+    if (capturedAt == null) return 'Location unavailable';
+
+    final age = DateTime.now().toUtc().difference(capturedAt.toUtc());
+    if (age.inSeconds <= 120) return 'Live now';
+    if (age.inMinutes <= 15) {
+      return 'Delayed · ${age.inMinutes} min old';
+    }
+    return 'Offline · last update ${age.inMinutes} min ago';
+  }
+
+  String distanceLabel(Object? value) {
+    final meters = value is num ? value.toDouble() : null;
+    if (meters == null) return 'Distance unavailable';
+    if (meters < 1000) return '${meters.round()} m from stop';
+    return '${(meters / 1000).toStringAsFixed(1)} km from stop';
+  }
+
+  Widget childCard(BuildContext context, JsonMap child) {
+    final student = (child['student'] as Map?)?.cast<String, dynamic>() ?? {};
+    final route = (child['route'] as Map?)?.cast<String, dynamic>();
+    final vehicle = (child['vehicle'] as Map?)?.cast<String, dynamic>();
+    final trip = (child['trip'] as Map?)?.cast<String, dynamic>();
+    final live = (child['live'] as Map?)?.cast<String, dynamic>();
+    final journey = (child['journey'] as Map?)?.cast<String, dynamic>();
+    final targetStop = (live?['targetStop'] as Map?)?.cast<String, dynamic>();
+
+    final eta = live?['etaMinutes'];
+    final etaText = eta is num
+        ? eta.toInt() == 0
+            ? 'At stop'
+            : '${eta.toInt()} min ETA'
+        : 'ETA unavailable';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(child: Icon(Icons.directions_bus)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        student['fullName']?.toString() ?? 'Linked student',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      Text(student['admissionNumber']?.toString() ?? ''),
+                    ],
+                  ),
+                ),
+                if (trip != null)
+                  Chip(label: Text(_title(trip['status']?.toString() ?? ''))),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              route == null
+                  ? 'No active transport assignment'
+                  : '${route['name'] ?? 'Route'} · ${route['code'] ?? ''}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              vehicle == null
+                  ? 'Vehicle not assigned'
+                  : 'Vehicle ${vehicle['number']} · '
+                      '${_title(vehicle['type']?.toString() ?? '')}',
+            ),
+            if (journey != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.how_to_reg_outlined, size: 18),
+                  const SizedBox(width: 7),
+                  Text(
+                    'Student journey · '
+                    '${_title(journey['status']?.toString() ?? 'waiting')}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ],
+            const Divider(height: 28),
+            if (live == null) ...[
+              const Row(
+                children: [
+                  Icon(Icons.location_off_outlined),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Live location is available only while '
+                      'the assigned trip is active.',
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  const Icon(Icons.my_location),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      freshnessLabel(live),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  Text(
+                    etaText,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                targetStop == null
+                    ? 'Assigned stop unavailable'
+                    : '${_title(live['targetStopType']?.toString() ?? '')} '
+                        'stop · ${targetStop['name']}',
+              ),
+              const SizedBox(height: 4),
+              Text(distanceLabel(live['distanceToStopMeters'])),
+              const SizedBox(height: 10),
+              Text(
+                'Live position: '
+                '${(live['latitude'] as num?)?.toStringAsFixed(5) ?? '-'}, '
+                '${(live['longitude'] as num?)?.toStringAsFixed(5) ?? '-'}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              Text(
+                'ETA is an estimate based on the latest GPS '
+                'position and current/fallback vehicle speed.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final transport = (data?['transport'] as Map?)?.cast<String, dynamic>();
+    final tracking =
+        (transport?['parentTracking'] as Map?)?.cast<String, dynamic>();
+    final children = (tracking?['children'] as List?) ?? const [];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Live transport'),
+        actions: [
+          IconButton(
+            onPressed: () => load(),
+            icon: const Icon(Icons.sync),
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
+      body: loading && data == null
+          ? const Center(child: CircularProgressIndicator())
+          : error != null && data == null
+              ? Center(child: Text(error!))
+              : RefreshIndicator(
+                  onRefresh: load,
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Icon(Icons.privacy_tip_outlined),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'For privacy, this screen shows '
+                                  'only vehicles assigned to your '
+                                  'linked child and only the latest '
+                                  'active-trip location.',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (children.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(28),
+                          child: Center(
+                            child: Text(
+                              'No active transport assignment is '
+                              'available for your linked student.',
+                            ),
+                          ),
+                        )
+                      else
+                        ...children.map(
+                          (entry) => childCard(
+                            context,
+                            (entry as Map).cast<String, dynamic>(),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+    );
+  }
+}
+
 class ModuleDetailPage extends StatefulWidget {
-  const ModuleDetailPage(
-      {super.key,
-      required this.api,
-      required this.principalType,
-      required this.item});
+  const ModuleDetailPage({
+    super.key,
+    required this.api,
+    required this.principalType,
+    required this.item,
+  });
   final HigMobileApi api;
   final String principalType;
   final JsonMap item;
@@ -1072,7 +1428,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
         'attendance',
         'fees_payments',
         'fees_summary',
-        'fees_finance'
+        'fees_finance',
       }.contains(key);
 
   @override
@@ -1109,24 +1465,32 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Send school request'),
         content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
                 controller: studentId,
-                decoration:
-                    const InputDecoration(labelText: 'Linked student ID')),
-            TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Linked student ID',
+                ),
+              ),
+              TextField(
                 controller: title,
-                decoration: const InputDecoration(labelText: 'Title')),
-            TextField(
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              TextField(
                 controller: description,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Details')),
-          ]),
+                decoration: const InputDecoration(labelText: 'Details'),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () async {
               final result = await widget.api.contentAction({
@@ -1140,9 +1504,12 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                      content: Text(result['queued'] == true
+                    content: Text(
+                      result['queued'] == true
                           ? 'Request queued for sync'
-                          : 'Request sent')),
+                          : 'Request sent',
+                    ),
+                  ),
                 );
               }
             },
@@ -1166,7 +1533,8 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
   Future<void> attendanceAction() async {
     final studentId = TextEditingController();
     final date = TextEditingController(
-        text: DateTime.now().toIso8601String().substring(0, 10));
+      text: DateTime.now().toIso8601String().substring(0, 10),
+    );
     var status = 'present';
     await showDialog<void>(
       context: context,
@@ -1174,29 +1542,40 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('Mark attendance'),
           content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
                   controller: studentId,
-                  decoration: const InputDecoration(labelText: 'Student ID')),
-              TextField(
+                  decoration: const InputDecoration(labelText: 'Student ID'),
+                ),
+                TextField(
                   controller: date,
-                  decoration:
-                      const InputDecoration(labelText: 'Date (YYYY-MM-DD)')),
-              DropdownButtonFormField<String>(
-                initialValue: status,
-                decoration: const InputDecoration(labelText: 'Status'),
-                items: const ['present', 'late', 'absent', 'excused']
-                    .map((entry) => DropdownMenuItem(
-                        value: entry, child: Text(_title(entry))))
-                    .toList(),
-                onChanged: (value) => setDialogState(() => status = value!),
-              ),
-            ]),
+                  decoration: const InputDecoration(
+                    labelText: 'Date (YYYY-MM-DD)',
+                  ),
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: status,
+                  decoration: const InputDecoration(labelText: 'Status'),
+                  items: const ['present', 'late', 'absent', 'excused']
+                      .map(
+                        (entry) => DropdownMenuItem(
+                          value: entry,
+                          child: Text(_title(entry)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => setDialogState(() => status = value!),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Cancel')),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
             FilledButton(
               onPressed: () async {
                 final result = await widget.api.operation({
@@ -1210,8 +1589,9 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                 await load();
                 if (!context.mounted) return;
                 if (result['queued'] == true) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Attendance queued for sync')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Attendance queued for sync')),
+                  );
                 }
               },
               child: const Text('Save'),
@@ -1227,36 +1607,46 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
     final feeType = TextEditingController(text: 'Tuition Fee');
     final amount = TextEditingController();
     final dueDate = TextEditingController(
-        text: DateTime.now()
-            .add(const Duration(days: 14))
-            .toIso8601String()
-            .substring(0, 10));
+      text: DateTime.now()
+          .add(const Duration(days: 14))
+          .toIso8601String()
+          .substring(0, 10),
+    );
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Create fee invoice'),
         content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
                 controller: studentId,
-                decoration: const InputDecoration(labelText: 'Student ID')),
-            TextField(
+                decoration: const InputDecoration(labelText: 'Student ID'),
+              ),
+              TextField(
                 controller: feeType,
-                decoration: const InputDecoration(labelText: 'Fee type')),
-            TextField(
+                decoration: const InputDecoration(labelText: 'Fee type'),
+              ),
+              TextField(
                 controller: amount,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Amount in INR')),
-            TextField(
+                decoration: const InputDecoration(labelText: 'Amount in INR'),
+              ),
+              TextField(
                 controller: dueDate,
-                decoration:
-                    const InputDecoration(labelText: 'Due date (YYYY-MM-DD)')),
-          ]),
+                decoration: const InputDecoration(
+                  labelText: 'Due date (YYYY-MM-DD)',
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () async {
               final rupees = double.tryParse(amount.text.trim());
@@ -1272,7 +1662,8 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
               await load();
               if (mounted && result['queued'] == true) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Invoice queued for sync')));
+                  const SnackBar(content: Text('Invoice queued for sync')),
+                );
               }
             },
             child: const Text('Create'),
@@ -1292,28 +1683,38 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
       builder: (dialogContext) => AlertDialog(
         title: Text('Create ${widget.item['label'] ?? 'record'}'),
         content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
                 controller: title,
-                decoration: const InputDecoration(labelText: 'Title')),
-            TextField(
+                decoration: const InputDecoration(labelText: 'Title'),
+              ),
+              TextField(
                 controller: description,
                 maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Description')),
-            TextField(
+                decoration: const InputDecoration(labelText: 'Description'),
+              ),
+              TextField(
                 controller: assignee,
                 decoration: const InputDecoration(
-                    labelText: 'Assignee (Schoolwide, class, or student)')),
-            TextField(
+                  labelText: 'Assignee (Schoolwide, class, or student)',
+                ),
+              ),
+              TextField(
                 controller: dueDate,
-                decoration:
-                    const InputDecoration(labelText: 'Due date (optional)')),
-          ]),
+                decoration: const InputDecoration(
+                  labelText: 'Due date (optional)',
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             onPressed: () async {
               final result = await widget.api.contentAction({
@@ -1332,7 +1733,8 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
               await load();
               if (mounted && result['queued'] == true) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Record queued for sync')));
+                  const SnackBar(content: Text('Record queued for sync')),
+                );
               }
             },
             child: const Text('Publish'),
@@ -1355,20 +1757,26 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
         : (((data?['content'] as Map?)?['records'] as List?) ?? const []);
     return Scaffold(
       appBar: AppBar(
-          title: Text(title),
-          actions: [IconButton(onPressed: load, icon: const Icon(Icons.sync))]),
+        title: Text(title),
+        actions: [IconButton(onPressed: load, icon: const Icon(Icons.sync))],
+      ),
       floatingActionButton: widget.principalType == 'parent' &&
-              const {'leave_requests', 'contact_school', 'ptm_meetings'}
-                  .contains(key)
+              const {
+                'leave_requests',
+                'contact_school',
+                'ptm_meetings',
+              }.contains(key)
           ? FloatingActionButton.extended(
               onPressed: parentRequest,
               icon: const Icon(Icons.send),
-              label: const Text('Request'))
+              label: const Text('Request'),
+            )
           : widget.principalType == 'school' && widget.item['canManage'] == true
               ? FloatingActionButton.extended(
                   onPressed: busy ? null : manageAction,
                   icon: const Icon(Icons.add),
-                  label: const Text('Manage'))
+                  label: const Text('Manage'),
+                )
               : null,
       body: error != null
           ? Center(child: Text(error!))
@@ -1376,7 +1784,8 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
               ? const Center(child: CircularProgressIndicator())
               : records.isEmpty
                   ? const Center(
-                      child: Text('No authorized records are available yet.'))
+                      child: Text('No authorized records are available yet.'),
+                    )
                   : ListView.builder(
                       padding: const EdgeInsets.all(16),
                       itemCount: records.length,
@@ -1386,13 +1795,18 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                         return Card(
                           child: ListTile(
                             leading: const CircleAvatar(
-                                child: Icon(Icons.description_outlined)),
-                            title: Text(record['title']?.toString() ??
-                                record['studentName']?.toString() ??
-                                'Record'),
-                            subtitle: Text(record['description']?.toString() ??
-                                record['status']?.toString() ??
-                                ''),
+                              child: Icon(Icons.description_outlined),
+                            ),
+                            title: Text(
+                              record['title']?.toString() ??
+                                  record['studentName']?.toString() ??
+                                  'Record',
+                            ),
+                            subtitle: Text(
+                              record['description']?.toString() ??
+                                  record['status']?.toString() ??
+                                  '',
+                            ),
                           ),
                         );
                       },
@@ -1437,16 +1851,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
           final item = (entries[index] as Map).cast<String, dynamic>();
           return Card(
             child: ListTile(
-              leading: Icon(item['read'] == true
-                  ? Icons.notifications_none
-                  : Icons.notifications_active),
+              leading: Icon(
+                item['read'] == true
+                    ? Icons.notifications_none
+                    : Icons.notifications_active,
+              ),
               title: Text(item['title']?.toString() ?? 'School notification'),
               subtitle: Text(item['message']?.toString() ?? ''),
               onTap: item['read'] == true
                   ? null
                   : () async {
-                      await widget.api
-                          .markNotificationRead(item['id'].toString());
+                      await widget.api.markNotificationRead(
+                        item['id'].toString(),
+                      );
                       await load();
                     },
             ),
@@ -1469,23 +1886,30 @@ class ProfilePage extends StatelessWidget {
       children: [
         const CircleAvatar(radius: 42, child: Icon(Icons.person, size: 44)),
         const SizedBox(height: 12),
-        Text(user['name']?.toString() ?? 'User',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+        Text(
+          user['name']?.toString() ?? 'User',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+        ),
         Text(user['email']?.toString() ?? '', textAlign: TextAlign.center),
         const SizedBox(height: 24),
         ListTile(
-            title: const Text('Tenant'),
-            subtitle: Text(home['tenantId']?.toString() ?? '')),
+          title: const Text('Tenant'),
+          subtitle: Text(home['tenantId']?.toString() ?? ''),
+        ),
         ListTile(
-            title: const Text('Identity'),
-            subtitle: Text(_title(home['principalType']?.toString() ?? ''))),
+          title: const Text('Identity'),
+          subtitle: Text(_title(home['principalType']?.toString() ?? '')),
+        ),
         const SizedBox(height: 16),
         OutlinedButton.icon(
-            onPressed: onLogout,
-            icon: const Icon(Icons.logout),
-            label: const Padding(
-                padding: EdgeInsets.all(14), child: Text('Sign out'))),
+          onPressed: onLogout,
+          icon: const Icon(Icons.logout),
+          label: const Padding(
+            padding: EdgeInsets.all(14),
+            child: Text('Sign out'),
+          ),
+        ),
       ],
     );
   }

@@ -88,6 +88,48 @@ export function routeNotificationEvent(event: NotificationEvent): DeliveryPlan[]
   const message = notificationPayload(event);
   const studentId = optionalUuid(event.payload.studentId);
 
+  if (event.topic === "transport.alert") {
+    const transportEventType = optionalString(event.payload.transportEventType);
+    const studentIds = uniqueUuidList(
+      event.payload.studentIds,
+      optionalUuid(event.payload.studentId),
+    );
+    const schoolPlan: DeliveryPlan = {
+      recipientType: "audience",
+      recipientId: null,
+      channel: "in_app",
+      templateKey: `transport.alert.${transportEventType ?? "event"}.school`,
+      payload: {
+        ...message,
+        audience: "school",
+        message: transportAlertMessage(event.payload, transportEventType, "school"),
+      },
+    };
+
+    const parentEligible =
+      transportEventType === "stop_approaching"
+      || transportEventType === "stop_arrived"
+      || transportEventType === "student_boarded"
+      || transportEventType === "student_dropped";
+
+    if (!parentEligible) return [schoolPlan];
+
+    const parentPlans: DeliveryPlan[] = studentIds.map((recipientId) => ({
+      recipientType: "parent",
+      recipientId,
+      channel: "in_app",
+      templateKey: `transport.alert.${transportEventType}.parent`,
+      payload: {
+        ...message,
+        audience: "parent",
+        studentId: recipientId,
+        message: transportAlertMessage(event.payload, transportEventType, "parent"),
+      },
+    }));
+
+    return [...parentPlans, schoolPlan];
+  }
+
   if (
     event.topic === "attendance.mark"
     || event.topic === "fee.invoice.create"
@@ -139,6 +181,28 @@ function notificationPayload(event: NotificationEvent): Record<string, unknown> 
     occurredAt: event.occurredAt,
   };
 
+  if (event.topic === "transport.alert") {
+    return compact({
+      ...common,
+      transportEventId: optionalUuid(event.payload.transportEventId),
+      transportEventType: optionalString(event.payload.transportEventType),
+      tripId: optionalUuid(event.payload.tripId),
+      studentId: optionalUuid(event.payload.studentId),
+      studentIds: uniqueUuidList(event.payload.studentIds),
+      studentName: optionalString(event.payload.studentName),
+      stopId: optionalUuid(event.payload.stopId),
+      stopName: optionalString(event.payload.stopName),
+      routeName: optionalString(event.payload.routeName),
+      vehicleNumber: optionalString(event.payload.vehicleNumber),
+      direction: optionalString(event.payload.direction),
+      latitude: optionalFiniteNumber(event.payload.latitude),
+      longitude: optionalFiniteNumber(event.payload.longitude),
+      accuracyMeters: optionalFiniteNumber(event.payload.accuracyMeters),
+      severity: optionalString(event.payload.severity),
+      capturedAt: optionalString(event.payload.capturedAt),
+    });
+  }
+
   if (event.topic === "attendance.mark") {
     return compact({
       ...common,
@@ -170,6 +234,79 @@ function notificationPayload(event: NotificationEvent): Record<string, unknown> 
   }
 
   return common;
+}
+
+function uniqueUuidList(value: unknown, fallback: string | null = null): string[] {
+  const candidates = Array.isArray(value) ? value.slice(0, 200) : [];
+  if (fallback) candidates.push(fallback);
+  const valid = candidates
+    .map((entry) => optionalUuid(entry))
+    .filter((entry): entry is string => entry !== null);
+  return [...new Set(valid)];
+}
+
+function transportAlertMessage(
+  payload: Record<string, unknown>,
+  eventType: string | null,
+  audience: "parent" | "school",
+): string {
+  const stopName = optionalString(payload.stopName);
+  const studentName = optionalString(payload.studentName);
+  const vehicleNumber = optionalString(payload.vehicleNumber);
+
+  if (eventType === "sos") {
+    const routeName = optionalString(payload.routeName);
+    return `EMERGENCY SOS from bus${vehicleNumber ? ` ${vehicleNumber}` : ""}${
+      routeName ? ` on ${routeName}` : ""
+    }. Open live tracking immediately.`;
+  }
+
+  if (eventType === "stop_approaching") {
+    if (audience === "parent") {
+      return `The school bus${vehicleNumber ? ` ${vehicleNumber}` : ""} is approaching ${
+        stopName ?? "your child's assigned stop"
+      }. Please be ready.`;
+    }
+    return `Bus${vehicleNumber ? ` ${vehicleNumber}` : ""} is approaching ${
+      stopName ?? "an assigned route stop"
+    }.`;
+  }
+
+  if (eventType === "stop_arrived") {
+    if (audience === "parent") {
+      return `The school bus${vehicleNumber ? ` ${vehicleNumber}` : ""} has arrived at ${
+        stopName ?? "your child's assigned stop"
+      }.`;
+    }
+    return `Bus${vehicleNumber ? ` ${vehicleNumber}` : ""} arrived at ${
+      stopName ?? "an assigned route stop"
+    }.`;
+  }
+
+  if (eventType === "stop_departed") {
+    return `Bus${vehicleNumber ? ` ${vehicleNumber}` : ""} departed ${
+      stopName ?? "an assigned route stop"
+    }.`;
+  }
+
+  if (eventType === "student_boarded") {
+    return audience === "parent"
+      ? `${studentName ?? "Your child"} boarded the school bus.`
+      : `${studentName ?? "A student"} boarded the school bus.`;
+  }
+
+  if (eventType === "student_dropped") {
+    return audience === "parent"
+      ? `${studentName ?? "Your child"} was dropped at the assigned stop.`
+      : `${studentName ?? "A student"} was dropped at the assigned stop.`;
+  }
+
+  return "A transport update is available.";
+}
+
+function optionalFiniteNumber(value: unknown): number | null {
+  const parsed = z.number().finite().safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 function optionalUuid(value: unknown): string | null {

@@ -6,14 +6,16 @@ import type {
 } from "./types.ts";
 
 export async function loadDriverTransportSnapshot(
-  _principal: MobileAuthenticatedPrincipal,
+  principal: MobileAuthenticatedPrincipal,
 ): Promise<DriverTransportSnapshot | null> {
+  void principal;
   return null;
 }
 
 export async function listTransportAdminSnapshot(
-  _tenantId: string,
+  tenantId: string,
 ): Promise<TransportAdminSnapshot> {
+  void tenantId;
   return {
     drivers: [],
     vehicles: [],
@@ -29,8 +31,10 @@ export async function listTransportAdminSnapshot(
 }
 
 export async function applyTransportAction(
-  _tenantId: string,
-  _action: TransportAction,
+  tenantId: string,
+  action: TransportAction,
 ): Promise<Record<string, unknown>> {
+  void tenantId;
+  void action;
   throw new Error("Transport master data requires the PostgreSQL backend");
 }

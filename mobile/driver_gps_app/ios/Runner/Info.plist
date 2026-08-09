@@ -68,5 +68,11 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Hig Driver uses location while an active trip is open.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Hig Driver shares the vehicle location with the school while an assigned school trip is active, including when the app is in the background.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 </dict>
 </plist>

@@ -129,7 +129,7 @@ test("School Transport UI uses the authenticated production endpoint", () => {
   );
   assert.match(workspace, /Latest Driver Positions/);
   assert.match(workspace, /Recent Trip & Safety Events/);
-  assert.match(workspace, /foreground-only/i);
+  assert.match(workspace, /active-trip background GPS/i);
 });
 
 test("Stage 10 command remains separately runnable", () => {

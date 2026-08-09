@@ -8,12 +8,14 @@ const apiBaseUrl = String.fromEnvironment(
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const HigMobileApp(
-    config: HigMobileAppConfig(
-      title: 'Hig Student & Parent',
-      appId: 'com.higautomation.higschool.studentparent',
-      allowedPrincipalTypes: ['student', 'parent'],
-      apiBaseUrl: apiBaseUrl,
+  runApp(
+    const HigMobileApp(
+      config: HigMobileAppConfig(
+        title: 'Hig Student & Parent',
+        appId: 'com.higautomation.higschool.studentparent',
+        allowedPrincipalTypes: ['student', 'parent'],
+        apiBaseUrl: apiBaseUrl,
+      ),
     ),
-  ));
+  );
 }

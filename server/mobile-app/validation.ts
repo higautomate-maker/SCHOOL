@@ -13,6 +13,7 @@ export const mobileTransportEventSchema = z.object({
   eventType: z.enum(mobileTransportEventTypes),
   tripId: z.string().uuid().nullable().optional(),
   studentId: z.string().uuid().nullable().optional(),
+  stopId: z.string().uuid().nullable().optional(),
   latitude: z.number().finite().min(-90).max(90).nullable().optional(),
   longitude: z.number().finite().min(-180).max(180).nullable().optional(),
   accuracyMeters: z.number().finite().min(0).max(10000).nullable().optional(),
@@ -39,6 +40,20 @@ export const mobileTransportEventSchema = z.object({
       code: "custom",
       path: ["studentId"],
       message: "Boarding events require a student assignment",
+    });
+  }
+  if (
+    (
+      value.eventType === "stop_arrived"
+      || value.eventType === "stop_departed"
+      || value.eventType === "stop_approaching"
+    )
+    && (!value.tripId || !value.stopId)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["stopId"],
+      message: "Geofence events require an active trip and route stop",
     });
   }
 });

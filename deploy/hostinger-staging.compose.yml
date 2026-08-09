@@ -15,6 +15,14 @@ services:
       - staging_school_data:/data/staging-school
       - staging_school_logs:/logs/staging-school
     restart: unless-stopped
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.staging-school.entrypoints: websecure
+      traefik.http.routers.staging-school.rule: Host(`staging-school.higaai.com`)
+      traefik.http.routers.staging-school.service: staging-school
+      traefik.http.routers.staging-school.tls: "true"
+      traefik.http.routers.staging-school.tls.certresolver: letsencrypt
+      traefik.http.services.staging-school.loadbalancer.server.port: "3000"
     healthcheck:
       test:
         - CMD

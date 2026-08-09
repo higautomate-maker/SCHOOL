@@ -7,6 +7,13 @@ import {
   requirePostgresSchool,
 } from "../runtime/postgres-repository.ts";
 import { withTenantDatabase } from "../runtime/postgres.ts";
+import {
+  gatewaySettingsPayload,
+  maskGatewayCredentials,
+  mergeGatewayCredentialEdits,
+  readGatewayCredentials,
+} from "../payments/credentials.ts";
+import { supportedPaymentGatewayId } from "../payments/providers.ts";
 import type { ConfigurationAction, GatewaySettings } from "./validation.ts";
 
 type ConfigurationRow = { configKey: string; payload: unknown };
@@ -70,12 +77,13 @@ export function applyPostgresConfigurationAction(
        LIMIT 1`,
       [tenantId],
     );
-    const previous = gatewaySettings(existing.rows[0]?.payload);
-    const credentials = Object.fromEntries(
-      Object.entries(action.credentials).map(([key, value]) => [
-        key,
-        value === "••••••••" ? previous.credentials[key] ?? "" : value,
-      ]),
+    const previous = gatewaySettings(tenantId, existing.rows[0]?.payload);
+    if (!supportedPaymentGatewayId(action.gatewayId)) {
+      throw new Error("Unsupported payment gateway");
+    }
+    const credentials = mergeGatewayCredentialEdits(
+      action.credentials,
+      previous.credentials,
     );
     const payload: GatewaySettings = {
       enabled: action.enabled,
@@ -96,7 +104,11 @@ export function applyPostgresConfigurationAction(
          SET payload = EXCLUDED.payload,
              updated_by = EXCLUDED.updated_by,
              updated_at = EXCLUDED.updated_at`,
-      [tenantId, JSON.stringify(payload), actorId],
+      [
+        tenantId,
+        JSON.stringify(gatewaySettingsPayload(tenantId, payload)),
+        actorId,
+      ],
     );
     await insertAudit(
       client,
@@ -129,7 +141,7 @@ async function readConfiguration(
     [tenantId],
   );
   const gatewayRow = result.rows.find((row) => row.configKey === "payment_gateway");
-  const gateway = gatewaySettings(gatewayRow?.payload);
+  const gateway = gatewaySettings(tenantId, gatewayRow?.payload);
   const documents = Object.fromEntries(
     result.rows
       .filter((row) => row.configKey !== "payment_gateway")
@@ -144,23 +156,42 @@ async function readConfiguration(
   };
 }
 
-function gatewaySettings(value: unknown): GatewaySettings {
+function gatewaySettings(
+  tenantId: string,
+  value: unknown,
+): GatewaySettings {
+  const source = jsonObject(value);
+  const rawGatewayId =
+    typeof source.gatewayId === "string" ? source.gatewayId : "";
+  const gatewayId = supportedPaymentGatewayId(rawGatewayId)
+    ? rawGatewayId as GatewaySettings["gatewayId"]
+    : "";
+
   return {
     ...defaultGatewaySettings,
-    ...jsonObject(value),
-    credentials: jsonObject(jsonObject(value).credentials) as Record<string, string>,
-  } as GatewaySettings;
+    enabled: gatewayId ? source.enabled === true : false,
+    gatewayId,
+    paymentMode: source.paymentMode === "live" ? "live" : "sandbox",
+    credentials: readGatewayCredentials(tenantId, source),
+    surchargeEnabled: source.surchargeEnabled === true,
+    surchargeType:
+      source.surchargeType === "flat" ? "flat" : "percentage",
+    surchargeValue:
+      typeof source.surchargeValue === "number" &&
+      Number.isFinite(source.surchargeValue)
+        ? source.surchargeValue
+        : 0,
+    surchargeLabel:
+      typeof source.surchargeLabel === "string"
+        ? source.surchargeLabel
+        : defaultGatewaySettings.surchargeLabel,
+  };
 }
 
-function maskSecrets(credentials: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(credentials).map(([key, value]) => [
-      key,
-      /secret|password|passkey|salt|token|encryption|private/i.test(key) && value
-        ? "••••••••"
-        : value,
-    ]),
-  );
+function maskSecrets(
+  credentials: Record<string, string>,
+): Record<string, string> {
+  return maskGatewayCredentials(credentials);
 }
 
 function insertAudit(

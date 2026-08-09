@@ -8,6 +8,7 @@ import type {
   MobileDeviceRegistration,
   MobileTransportEvent,
   MobileTransportEventType,
+  ParentTransportTrackingSnapshot,
 } from "./types.ts";
 
 export async function registerMobileDevice(
@@ -167,7 +168,10 @@ export async function listMobileTransportEvents(
   return result.results.map(toEvent);
 }
 
-type TransportEventRow = Omit<MobileTransportEvent, "metadata" | "eventType"> & {
+type TransportEventRow = Omit<
+  MobileTransportEvent,
+  "metadata" | "eventType" | "stopId"
+> & {
   eventType: string;
   metadataJson: string;
 };
@@ -175,6 +179,7 @@ type TransportEventRow = Omit<MobileTransportEvent, "metadata" | "eventType"> & 
 function toEvent(row: TransportEventRow): MobileTransportEvent {
   return {
     ...row,
+    stopId: null,
     eventType: row.eventType as MobileTransportEventType,
     metadata: safeRecord(row.metadataJson),
   };
@@ -189,4 +194,24 @@ function safeRecord(value: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+export async function loadParentTransportTracking(
+  principal: MobileAuthenticatedPrincipal,
+  studentIds: readonly string[],
+): Promise<ParentTransportTrackingSnapshot> {
+  void studentIds;
+  if (principal.principalType !== "parent") {
+    throw new Error("Parent identity required");
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    children: [],
+    privacy: {
+      scope: "linked_students_only",
+      locationHistoryExposed: false,
+      driverContactExposed: false,
+      activeTripLocationOnly: true,
+    },
+  };
 }
