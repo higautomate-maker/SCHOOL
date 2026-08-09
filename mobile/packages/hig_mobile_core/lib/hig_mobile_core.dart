@@ -13,6 +13,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
+part 'src/hig_mobile_ui.dart';
+
 const _uuid = Uuid();
 
 typedef JsonMap = Map<String, dynamic>;
@@ -602,7 +604,7 @@ class HigMobileAppConfig {
     required this.appId,
     required this.allowedPrincipalTypes,
     required this.apiBaseUrl,
-    this.seedColor = const Color(0xffe94e0c),
+    this.seedColor = const Color(0xff286ea8),
   });
 
   final String title;
@@ -620,10 +622,7 @@ class HigMobileApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
         debugShowCheckedModeBanner: false,
         title: config.title,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: config.seedColor),
-          useMaterial3: true,
-        ),
+        theme: higMobileTheme(config.seedColor),
         home: HigMobileRoot(config: config),
       );
 }
@@ -732,6 +731,7 @@ class _LoginViewState extends State<LoginView> {
   final password = TextEditingController();
   late String principalType;
   bool busy = false;
+  bool obscurePassword = true;
   String? message;
 
   @override
@@ -770,91 +770,191 @@ class _LoginViewState extends State<LoginView> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        body: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.all(28),
-            children: [
-              const SizedBox(height: 30),
-              CircleAvatar(
-                radius: 34,
-                child: Text(
-                  widget.config.title.characters.first,
-                  style: const TextStyle(
-                      fontSize: 30, fontWeight: FontWeight.w900),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                widget.config.title,
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(fontSize: 27, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 28),
-              TextField(
-                controller: tenant,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'School tenant ID',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: principalType,
-                decoration: const InputDecoration(
-                  labelText: 'Sign in as',
-                  border: OutlineInputBorder(),
-                ),
-                items: widget.config.allowedPrincipalTypes
-                    .map(
-                      (entry) => DropdownMenuItem(
-                        value: entry,
-                        child: Text(_title(entry)),
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xffedf5fb), HigPalette.canvas],
+              begin: Alignment.topCenter,
+              end: Alignment.center,
+            ),
+          ),
+          child: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    width: 62,
+                    height: 62,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [HigPalette.navy, HigPalette.blue],
                       ),
-                    )
-                    .toList(),
-                onChanged: busy
-                    ? null
-                    : (value) => setState(() => principalType = value!),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: email,
-                keyboardType: TextInputType.emailAddress,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: password,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              if ((message ?? widget.error) != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Text(
-                    message ?? widget.error!,
-                    style:
-                        TextStyle(color: Theme.of(context).colorScheme.error),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(
+                      Icons.school_rounded,
+                      color: Colors.white,
+                      size: 32,
+                    ),
                   ),
                 ),
-              const SizedBox(height: 18),
-              FilledButton(
-                onPressed: busy ? null : submit,
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Text(busy ? 'Signing in…' : 'Sign in securely'),
+                const SizedBox(height: 28),
+                const Text(
+                  'Welcome back',
+                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
                 ),
-              ),
-            ],
+                const SizedBox(height: 7),
+                Text(
+                  'Sign in to ${widget.config.title} and continue your school day.',
+                  style: const TextStyle(
+                    color: HigPalette.muted,
+                    fontSize: 15,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                if (widget.config.allowedPrincipalTypes.length > 1) ...[
+                  const Text(
+                    'I am signing in as',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 9),
+                  SegmentedButton<String>(
+                    segments: widget.config.allowedPrincipalTypes
+                        .map(
+                          (entry) => ButtonSegment(
+                            value: entry,
+                            icon: Icon(
+                              entry == 'parent'
+                                  ? Icons.family_restroom_rounded
+                                  : Icons.school_rounded,
+                            ),
+                            label: Text(_title(entry)),
+                          ),
+                        )
+                        .toList(),
+                    selected: {principalType},
+                    onSelectionChanged: busy
+                        ? null
+                        : (value) =>
+                            setState(() => principalType = value.first),
+                    showSelectedIcon: false,
+                  ),
+                  const SizedBox(height: 18),
+                ],
+                TextField(
+                  controller: tenant,
+                  autocorrect: false,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'School ID',
+                    hintText: 'Provided by your school',
+                    prefixIcon: Icon(Icons.apartment_rounded),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: email,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autocorrect: false,
+                  decoration: const InputDecoration(
+                    labelText: 'Email address',
+                    prefixIcon: Icon(Icons.mail_outline_rounded),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: password,
+                  obscureText: obscurePassword,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: busy ? null : (_) => submit(),
+                  decoration: InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon: const Icon(Icons.lock_outline_rounded),
+                    suffixIcon: IconButton(
+                      tooltip:
+                          obscurePassword ? 'Show password' : 'Hide password',
+                      onPressed: () => setState(
+                        () => obscurePassword = !obscurePassword,
+                      ),
+                      icon: Icon(
+                        obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                        title: const Text('Can’t sign in?'),
+                        content: const Text(
+                          'Contact your school administrator to reset your password or confirm your School ID.',
+                        ),
+                        actions: [
+                          FilledButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('Got it'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    child: const Text('Need help signing in?'),
+                  ),
+                ),
+                if ((message ?? widget.error) != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 4),
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .errorContainer
+                          .withValues(alpha: .55),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(message ?? widget.error!)),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 18),
+                FilledButton(
+                  onPressed: busy ? null : submit,
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Text(busy ? 'Signing in…' : 'Sign in securely'),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.shield_outlined,
+                        size: 17, color: HigPalette.muted),
+                    SizedBox(width: 6),
+                    Text(
+                      'Protected role-based school access',
+                      style: TextStyle(color: HigPalette.muted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -881,6 +981,51 @@ class HomeView extends StatefulWidget {
 
 class _HomeViewState extends State<HomeView> {
   int index = 0;
+  List<String> recentKeys = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadRecent());
+  }
+
+  String get principalType {
+    final wrapper = widget.home?['home'];
+    if (wrapper is! Map) return '';
+    return wrapper['principalType']?.toString() ?? '';
+  }
+
+  Future<void> _loadRecent() async {
+    final keys = await HigRecentFeatureStore.read(principalType);
+    if (mounted) setState(() => recentKeys = keys);
+  }
+
+  Future<void> _openModule(JsonMap item) async {
+    final key = item['key']?.toString() ?? '';
+    final next = await HigRecentFeatureStore.record(principalType, key);
+    if (mounted) setState(() => recentKeys = next);
+    if (!mounted) return;
+    final wrapper = widget.home?['home'];
+    final roleHome =
+        wrapper is Map ? wrapper.cast<String, dynamic>() : <String, dynamic>{};
+    final availableStudents = ((roleHome['students'] as List?) ?? const [])
+        .map((entry) => (entry as Map).cast<String, dynamic>())
+        .where((student) => (student['id']?.toString() ?? '').isNotEmpty)
+        .toList();
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => principalType == 'parent' && key == 'transport_tracking'
+            ? ParentTransportTrackingPage(api: widget.api)
+            : ModuleDetailPage(
+                api: widget.api,
+                principalType: principalType,
+                item: item,
+                availableStudents: availableStudents,
+              ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -905,22 +1050,23 @@ class _HomeViewState extends State<HomeView> {
     final modules =
         entries.map((entry) => (entry as Map).cast<String, dynamic>()).toList();
     final pages = [
-      DashboardPage(home: home, api: widget.api, onRefresh: widget.onRefresh),
-      ModulesPage(
-        api: widget.api,
+      HigRoleDashboardPage(
+        home: home,
+        modules: modules,
+        recentKeys: recentKeys,
+        onRefresh: widget.onRefresh,
+        onOpen: _openModule,
+        onAlerts: () => setState(() => index = 2),
+      ),
+      HigRoleWorkspacePage(
         principalType: principalType,
         modules: modules,
+        onOpen: _openModule,
       ),
-      NotificationsPage(api: widget.api),
-      ProfilePage(home: home, onLogout: widget.onLogout),
+      HigNotificationsView(api: widget.api),
+      HigProfileView(home: home, onLogout: widget.onLogout),
     ];
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.config.title),
-        actions: [
-          IconButton(onPressed: widget.onRefresh, icon: const Icon(Icons.sync)),
-        ],
-      ),
       body: IndexedStack(index: index, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
@@ -934,7 +1080,7 @@ class _HomeViewState extends State<HomeView> {
           NavigationDestination(
             icon: Icon(Icons.apps_outlined),
             selectedIcon: Icon(Icons.apps),
-            label: 'Modules',
+            label: 'Workspace',
           ),
           NavigationDestination(
             icon: Icon(Icons.notifications_outlined),
@@ -1409,10 +1555,12 @@ class ModuleDetailPage extends StatefulWidget {
     required this.api,
     required this.principalType,
     required this.item,
+    this.availableStudents = const [],
   });
   final HigMobileApi api;
   final String principalType;
   final JsonMap item;
+  final List<JsonMap> availableStudents;
 
   @override
   State<ModuleDetailPage> createState() => _ModuleDetailPageState();
@@ -1430,6 +1578,13 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
         'fees_summary',
         'fees_finance',
       }.contains(key);
+
+  String get manageLabel {
+    if (key == 'attendance') return 'Mark attendance';
+    if (key == 'fees_finance') return 'Create invoice';
+    if (widget.principalType == 'parent') return 'Send request';
+    return 'Add update';
+  }
 
   @override
   void initState() {
@@ -1455,6 +1610,9 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
     final title = TextEditingController();
     final description = TextEditingController();
     final studentId = TextEditingController();
+    String? selectedStudentId = widget.availableStudents.length == 1
+        ? widget.availableStudents.first['id']?.toString()
+        : null;
     final requestType = key == 'leave_requests'
         ? 'leave_request'
         : key == 'ptm_meetings'
@@ -1468,12 +1626,33 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: studentId,
-                decoration: const InputDecoration(
-                  labelText: 'Linked student ID',
+              if (widget.availableStudents.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  initialValue: selectedStudentId,
+                  decoration: const InputDecoration(
+                    labelText: 'Student',
+                    prefixIcon: Icon(Icons.school_outlined),
+                  ),
+                  items: widget.availableStudents
+                      .map(
+                        (student) => DropdownMenuItem(
+                          value: student['id']?.toString(),
+                          child: Text(
+                            student['fullName']?.toString() ?? 'Student',
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => selectedStudentId = value,
+                )
+              else
+                TextField(
+                  controller: studentId,
+                  decoration: const InputDecoration(
+                    labelText: 'Linked student ID',
+                  ),
                 ),
-              ),
+              const SizedBox(height: 10),
               TextField(
                 controller: title,
                 decoration: const InputDecoration(labelText: 'Title'),
@@ -1496,7 +1675,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
               final result = await widget.api.contentAction({
                 'action': 'parent_request',
                 'requestType': requestType,
-                'studentId': studentId.text.trim(),
+                'studentId': selectedStudentId ?? studentId.text.trim(),
                 'title': title.text.trim(),
                 'description': description.text.trim(),
               });
@@ -1532,6 +1711,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
 
   Future<void> attendanceAction() async {
     final studentId = TextEditingController();
+    String? selectedStudentId;
     final date = TextEditingController(
       text: DateTime.now().toIso8601String().substring(0, 10),
     );
@@ -1545,10 +1725,32 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: studentId,
-                  decoration: const InputDecoration(labelText: 'Student ID'),
-                ),
+                if (widget.availableStudents.isNotEmpty)
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedStudentId,
+                    decoration: const InputDecoration(
+                      labelText: 'Student',
+                      prefixIcon: Icon(Icons.school_outlined),
+                    ),
+                    items: widget.availableStudents
+                        .map(
+                          (student) => DropdownMenuItem(
+                            value: student['id']?.toString(),
+                            child: Text(
+                              student['fullName']?.toString() ?? 'Student',
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => selectedStudentId = value),
+                  )
+                else
+                  TextField(
+                    controller: studentId,
+                    decoration: const InputDecoration(labelText: 'Student ID'),
+                  ),
+                const SizedBox(height: 10),
                 TextField(
                   controller: date,
                   decoration: const InputDecoration(
@@ -1580,7 +1782,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
               onPressed: () async {
                 final result = await widget.api.operation({
                   'action': 'mark_attendance',
-                  'studentId': studentId.text.trim(),
+                  'studentId': selectedStudentId ?? studentId.text.trim(),
                   'attendanceDate': date.text.trim(),
                   'status': status,
                   'note': 'Marked from Hig Staff & Admin mobile app',
@@ -1604,6 +1806,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
 
   Future<void> invoiceAction() async {
     final studentId = TextEditingController();
+    String? selectedStudentId;
     final feeType = TextEditingController(text: 'Tuition Fee');
     final amount = TextEditingController();
     final dueDate = TextEditingController(
@@ -1620,10 +1823,31 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
-                controller: studentId,
-                decoration: const InputDecoration(labelText: 'Student ID'),
-              ),
+              if (widget.availableStudents.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  initialValue: selectedStudentId,
+                  decoration: const InputDecoration(
+                    labelText: 'Student',
+                    prefixIcon: Icon(Icons.school_outlined),
+                  ),
+                  items: widget.availableStudents
+                      .map(
+                        (student) => DropdownMenuItem(
+                          value: student['id']?.toString(),
+                          child: Text(
+                            student['fullName']?.toString() ?? 'Student',
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) => selectedStudentId = value,
+                )
+              else
+                TextField(
+                  controller: studentId,
+                  decoration: const InputDecoration(labelText: 'Student ID'),
+                ),
+              const SizedBox(height: 10),
               TextField(
                 controller: feeType,
                 decoration: const InputDecoration(labelText: 'Fee type'),
@@ -1653,7 +1877,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
               if (rupees == null || rupees <= 0) return;
               final result = await widget.api.operation({
                 'action': 'create_invoice',
-                'studentId': studentId.text.trim(),
+                'studentId': selectedStudentId ?? studentId.text.trim(),
                 'feeType': feeType.text.trim(),
                 'amountPaise': (rupees * 100).round(),
                 'dueDate': dueDate.text.trim(),
@@ -1676,7 +1900,15 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
   Future<void> contentCreateAction() async {
     final title = TextEditingController();
     final description = TextEditingController();
-    final assignee = TextEditingController(text: 'Schoolwide');
+    var assignee = 'Schoolwide';
+    final classOptions = widget.availableStudents
+        .map((student) =>
+            '${student['className'] ?? ''} ${student['sectionName'] ?? ''}'
+                .trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
     final dueDate = TextEditingController();
     await showDialog<void>(
       context: context,
@@ -1695,11 +1927,21 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                 maxLines: 3,
                 decoration: const InputDecoration(labelText: 'Description'),
               ),
-              TextField(
-                controller: assignee,
+              DropdownButtonFormField<String>(
+                initialValue: assignee,
                 decoration: const InputDecoration(
-                  labelText: 'Assignee (Schoolwide, class, or student)',
+                  labelText: 'Audience',
+                  prefixIcon: Icon(Icons.groups_outlined),
                 ),
+                items: ['Schoolwide', ...classOptions]
+                    .map(
+                      (value) => DropdownMenuItem(
+                        value: value,
+                        child: Text(value),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) => assignee = value ?? 'Schoolwide',
               ),
               TextField(
                 controller: dueDate,
@@ -1726,7 +1968,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                 'recordDate': DateTime.now().toIso8601String().substring(0, 10),
                 'dueDate': dueDate.text.trim(),
                 'amountPaise': null,
-                'assignee': assignee.text.trim(),
+                'assignee': assignee,
                 'priority': 'normal',
               });
               if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -1769,48 +2011,128 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
           ? FloatingActionButton.extended(
               onPressed: parentRequest,
               icon: const Icon(Icons.send),
-              label: const Text('Request'),
+              label: Text(manageLabel),
             )
           : widget.principalType == 'school' && widget.item['canManage'] == true
               ? FloatingActionButton.extended(
                   onPressed: busy ? null : manageAction,
                   icon: const Icon(Icons.add),
-                  label: const Text('Manage'),
+                  label: Text(manageLabel),
                 )
               : null,
       body: error != null
           ? Center(child: Text(error!))
           : data == null
               ? const Center(child: CircularProgressIndicator())
-              : records.isEmpty
-                  ? const Center(
-                      child: Text('No authorized records are available yet.'),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: records.length,
-                      itemBuilder: (context, index) {
-                        final record =
-                            (records[index] as Map).cast<String, dynamic>();
-                        return Card(
-                          child: ListTile(
-                            leading: const CircleAvatar(
-                              child: Icon(Icons.description_outlined),
-                            ),
-                            title: Text(
-                              record['title']?.toString() ??
-                                  record['studentName']?.toString() ??
-                                  'Record',
-                            ),
-                            subtitle: Text(
-                              record['description']?.toString() ??
-                                  record['status']?.toString() ??
-                                  '',
-                            ),
+              : Builder(
+                  builder: (context) {
+                    final visual = _featureVisual(key);
+                    return ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: visual.color,
+                            borderRadius: BorderRadius.circular(22),
                           ),
-                        );
-                      },
-                    ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 52,
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: .16),
+                                  borderRadius: BorderRadius.circular(17),
+                                ),
+                                child: Icon(
+                                  visual.icon,
+                                  color: Colors.white,
+                                  size: 29,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '$title overview',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${records.length} authorized ${records.length == 1 ? 'record' : 'records'} · ${widget.item['canManage'] == true ? 'Manage access' : 'View access'}',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        if (records.isEmpty)
+                          _HigEmptyCard(
+                            icon: visual.icon,
+                            title: 'Nothing here yet',
+                            message:
+                                'Authorized $title updates will appear here when the school publishes them.',
+                          )
+                        else
+                          for (final entry in records) ...[
+                            Builder(
+                              builder: (context) {
+                                final record =
+                                    (entry as Map).cast<String, dynamic>();
+                                final status =
+                                    record['status']?.toString() ?? '';
+                                return Card(
+                                  child: ListTile(
+                                    minVerticalPadding: 14,
+                                    leading: CircleAvatar(
+                                      backgroundColor:
+                                          visual.color.withValues(alpha: .10),
+                                      child: Icon(
+                                        visual.icon,
+                                        color: visual.color,
+                                      ),
+                                    ),
+                                    title: Text(
+                                      record['title']?.toString() ??
+                                          record['studentName']?.toString() ??
+                                          'Record',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      record['description']?.toString() ??
+                                          status,
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    trailing: status.isEmpty
+                                        ? const Icon(Icons.chevron_right)
+                                        : _HigRoleBadge(
+                                            label: _title(status),
+                                          ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 10),
+                          ],
+                      ],
+                    );
+                  },
+                ),
     );
   }
 }

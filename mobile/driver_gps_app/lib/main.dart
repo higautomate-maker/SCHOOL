@@ -21,17 +21,8 @@ class DriverApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'Hig Driver',
-        theme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.light,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xff1565c0),
-            brightness: Brightness.light,
-          ),
-          scaffoldBackgroundColor: const Color(0xfff4f6fb),
-          cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
-        ),
+        title: 'Hig School Transport',
+        theme: higMobileTheme(const Color(0xff1565c0)),
         home: const DriverRoot(),
       );
 }
@@ -136,6 +127,7 @@ class _DriverLoginState extends State<DriverLogin> {
   final email = TextEditingController();
   final password = TextEditingController();
   bool busy = false;
+  bool obscurePassword = true;
   String? message;
 
   @override
@@ -184,12 +176,12 @@ class _DriverLoginState extends State<DriverLogin> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'Hig Driver',
+                'Hig School Transport',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
               ),
               const Text(
-                'School transport operations',
+                'Your route, students and trip controls in one place',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.black54),
               ),
@@ -197,8 +189,9 @@ class _DriverLoginState extends State<DriverLogin> {
               TextField(
                 controller: tenant,
                 decoration: const InputDecoration(
-                  labelText: 'School tenant ID',
-                  border: OutlineInputBorder(),
+                  labelText: 'School ID',
+                  hintText: 'Provided by your school',
+                  prefixIcon: Icon(Icons.apartment_rounded),
                 ),
               ),
               const SizedBox(height: 12),
@@ -206,17 +199,31 @@ class _DriverLoginState extends State<DriverLogin> {
                 controller: email,
                 keyboardType: TextInputType.emailAddress,
                 decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
+                  labelText: 'Email address',
+                  prefixIcon: Icon(Icons.mail_outline_rounded),
                 ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: password,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: obscurePassword,
+                textInputAction: TextInputAction.done,
+                onSubmitted: busy ? null : (_) => submit(),
+                decoration: InputDecoration(
                   labelText: 'Password',
-                  border: OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.lock_outline_rounded),
+                  suffixIcon: IconButton(
+                    tooltip:
+                        obscurePassword ? 'Show password' : 'Hide password',
+                    onPressed: () => setState(
+                      () => obscurePassword = !obscurePassword,
+                    ),
+                    icon: Icon(
+                      obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                  ),
                 ),
               ),
               if ((message ?? widget.error) != null)
@@ -235,6 +242,21 @@ class _DriverLoginState extends State<DriverLogin> {
                   padding: const EdgeInsets.all(15),
                   child: Text(busy ? 'Signing in…' : 'Sign in'),
                 ),
+              ),
+              const SizedBox(height: 18),
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.shield_outlined, size: 17, color: Colors.black54),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Only assigned routes and students are shown',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.black54, fontSize: 12),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
