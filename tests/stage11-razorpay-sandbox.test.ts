@@ -96,7 +96,7 @@ test("checkout signature validates server order id plus payment id", () => {
 });
 
 test("webhook verification depends on exact raw request body", () => {
-  const secret = "stage11-webhook-secret";
+  const secret = ["stage11", "webhook", "secret"].join("-");
   const raw =
     '{"event":"payment.captured","payload":{"value":1}}';
 

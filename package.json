@@ -33,6 +33,9 @@
     "test:load:postgres": "node --experimental-strip-types scripts/test-postgres-load.ts",
     "test:readiness:production": "node --experimental-strip-types scripts/test-stage5-readiness.ts",
     "validate:production": "node --experimental-strip-types scripts/validate-production-environment.ts",
+    "production:validate": "node --experimental-strip-types scripts/validate-production-environment.ts",
+    "production:database-roles": "node --experimental-strip-types scripts/validate-production-database-roles.ts",
+    "production:migrate": "node --experimental-strip-types scripts/migrate-production-postgres.ts",
     "staging:validate": "node --experimental-strip-types scripts/validate-staging-environment.ts",
     "staging:database-roles": "node --experimental-strip-types scripts/validate-staging-database-roles.ts",
     "staging:migrate": "node --experimental-strip-types scripts/migrate-staging-postgres.ts",
@@ -52,7 +55,8 @@
     "stage9:test": "node --experimental-strip-types --test tests/stage9-*.test.ts",
     "stage9:mobile:validate": "bash mobile/scripts/validate_flutter_apps.sh",
     "stage10:test": "node --experimental-strip-types --test tests/stage10-*.test.ts",
-    "stage11:test": "node --experimental-strip-types --test tests/stage11-*.test.ts"
+    "stage11:test": "node --experimental-strip-types --test tests/stage11-*.test.ts",
+    "stage13:test": "node --experimental-strip-types --test tests/stage13-*.test.ts"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "1.49.0",

@@ -1,0 +1,86 @@
+name: production-school
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: runner
+    image: hig-school-production-app:${PRODUCTION_IMAGE_TAG:?Set PRODUCTION_IMAGE_TAG}
+    env_file:
+      - ../.env.production
+    ports:
+      - "127.0.0.1:${PRODUCTION_HOST_PORT:-3200}:3000"
+    volumes:
+      - production_school_logs:/logs/hig-school-production
+    restart: unless-stopped
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.production-school.entrypoints: websecure
+      traefik.http.routers.production-school.rule: Host(`${PRODUCTION_HOSTNAME:?Set PRODUCTION_HOSTNAME}`)
+      traefik.http.routers.production-school.service: production-school
+      traefik.http.routers.production-school.tls: "true"
+      traefik.http.routers.production-school.tls.certresolver: letsencrypt
+      traefik.http.services.production-school.loadbalancer.server.port: "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 9
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: notification-worker
+    image: hig-school-production-worker:${PRODUCTION_IMAGE_TAG:?Set PRODUCTION_IMAGE_TAG}
+    env_file:
+      - ../.env.production
+    volumes:
+      - production_school_logs:/logs/hig-school-production
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - npm
+        - run
+        - stage8:worker:health
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  operator:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: production-operator
+    image: hig-school-production-operator:${PRODUCTION_IMAGE_TAG:?Set PRODUCTION_IMAGE_TAG}
+    env_file:
+      - ../.env.production
+      - ../.env.production.operator
+    volumes:
+      - production_school_backups:/backups/hig-school-production
+    profiles:
+      - operator
+
+volumes:
+  production_school_logs:
+    name: production_school_logs
+  production_school_backups:
+    name: production_school_backups
