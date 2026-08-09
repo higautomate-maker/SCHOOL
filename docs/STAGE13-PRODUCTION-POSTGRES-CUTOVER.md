@@ -2,15 +2,35 @@
 
 Date: 2026-08-09
 
-Status: **Production-safe deployment package complete; infrastructure creation
-and activation await resource/maintenance approval.**
+Status: **Production PostgreSQL provisioned and migrated; production Redis,
+Hostinger candidate activation and private readiness acceptance remain pending.**
+
+## Provisioned production resources
+
+- Neon project: `hig-school-production` (`blue-dawn-27831797`)
+- Cloud/region: AWS Singapore (`aws-ap-southeast-1`)
+- PostgreSQL: 16
+- Production branch: `production` (`br-shiny-bar-az21m26c`)
+- Database: `hig_school_production`
+- Migration role: `hig_school_production_owner`
+- Runtime role: `hig_school_production_app`, created through SQL without
+  `neon_superuser` membership and verified `NOSUPERUSER`, `NOBYPASSRLS`,
+  `NOCREATEDB`, `NOCREATEROLE` and zero owned tables
+- Pre-migration recovery branch: `stage13-pre-migration-20260809`
+  (`br-restless-meadow-az04t737`)
+- Reserved production hostname: `school.higaai.com`; DNS/public routing remains
+  intentionally unconfigured until Stage 14
+- Migration state: all 15 migrations through `0014_payment_foundation.sql`
+  applied on 2026-08-09 with exact checksum verification
+- Greenfield verification: zero tenants, users, plans and prohibited demo rows;
+  51 RLS-enabled tables and 79 policies
 
 ## Confirmed production classification
 
 This is a greenfield production repository. Hostinger currently contains only
-the `staging-school` application, and the connected Neon organization currently
-contains only the `staging-school` project. There is no production repository
-database and no legacy production SQLite business database to import.
+the `staging-school` application. The isolated Neon production project listed
+above now exists, but there is no legacy production SQLite business database to
+import.
 
 The Stage 13 path therefore creates an empty, isolated production PostgreSQL
 database, applies migrations and verifies it remains empty. First-school
@@ -33,18 +53,18 @@ is forbidden.
 
 ## Required production resources
 
-Before executing the migration:
+Resource checklist:
 
-1. Create a separate Neon project in the HIG Automation organization, in the
-   approved production region and plan.
-2. Create `hig_school_production` plus distinct
+1. [x] Create a separate Neon project in the HIG Automation organization, in
+   AWS Singapore.
+2. [x] Create `hig_school_production` plus distinct
    `hig_school_production_owner` and `hig_school_production_app` roles.
-3. Grant the application role only required schema/table/sequence privileges;
-   it must remain `NOSUPERUSER`, `NOBYPASSRLS` and not own tables.
-4. Create a production Redis allocation with TLS and authentication.
-5. Select the production hostname and configure DNS only after the candidate is
+3. [x] Grant the application role only required schema/table/sequence
+   privileges and verify it is `NOSUPERUSER`, `NOBYPASSRLS` and owns no tables.
+4. [ ] Create a production Redis allocation with TLS and authentication.
+5. [x] Reserve `school.higaai.com`; configure DNS only after the candidate is
    healthy. Stage 14 controls public traffic and launch.
-6. Store production secrets in protected environment files or the Hostinger
+6. [ ] Store production secrets in protected environment files or the Hostinger
    secret manager; never put values in Git, chat, build arguments or images.
 
 ## Pre-migration procedure
