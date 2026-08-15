@@ -54,3 +54,16 @@ Publish via "Save to GitHub" → open PR into `main`. No secrets/env/migrations 
 Verification: `test:unit` 356 pass / 0 fail / 14 todo (370); tsc 0; eslint 0; web build OK.
 Testing agent (frontend): 9/9 auth-UX requirements PASS. Only finding = preview-infra WAF blocks %00 in Vite dev module URLs (hydration needs proxy on preview URL only; production build unaffected) — not a code defect.
 Total: 10 commits on branch.
+
+## Update — 2026-06 (session 3: four requested enhancements)
+1. **APK Pipeline**: `.github/workflows/mobile-apk.yml` — PR job (ubuntu x86_64) running `flutter analyze` + tests + **unsigned** debug APK builds for all 3 apps, pub/Gradle caching, artifacts 5-day retention. No signing/secrets/publishing. Flutter analyze verified clean on core + 3 apps.
+2. **Brand Consistency**: `app/AuthBrandPanel.tsx` + responsive `app/auth-flow.module.css` → two-panel branded layout on wide screens for login/reset/forgot/invitation, single compact card on mobile. Auth behaviour + safe messages unchanged. Screenshots in `docs/screenshots/after-v2/`.
+3. **Today Summary**: pure `server/mobile-app/today-summary.ts` + `mobileTodaySummary()` + `GET /api/v1/mobile/today` (read-only, counts-only, fail-closed, no N+1, no migration). Additive `today`/`unreadNotices` on home snapshot. Tests cover all 6 roles (Company/School/Teacher/Parent/Student/Transporter).
+4. **Unread Notices**: count-only badge on mobile bell (existing `unreadCount`, hidden at 0, `99+` cap) + Today summary strip on role dashboard.
+
+Docs: `EMERGENT_API_ADDITIONS.md`, `EMERGENT_FEATURE_GAP_ANALYSIS.md`; updated changelog/test-results/manifest.
+Verification: `test:unit` 364 pass / 0 fail / 14 todo (378); tsc 0; eslint 0; web build OK (new /api/v1/mobile/today emitted); flutter analyze clean (all apps).
+Testing agent (frontend, iteration_2): two-panel layout confirmed on all 4 pages desktop + collapses on mobile (no overflow); safe-message + validation regressions pass; no code defects (only the pre-existing preview-WAF %00 hydration limitation on 2 pages — infra, not code). 16 commits total.
+
+## Deployment note (parked)
+Emergent one-click deploy fails because the pipeline expects `backend/.env` + managed MongoDB; this app is root-level Next.js/vinext on **Postgres+Redis (with RLS)** and ships its own Docker/Postgres deploy path (`docs/HOSTINGER_RUNTIME_ARCHITECTURE.md`). Not compatible with Emergent's MongoDB pipeline without a full, destructive data-layer rewrite (out of scope / against constraints). Awaiting user decision.
