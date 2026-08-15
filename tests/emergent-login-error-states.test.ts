@@ -10,6 +10,11 @@ import {
   messageForStatus,
   networkMessage,
   validateLoginFields,
+  RESET_MESSAGES,
+  INVITATION_MESSAGES,
+  messageForResetStatus,
+  messageForInvitationStatus,
+  passwordPolicyError,
 } from "../app/login/error-messages.ts";
 import {
   resolveEffectiveSchoolModuleAccess,
@@ -107,4 +112,34 @@ test("app feature becomes accessible only when policy AND dependency are satisfi
   });
   const tracking = resolved.find((f) => f.feature.key === "transport_tracking");
   assert.equal(tracking?.accessible, true);
+});
+
+test("password reset: any invalid/expired/rejected status collapses to one safe message", () => {
+  for (const status of [400, 403, 404, 410, 422]) {
+    assert.equal(messageForResetStatus(status), RESET_MESSAGES.resetInvalid);
+  }
+  assert.equal(messageForResetStatus(429), RESET_MESSAGES.rateLimited);
+  assert.equal(messageForResetStatus(503), RESET_MESSAGES.unavailable);
+  assert.equal(messageForResetStatus(500), RESET_MESSAGES.unavailable);
+});
+
+test("invitation accept: invalid/expired never reveals validity detail", () => {
+  for (const status of [400, 403, 404, 410, 422]) {
+    assert.equal(messageForInvitationStatus(status), INVITATION_MESSAGES.acceptInvalid);
+  }
+  assert.equal(messageForInvitationStatus(429), INVITATION_MESSAGES.rateLimited);
+  assert.equal(messageForInvitationStatus(503), INVITATION_MESSAGES.unavailable);
+});
+
+test("password policy is enforced client-side before submit", () => {
+  assert.equal(passwordPolicyError(""), LOGIN_MESSAGES.passwordRequired);
+  assert.equal(passwordPolicyError("short"), RESET_MESSAGES.passwordTooShort);
+  assert.equal(passwordPolicyError("a-strong-enough-password"), undefined);
+});
+
+test("reset & invitation copy contain no technical terms", () => {
+  const banned = /(stack|trace|timeout|exception|sql|database|undefined|null|token|fetch|http)/i;
+  for (const value of [...Object.values(RESET_MESSAGES), ...Object.values(INVITATION_MESSAGES)]) {
+    assert.ok(!banned.test(value), `unsafe copy: ${value}`);
+  }
 });

@@ -19,7 +19,7 @@ test("mobile shell provides role-focused daily work and discoverable navigation"
   assert.match(core, /HigNotificationsView/);
   assert.match(core, /HigProfileView/);
   assert.match(roleUi, /Recently used/);
-  assert.match(roleUi, /Daily shortcuts/);
+  assert.match(roleUi, /Daily priorities/);
   assert.match(roleUi, /Search your workspace/);
   assert.match(roleUi, /Linked students/);
   assert.match(roleUi, /higMobileTheme/);
