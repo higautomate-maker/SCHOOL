@@ -55,3 +55,60 @@ export function messageForStatus(status: number): string {
 export function networkMessage(): string {
   return LOGIN_MESSAGES.network;
 }
+
+// ---------------------------------------------------------------------------
+// Password reset & invitation flows (same safety guarantees as login).
+// The server already returns enumeration-safe generic responses; these keep the
+// client copy plain-language and never reveal whether an email/invitation
+// exists or leak technical/API detail.
+// ---------------------------------------------------------------------------
+
+export const RESET_MESSAGES = {
+  // Shown for BOTH success and failure of a reset request, so we never reveal
+  // whether the email is registered.
+  requestAcknowledged:
+    "If your email is registered, we’ve sent password-reset instructions. Please check your inbox and spam folder.",
+  resetSuccess: "Your password has been reset. You can now sign in.",
+  resetInvalid:
+    "This reset link is invalid or has expired. Please request a new one.",
+  network: LOGIN_MESSAGES.network,
+  rateLimited: LOGIN_MESSAGES.rateLimited,
+  unavailable: LOGIN_MESSAGES.unavailable,
+  emailRequired: LOGIN_MESSAGES.emailRequired,
+  emailInvalid: LOGIN_MESSAGES.emailInvalid,
+  passwordRequired: LOGIN_MESSAGES.passwordRequired,
+  passwordTooShort: "Please choose a password with at least 12 characters.",
+} as const;
+
+export const INVITATION_MESSAGES = {
+  acceptSuccess: "Invitation accepted. You can now sign in.",
+  acceptInvalid:
+    "This invitation link is invalid or has expired. Please contact your administrator.",
+  network: LOGIN_MESSAGES.network,
+  rateLimited: LOGIN_MESSAGES.rateLimited,
+  unavailable: LOGIN_MESSAGES.unavailable,
+  emailRequired: LOGIN_MESSAGES.emailRequired,
+  emailInvalid: LOGIN_MESSAGES.emailInvalid,
+  passwordRequired: LOGIN_MESSAGES.passwordRequired,
+  passwordTooShort: RESET_MESSAGES.passwordTooShort,
+} as const;
+
+// Minimum length mirrors the server password policy (12+).
+export function passwordPolicyError(password: string): string | undefined {
+  if (!password) return LOGIN_MESSAGES.passwordRequired;
+  if (password.length < 12) return RESET_MESSAGES.passwordTooShort;
+  return undefined;
+}
+
+export function messageForResetStatus(status: number): string {
+  if (status === 429) return RESET_MESSAGES.rateLimited;
+  if (status === 503 || status >= 500) return RESET_MESSAGES.unavailable;
+  // 400/403/404/410/422 all collapse to a single safe "invalid or expired".
+  return RESET_MESSAGES.resetInvalid;
+}
+
+export function messageForInvitationStatus(status: number): string {
+  if (status === 429) return INVITATION_MESSAGES.rateLimited;
+  if (status === 503 || status >= 500) return INVITATION_MESSAGES.unavailable;
+  return INVITATION_MESSAGES.acceptInvalid;
+}
