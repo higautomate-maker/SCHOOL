@@ -343,6 +343,10 @@ class HigRoleDashboardPage extends StatelessWidget {
     final notifications =
         ((home['notifications'] as Map?)?['notifications'] as List?) ??
             const [];
+    final unread = (home['unreadNotices'] as num?)?.toInt() ??
+        ((home['notifications'] as Map?)?['unreadCount'] as num?)?.toInt() ??
+        0;
+    final today = (home['today'] as Map?)?.cast<String, dynamic>();
     final daily =
         _orderedMatches(modules, _dailyKeys[role] ?? const []).take(6).toList();
     final recent = _recentMatches(modules, recentKeys).take(4).toList();
@@ -360,6 +364,7 @@ class HigRoleDashboardPage extends StatelessWidget {
               name: user['name']?.toString() ?? 'Hig School user',
               subtitle: roleLabel,
               onAlerts: onAlerts,
+              unreadCount: unread,
             ),
             if (home['offline'] == true) ...[
               const SizedBox(height: 14),
@@ -373,6 +378,10 @@ class HigRoleDashboardPage extends StatelessWidget {
               alertCount: notifications.length,
               moduleCount: modules.length,
             ),
+            if (today != null) ...[
+              const SizedBox(height: 22),
+              _HigTodaySummary(summary: today),
+            ],
             if (students.isNotEmpty) ...[
               const SizedBox(height: 22),
               const _HigSectionTitle(
@@ -720,12 +729,97 @@ class HigProfileView extends StatelessWidget {
   }
 }
 
+class _HigTodaySummary extends StatelessWidget {
+  const _HigTodaySummary({required this.summary});
+  final Map<String, dynamic> summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = (summary['items'] as List?) ?? const [];
+    final title = _HigSectionTitle(
+      title: 'Today',
+      subtitle: items.isEmpty
+          ? 'You are all caught up'
+          : 'Your priorities at a glance',
+    );
+    if (items.isEmpty) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        title,
+        const SizedBox(height: 10),
+        const _HigEmptyCard(
+          icon: Icons.check_circle_outline_rounded,
+          title: 'Nothing needs attention',
+          message: 'New tasks and alerts for today will appear here.',
+        ),
+      ]);
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      title,
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (final entry in items)
+            _HigTodayTile(item: (entry as Map).cast<String, dynamic>()),
+        ],
+      ),
+    ]);
+  }
+}
+
+class _HigTodayTile extends StatelessWidget {
+  const _HigTodayTile({required this.item});
+  final Map<String, dynamic> item;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = (item['count'] as num?)?.toInt() ?? 0;
+    final label = item['label']?.toString() ?? '';
+    final hint = item['hint']?.toString() ?? '';
+    final accent = Theme.of(context).colorScheme.primary;
+    final width = (MediaQuery.of(context).size.width - 18 * 2 - 10) / 2;
+    return Container(
+      width: width < 150 ? width : 168,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: HigPalette.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$count',
+              style: TextStyle(
+                  fontSize: 26, fontWeight: FontWeight.w900, color: accent)),
+          const SizedBox(height: 4),
+          Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 3),
+          Text(hint,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: HigPalette.muted, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
 class _HigTopBar extends StatelessWidget {
   const _HigTopBar(
-      {required this.name, required this.subtitle, required this.onAlerts});
+      {required this.name,
+      required this.subtitle,
+      required this.onAlerts,
+      this.unreadCount = 0});
   final String name;
   final String subtitle;
   final VoidCallback onAlerts;
+  final int unreadCount;
   @override
   Widget build(BuildContext context) => Row(children: [
         _HigAvatar(name: name),
@@ -750,8 +844,14 @@ class _HigTopBar extends StatelessWidget {
         ])),
         IconButton.filledTonal(
             onPressed: onAlerts,
-            tooltip: 'School notifications',
-            icon: const Icon(Icons.notifications_none_rounded)),
+            tooltip: unreadCount > 0
+                ? '$unreadCount unread notification${unreadCount == 1 ? '' : 's'}'
+                : 'School notifications',
+            icon: Badge(
+              isLabelVisible: unreadCount > 0,
+              label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
+              child: const Icon(Icons.notifications_none_rounded),
+            )),
       ]);
 
   static String _greeting() {
