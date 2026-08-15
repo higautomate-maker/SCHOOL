@@ -32,6 +32,7 @@ import {
 } from "../workspace/repository.ts";
 import { moduleKeys, type WorkspaceAction } from "../workspace/validation.ts";
 import { encryptMobilePushToken } from "./crypto.ts";
+import { buildTodaySummary, type TodayInputs, type TodayRole, type TodaySummary } from "./today-summary.ts";
 import {
   listMobileTransportEvents,
   recordMobileTransportEvent,
@@ -107,6 +108,7 @@ export async function mobileHomeSnapshot(
   const assignments = await activeAssignmentsForPrincipal(principal);
   const students = await allowedStudents(principal, access, assignments);
   const notifications = await mobileNotifications(principal, assignments, 5, false);
+  const today = await mobileTodaySummary(principal);
   const transportEvents = principal.principalType === "transporter"
     ? await listMobileTransportEvents(principal, 20)
     : [];
@@ -123,6 +125,8 @@ export async function mobileHomeSnapshot(
     students,
     assignments,
     notifications,
+    unreadNotices: notifications.unreadCount,
+    today,
     transportEvents,
     offlinePolicy: {
       cacheReads: true,
@@ -131,6 +135,48 @@ export async function mobileHomeSnapshot(
       conflictResolution: "server_authoritative",
     },
   };
+}
+
+export async function mobileTodaySummary(
+  principal: MobileAuthenticatedPrincipal,
+): Promise<TodaySummary> {
+  const access = await effectiveAccessForPrincipal(principal);
+  const moduleKeys = new Set(access.modules.map((entry) => entry.key));
+  const featureKeys = new Set(access.features.map((entry) => entry.key));
+  const notifications = await mobileNotifications(principal, null, 1, false);
+  const unreadNotices = notifications.unreadCount;
+
+  const inputs: TodayInputs = { moduleKeys, featureKeys, unreadNotices };
+  let role: TodayRole;
+
+  if (principal.principalType === "school") {
+    role = "school";
+    const operations = await mobileOperationsSnapshot(principal);
+    if (moduleKeys.has("fees_finance")) {
+      inputs.feesOutstandingCount = operations.invoices.filter(
+        (invoice) => invoice.amountPaise - invoice.paidPaise > 0,
+      ).length;
+    }
+  } else if (principal.principalType === "parent" || principal.principalType === "student") {
+    role = principal.principalType;
+    const operations = await mobileOperationsSnapshot(principal);
+    if (featureKeys.has("attendance")) {
+      inputs.childAbsencesToday = operations.metrics.absent;
+    }
+    if (featureKeys.has("fees_payments") || featureKeys.has("fees_summary")) {
+      inputs.feesDue = operations.invoices.filter(
+        (invoice) => invoice.amountPaise - invoice.paidPaise > 0,
+      ).length;
+    }
+  } else {
+    role = "transporter";
+    if (featureKeys.has("trip_control")) {
+      const transport = await loadDriverTransportSnapshot(principal);
+      inputs.tripActive = transport?.trip?.status === "active";
+    }
+  }
+
+  return buildTodaySummary(role, inputs);
 }
 
 export async function mobileOperationsSnapshot(
