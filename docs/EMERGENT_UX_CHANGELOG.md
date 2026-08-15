@@ -58,6 +58,33 @@ data was changed. No secrets or env files were added.
   wrong-credentials copy, no-leak guarantees, network/rate-limit/outage mapping,
   pre-submit validation, and fail-closed module/app-feature access.
 
+## Round 2 additions (same branch)
+
+### Brand consistency (responsive login/reset/invitation)
+- New `app/AuthBrandPanel.tsx` + responsive `app/auth-flow.module.css`: **two-panel
+  branded layout on wide screens** (parity with `/login`) that **collapses to a
+  compact single card on mobile**, for `/password/forgot`, `/password/reset`,
+  `/invitation/accept`. Same colours, logo, typography, safe errors and
+  accessibility. **Authentication behaviour and safe messages unchanged.**
+
+### Today summary (read-only, role-aware, counts only)
+- New pure builder `server/mobile-app/today-summary.ts` + `mobileTodaySummary()`
+  in `server/mobile-app/service.ts`; new endpoint `GET /api/v1/mobile/today`;
+  additive `today` + `unreadNotices` fields on `mobileHomeSnapshot`.
+- Fail-closed: tiles appear only for authorized modules/features; counts only; safe
+  zero/empty states; no N+1; no migration/external service. See
+  `EMERGENT_API_ADDITIONS.md`.
+
+### Unread-notices badge (mobile)
+- `hig_mobile_ui.dart`: notification bell now shows a **count-only** badge from the
+  existing `unreadCount` (hidden at 0, capped `99+`); a "Today" summary strip with
+  count tiles + caught-up empty state was added to the role dashboard.
+
+### Mobile Flutter CI
+- `.github/workflows/mobile-apk.yml`: PR job (Linux x86_64) running analyze +
+  tests + **unsigned** debug APK builds for all three apps, with pub/Gradle
+  caching, artifacts retained 5 days. **No signing keys, secrets or publishing.**
+
 ## Explicitly NOT done (by constraint)
 - No changes to `server/**` authorization, tenancy, crypto, rate limiting, mobile
   auth tokens, payments, or migrations.

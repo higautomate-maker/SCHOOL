@@ -27,6 +27,23 @@ A source-only archive must contain only these files. It must **NOT** include:
 | `docs/EMERGENT_ROLE_DASHBOARDS.md` | Role dashboard prioritisation + proposed backend enhancements. |
 | `scripts/emergent-screenshots.mjs` | Local, synthetic-data screenshot capture for the review pack. |
 | `docs/screenshots/README.md` + `docs/screenshots/{before,after}/*.png` | Login before/after review pack (synthetic data only). |
+| `docs/EMERGENT_API_ADDITIONS.md` | New API additions + permission decisions (Today summary, unread badge). |
+| `docs/EMERGENT_FEATURE_GAP_ANALYSIS.md` | Feature coverage vs reference apps; proposed (not-built) enhancements. |
+| `app/AuthBrandPanel.tsx` | Shared branded left panel for wide-screen auth flows. |
+| `server/mobile-app/today-summary.ts` | Pure role-aware "Today" summary builder (counts only). |
+| `app/api/v1/mobile/today/route.ts` | Read-only `GET /api/v1/mobile/today` endpoint. |
+| `tests/emergent-today-summary.test.ts` | All-roles Today-summary fail-closed tests. |
+| `.github/workflows/mobile-apk.yml` | PR CI: Flutter analyze + tests + unsigned debug APKs (x86_64). |
+| `docs/screenshots/after-v2/*.png` | Two-panel responsive auth screens (brand consistency). |
+
+## Modified (round 2)
+
+| File | Change |
+| --- | --- |
+| `app/auth-flow.module.css` | Responsive two-panel + brand panel styles. |
+| `app/password/forgot/page.tsx`, `app/password/reset/page.tsx`, `app/invitation/accept/page.tsx` | Wrapped in responsive two-panel; forgot surfaces safe 5xx/429. |
+| `server/mobile-app/service.ts` | `mobileTodaySummary()`; additive `today` + `unreadNotices` on home snapshot. |
+| `mobile/packages/hig_mobile_core/lib/src/hig_mobile_ui.dart` | Unread badge on bell; Today summary strip + tiles. |
 
 ## Modified
 

@@ -7,11 +7,11 @@ Environment used for verification: Node **22.13.0**, dependencies installed with
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Unit tests (full) | `npm run test:unit` | **356 pass · 0 fail · 14 todo** (370 total) |
-| New focused tests | `node --experimental-strip-types --test tests/emergent-login-error-states.test.ts` | **13 pass · 0 fail** |
+| Unit tests (full) | `npm run test:unit` | **364 pass · 0 fail · 14 todo** (378 total) |
+| New focused tests | login error-states (13) + today-summary all-roles (8) | **21 pass · 0 fail** |
 | Type check | `npm run typecheck` (`tsc --noEmit`) | **0 errors** |
 | Lint | `npm run lint` (`eslint .`) | **0 errors** |
-| Web build | `npm run build` (vinext build) | **Build complete** — `/login`, `/password/forgot`, `/password/reset`, `/invitation/accept` all emitted |
+| Web build | `npm run build` (vinext build) | **Build complete** — `/login`, `/password/forgot`, `/password/reset`, `/invitation/accept`, and new `GET /api/v1/mobile/today` all emitted |
 | Flutter analyze (staff_admin_app) | `flutter analyze` | **No issues found** |
 | Flutter analyze (student_parent_app) | `flutter analyze` | **No issues found** |
 | Flutter analyze (driver_gps_app) | `flutter analyze` | **No issues found** |
