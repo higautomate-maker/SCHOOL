@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import styles from "../../auth-flow.module.css";
+import AuthBrandPanel from "../../AuthBrandPanel";
 import {
   RESET_MESSAGES,
   networkMessage,
@@ -47,6 +48,8 @@ export default function Forgot() {
 
   return (
     <main className={styles.authPage}>
+      <AuthBrandPanel />
+      <div className={styles.cardColumn}>
       <div className={styles.authCard}>
         <div className={styles.brand}><i>H</i><span><b>HIG School</b><small>SECURE ACCESS</small></span></div>
         <header>
@@ -81,6 +84,7 @@ export default function Forgot() {
           <a href="/login" data-testid="forgot-back-link">Back to sign in</a>
           <span>Protected by tenant &amp; role access controls</span>
         </div>
+      </div>
       </div>
     </main>
   );

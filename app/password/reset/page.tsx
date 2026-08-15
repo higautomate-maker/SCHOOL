@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import styles from "../../auth-flow.module.css";
+import AuthBrandPanel from "../../AuthBrandPanel";
 import {
   RESET_MESSAGES,
   messageForResetStatus,
@@ -46,6 +47,8 @@ export default function Reset() {
 
   return (
     <main className={styles.authPage}>
+      <AuthBrandPanel />
+      <div className={styles.cardColumn}>
       <div className={styles.authCard}>
         <div className={styles.brand}><i>H</i><span><b>HIG School</b><small>SECURE ACCESS</small></span></div>
         <header>
@@ -82,6 +85,7 @@ export default function Reset() {
           </form>
         )}
         <p className={styles.note}>Reset links expire for your security. If yours no longer works, request a new one from the sign-in page.</p>
+      </div>
       </div>
     </main>
   );

@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import styles from "../../auth-flow.module.css";
+import AuthBrandPanel from "../../AuthBrandPanel";
 import {
   INVITATION_MESSAGES,
   messageForInvitationStatus,
@@ -49,6 +50,8 @@ export default function Accept() {
 
   return (
     <main className={styles.authPage}>
+      <AuthBrandPanel />
+      <div className={styles.cardColumn}>
       <div className={styles.authCard}>
         <div className={styles.brand}><i>H</i><span><b>HIG School</b><small>SECURE ACCESS</small></span></div>
         <header>
@@ -99,6 +102,7 @@ export default function Accept() {
           </form>
         )}
         <p className={styles.note}>Invitations expire for your security. If yours no longer works, ask your administrator to resend it.</p>
+      </div>
       </div>
     </main>
   );
