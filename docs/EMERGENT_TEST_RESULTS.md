@@ -7,16 +7,25 @@ Environment used for verification: Node **22.13.0**, dependencies installed with
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Unit tests (full) | `npm run test:unit` | **352 pass · 0 fail · 14 todo** (366 total) |
-| New focused tests | `node --experimental-strip-types --test tests/emergent-login-error-states.test.ts` | **9 pass · 0 fail** |
+| Unit tests (full) | `npm run test:unit` | **356 pass · 0 fail · 14 todo** (370 total) |
+| New focused tests | `node --experimental-strip-types --test tests/emergent-login-error-states.test.ts` | **13 pass · 0 fail** |
 | Type check | `npm run typecheck` (`tsc --noEmit`) | **0 errors** |
 | Lint | `npm run lint` (`eslint .`) | **0 errors** |
-| Web build | `npm run build` (vinext build) | **Build complete** — `/login` and all routes emitted |
+| Web build | `npm run build` (vinext build) | **Build complete** — `/login`, `/password/forgot`, `/password/reset`, `/invitation/accept` all emitted |
+| Flutter analyze (staff_admin_app) | `flutter analyze` | **No issues found** |
+| Flutter analyze (student_parent_app) | `flutter analyze` | **No issues found** |
+| Flutter analyze (driver_gps_app) | `flutter analyze` | **No issues found** |
+| Flutter analyze (hig_mobile_core) | `flutter analyze` | **No issues found** |
+| Login before/after screenshots | `scripts/emergent-screenshots.mjs` | Captured (synthetic data) — see `docs/screenshots/` |
+
+Environment: web verified on Node **22.13.0**; Flutter verified on **3.47.0 /
+Dart 3.13.0**. Flutter `pub get` succeeded for all three apps without upgrading
+dependencies (auto-refreshed `pubspec.lock` / `analysis_options.yaml` were
+reverted, since no build failure required them).
 
 > The pre-existing `tests/rendered-html.test.mjs` is a leftover starter-skeleton
-> test (it asserts `title: "Starter Project"`), is **excluded** from the official
-> `test:unit` glob (`tests/*.test.ts`), and fails on `main` independently of this
-> work. It was not modified.
+> test (asserts `title: "Starter Project"`), is **excluded** from the official
+> `test:unit` glob (`tests/*.test.ts`), and fails on `main` independently. Not modified.
 
 ## New tests — `tests/emergent-login-error-states.test.ts`
 
@@ -52,10 +61,18 @@ credential revocation, persona concurrency), `tests/tenancy.test.ts`.
 
 | Item | Reason | How to run |
 | --- | --- | --- |
-| Flutter analyze/build (3 apps) | Flutter SDK not installed here | `bash mobile/scripts/validate_flutter_apps.sh`; `flutter build apk` per app (see export instructions) |
+| Flutter **debug APK** (3 apps) | Host is ARM64 Linux; the Android build-tools `aapt2`/`d8` and a stable Android SDK are x86_64-oriented and the sandbox reset removed the SDK mid-build. `flutter analyze` passed for all apps, so the Dart/UI changes compile. | On an x86_64 CI runner with JDK 17 + Android SDK 35 + build-tools 34: `flutter build apk --debug --dart-define=API_BASE_URL=<host>` per app (see `EMERGENT_EXPORT_INSTRUCTIONS.md`). |
+| Flutter unit/widget tests | Apps ship no `test/` directory (pre-existing). | Add widget tests in CI if desired; none exist to run today. |
 | Integration/staging/postgres suites | Require Redis/Postgres/Docker services & secrets | `npm run test:integration:*`, `npm run staging:*` in provisioned CI |
-| Live login screenshots | vinext runtime needs Workers/Wrangler + env validation | `npm run build && npm start` then load `/login` |
 
-The Flutter changes are localised to login screens and a small shared helper and
-were written to compile against the existing Material 3 theme and `HigMobileApi`
-types; run `flutter analyze` in CI to confirm before release.
+The Flutter changes are localised to login screens, one shared helper, and the
+role-dashboard section, and passed `flutter analyze` cleanly against the existing
+Material 3 theme and `HigMobileApi` types.
+
+## Login screenshots (review pack)
+
+Before/after screenshots for login, forgot-password, reset-password and
+invitation-accept (desktop + mobile) were captured locally with synthetic data.
+See `docs/screenshots/README.md` and the `docs/screenshots/before` /
+`docs/screenshots/after` folders. No real names, emails, tenant IDs, passwords,
+tokens, API URLs or production data appear in any image.

@@ -24,6 +24,9 @@ A source-only archive must contain only these files. It must **NOT** include:
 | `docs/EMERGENT_TEST_RESULTS.md` | Test/lint/typecheck/build results. |
 | `docs/EMERGENT_EXPORT_INSTRUCTIONS.md` | Export, apply, install, test, build, rollback. |
 | `docs/EMERGENT_HANDOFF_MANIFEST.md` | This file. |
+| `docs/EMERGENT_ROLE_DASHBOARDS.md` | Role dashboard prioritisation + proposed backend enhancements. |
+| `scripts/emergent-screenshots.mjs` | Local, synthetic-data screenshot capture for the review pack. |
+| `docs/screenshots/README.md` + `docs/screenshots/{before,after}/*.png` | Login before/after review pack (synthetic data only). |
 
 ## Modified
 
