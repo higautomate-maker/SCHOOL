@@ -347,6 +347,7 @@ class HigRoleDashboardPage extends StatelessWidget {
         ((home['notifications'] as Map?)?['unreadCount'] as num?)?.toInt() ??
         0;
     final today = (home['today'] as Map?)?.cast<String, dynamic>();
+    final birthdays = (home['birthdays'] as List?) ?? const [];
     final daily =
         _orderedMatches(modules, _dailyKeys[role] ?? const []).take(6).toList();
     final recent = _recentMatches(modules, recentKeys).take(4).toList();
@@ -381,6 +382,10 @@ class HigRoleDashboardPage extends StatelessWidget {
             if (today != null) ...[
               const SizedBox(height: 22),
               _HigTodaySummary(summary: today),
+            ],
+            if (birthdays.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              _HigBirthdaysCard(birthdays: birthdays),
             ],
             if (students.isNotEmpty) ...[
               const SizedBox(height: 22),
@@ -726,6 +731,57 @@ class HigProfileView extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _HigBirthdaysCard extends StatelessWidget {
+  const _HigBirthdaysCard({required this.birthdays});
+  final List<dynamic> birthdays;
+
+  String _label(Map<String, dynamic> b) {
+    final name = b['name']?.toString() ?? 'A classmate';
+    if (b['isToday'] == true) return '$name — today 🎉';
+    final days = (b['inDays'] as num?)?.toInt() ?? 0;
+    final weekday = b['weekday']?.toString() ?? '';
+    return days == 1 ? '$name — tomorrow ($weekday)' : '$name — $weekday';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries =
+        birthdays.map((e) => (e as Map).cast<String, dynamic>()).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const _HigSectionTitle(
+        title: 'Birthdays this week',
+        subtitle: 'A friendly reminder to celebrate',
+      ),
+      const SizedBox(height: 10),
+      Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: HigPalette.line),
+        ),
+        child: Column(
+          children: [
+            for (final entry in entries)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(children: [
+                  const Icon(Icons.cake_outlined,
+                      size: 20, color: HigPalette.muted),
+                  const SizedBox(width: 10),
+                  Expanded(
+                      child: Text(_label(entry),
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w700))),
+                ]),
+              ),
+          ],
+        ),
+      ),
+    ]);
   }
 }
 

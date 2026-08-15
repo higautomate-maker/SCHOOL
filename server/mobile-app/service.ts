@@ -33,6 +33,7 @@ import {
 import { moduleKeys, type WorkspaceAction } from "../workspace/validation.ts";
 import { encryptMobilePushToken } from "./crypto.ts";
 import { buildTodaySummary, type TodayInputs, type TodayRole, type TodaySummary } from "./today-summary.ts";
+import { upcomingBirthdays } from "./birthdays.ts";
 import {
   listMobileTransportEvents,
   recordMobileTransportEvent,
@@ -109,6 +110,12 @@ export async function mobileHomeSnapshot(
   const students = await allowedStudents(principal, access, assignments);
   const notifications = await mobileNotifications(principal, assignments, 5, false);
   const today = await mobileTodaySummary(principal);
+  // Birthdays are derived ONLY from already-authorized records (a student's own
+  // record; a parent's linked children). First name + weekday only, no year.
+  const birthdays =
+    principal.principalType === "parent" || principal.principalType === "student"
+      ? upcomingBirthdays(students)
+      : [];
   const transportEvents = principal.principalType === "transporter"
     ? await listMobileTransportEvents(principal, 20)
     : [];
@@ -127,6 +134,7 @@ export async function mobileHomeSnapshot(
     notifications,
     unreadNotices: notifications.unreadCount,
     today,
+    birthdays,
     transportEvents,
     offlinePolicy: {
       cacheReads: true,
