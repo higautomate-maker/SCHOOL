@@ -27,13 +27,17 @@ export default function Forgot() {
     setFieldError("");
     setBusy(true);
     try {
-      await fetch("/api/v1/auth/password/forgot", {
+      const response = await fetch("/api/v1/auth/password/forgot", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email: email.trim() }),
       });
-      // Always acknowledge identically — never reveal whether the email exists.
-      setDone(true);
+      // Server-health errors (rate limit / outage) surface a generic message.
+      // Everything else acknowledges identically so we never reveal whether the
+      // email exists (enumeration-safe: 2xx and 4xx-client look the same).
+      if (response.status === 429) setError(RESET_MESSAGES.rateLimited);
+      else if (response.status >= 500) setError(RESET_MESSAGES.unavailable);
+      else setDone(true);
     } catch {
       setError(networkMessage());
     } finally {
