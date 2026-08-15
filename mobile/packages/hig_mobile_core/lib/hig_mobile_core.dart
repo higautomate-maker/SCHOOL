@@ -666,7 +666,7 @@ class _HigMobileRootState extends State<HigMobileRoot> {
       final restored = await api.restore();
       if (restored) await _load();
     } catch (exception) {
-      error = exception.toString();
+      error = higFriendlyAuthMessage(exception);
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -733,6 +733,12 @@ class _LoginViewState extends State<LoginView> {
   bool busy = false;
   bool obscurePassword = true;
   String? message;
+  String? emailError;
+  String? passwordError;
+  String? tenantError;
+
+  bool get _tenantPreconfigured =>
+      const String.fromEnvironment('HIG_TENANT_ID').trim().isNotEmpty;
 
   @override
   void initState() {
@@ -749,10 +755,23 @@ class _LoginViewState extends State<LoginView> {
   }
 
   Future<void> submit() async {
+    // Validate required fields locally before sending any request.
+    final tenantIssue = _tenantPreconfigured
+        ? null
+        : (tenant.text.trim().isEmpty ? HigAuthMessages.schoolIdRequired : null);
+    final emailIssue = higValidateEmail(email.text);
+    final passwordIssue = higValidatePassword(password.text);
     setState(() {
-      busy = true;
+      tenantError = tenantIssue;
+      emailError = emailIssue;
+      passwordError = passwordIssue;
       message = null;
     });
+    if (tenantIssue != null || emailIssue != null || passwordIssue != null) {
+      return;
+    }
+
+    setState(() => busy = true);
     try {
       await widget.api.login(
         tenantId: tenant.text,
@@ -762,7 +781,9 @@ class _LoginViewState extends State<LoginView> {
       );
       await widget.onAuthenticated();
     } catch (exception) {
-      if (mounted) setState(() => message = exception.toString());
+      if (mounted) {
+        setState(() => message = higFriendlyAuthMessage(exception));
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -844,25 +865,30 @@ class _LoginViewState extends State<LoginView> {
                   ),
                   const SizedBox(height: 18),
                 ],
-                TextField(
-                  controller: tenant,
-                  autocorrect: false,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'School ID',
-                    hintText: 'Provided by your school',
-                    prefixIcon: Icon(Icons.apartment_rounded),
+                if (!_tenantPreconfigured) ...[
+                  TextField(
+                    controller: tenant,
+                    autocorrect: false,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'School ID',
+                      hintText: 'Provided by your school',
+                      prefixIcon: const Icon(Icons.apartment_rounded),
+                      errorText: tenantError,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+                ],
                 TextField(
                   controller: email,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
                   autocorrect: false,
-                  decoration: const InputDecoration(
+                  autofillHints: const [AutofillHints.username, AutofillHints.email],
+                  decoration: InputDecoration(
                     labelText: 'Email address',
-                    prefixIcon: Icon(Icons.mail_outline_rounded),
+                    prefixIcon: const Icon(Icons.mail_outline_rounded),
+                    errorText: emailError,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -870,10 +896,12 @@ class _LoginViewState extends State<LoginView> {
                   controller: password,
                   obscureText: obscurePassword,
                   textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.password],
                   onSubmitted: busy ? null : (_) => submit(),
                   decoration: InputDecoration(
                     labelText: 'Password',
                     prefixIcon: const Icon(Icons.lock_outline_rounded),
+                    errorText: passwordError,
                     suffixIcon: IconButton(
                       tooltip:
                           obscurePassword ? 'Show password' : 'Hide password',

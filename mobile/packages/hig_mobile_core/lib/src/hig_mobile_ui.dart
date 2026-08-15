@@ -1,5 +1,56 @@
 part of '../hig_mobile_core.dart';
 
+// Emergent UX redesign: user-safe login/auth messaging shared by every
+// Flutter app. Never surfaces raw server strings, status codes, timeouts or
+// exception text, and never reveals whether an account exists.
+class HigAuthMessages {
+  static const invalidCredentials =
+      'Incorrect email or password. Please check your details and try again.';
+  static const network =
+      'We couldn’t connect. Please check your internet connection and try again.';
+  static const rateLimited =
+      'Too many sign-in attempts. Please wait a moment, then try again.';
+  static const unavailable =
+      'Sign-in is temporarily unavailable. Please try again in a few minutes.';
+  static const emailRequired = 'Please enter your email address.';
+  static const emailInvalid = 'Please enter a valid email address.';
+  static const passwordRequired = 'Please enter your password.';
+  static const schoolIdRequired = 'Please enter your School ID.';
+}
+
+final RegExp _higEmailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+
+/// Validates required login fields before any network request is made.
+/// Returns a safe field-level message, or null when the field is acceptable.
+String? higValidateEmail(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return HigAuthMessages.emailRequired;
+  if (!_higEmailPattern.hasMatch(trimmed)) return HigAuthMessages.emailInvalid;
+  return null;
+}
+
+String? higValidatePassword(String value) =>
+    value.isEmpty ? HigAuthMessages.passwordRequired : null;
+
+/// Converts any thrown login/auth error into a safe, user-facing message.
+String higFriendlyAuthMessage(Object error) {
+  if (error is MobileApiException) {
+    final status = error.statusCode;
+    if (status == 429) return HigAuthMessages.rateLimited;
+    if (status >= 500) return HigAuthMessages.unavailable;
+    // 401/400/403/404/422 and any other client error stay generic so we never
+    // reveal account existence or internal validation detail.
+    return HigAuthMessages.invalidCredentials;
+  }
+  if (error is SocketException ||
+      error is TimeoutException ||
+      error is http.ClientException) {
+    return HigAuthMessages.network;
+  }
+  // Unknown/unexpected errors fall back to a safe generic message.
+  return HigAuthMessages.unavailable;
+}
+
 class HigPalette {
   static const navy = Color(0xff17365d);
   static const blue = Color(0xff286ea8);
