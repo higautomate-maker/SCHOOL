@@ -302,6 +302,21 @@ const _dailyKeys = <String, List<String>>{
   ],
 };
 
+String _rolePriorityHint(String role) {
+  switch (role) {
+    case 'parent':
+      return 'Your child’s day at a glance';
+    case 'student':
+      return 'What you need for today';
+    case 'school':
+      return 'Only actions currently allowed for you';
+    case 'transporter':
+      return 'Your trip and safety controls';
+    default:
+      return 'Only actions currently allowed for you';
+  }
+}
+
 class HigRoleDashboardPage extends StatelessWidget {
   const HigRoleDashboardPage({
     super.key,
@@ -379,11 +394,25 @@ class HigRoleDashboardPage extends StatelessWidget {
             if (daily.isNotEmpty) ...[
               const SizedBox(height: 24),
               _HigSectionTitle(
-                title: role == 'school' ? 'Today’s work' : 'Daily shortcuts',
-                subtitle: 'Only actions currently allowed for you',
+                title: role == 'school' ? 'Today’s work' : 'Daily priorities',
+                subtitle: _rolePriorityHint(role),
               ),
               const SizedBox(height: 12),
               _HigFeatureGrid(items: daily, onOpen: onOpen),
+            ] else ...[
+              const SizedBox(height: 24),
+              _HigSectionTitle(
+                title: role == 'school' ? 'Today’s work' : 'Daily priorities',
+                subtitle: _rolePriorityHint(role),
+              ),
+              const SizedBox(height: 12),
+              const _HigEmptyCard(
+                icon: Icons.lock_outline_rounded,
+                title: 'No actions available yet',
+                message:
+                    'Your school hasn’t enabled any features for you yet. '
+                    'Please check back later or contact your school office.',
+              ),
             ],
             if (recent.isNotEmpty) ...[
               const SizedBox(height: 24),
