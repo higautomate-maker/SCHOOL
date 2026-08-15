@@ -85,6 +85,31 @@ data was changed. No secrets or env files were added.
   tests + **unsigned** debug APK builds for all three apps, with pub/Gradle
   caching, artifacts retained 5 days. **No signing keys, secrets or publishing.**
 
+## Round 3 additions (same branch)
+
+### Birthday tile (privacy-safe)
+- `server/mobile-app/birthdays.ts` (`upcomingBirthdays`) + additive `birthdays`
+  on the mobile home snapshot; rendered as `_HigBirthdaysCard`. Uses ONLY
+  already-authorized records (a student's own record; a parent's linked children),
+  **first name + weekday only — no birth year, surname, id or full DOB**. Tests:
+  `tests/emergent-birthdays.test.ts`.
+
+### Web "Today" panel (School dashboard)
+- New read-only `GET /api/v1/schools/:schoolId/today` (fail-closed via
+  `authorize`, per-tile module entitlement + view permission, counts only, uses
+  existing `filterWorkspaceForActor` metrics + notification inbox count).
+- `app/school/TodayPanel.tsx` + `today-panel.module.css` injected into the School
+  dashboard with loading/empty/error+retry states.
+
+### Staff self-attendance punch (PROPOSED — not auto-applied)
+- Security-critical safeguards implemented + tested now:
+  `server/attendance/staff-punch-safeguards.ts` (geofence Haversine + device-clock
+  skew + punch ordering; safe generic reasons) with
+  `tests/emergent-staff-punch-safeguards.test.ts` (7 tests).
+- Migration (additive, reversible), endpoint contract, RLS and rollback plan in
+  `docs/proposals/STAFF_PUNCH.md`. **Not applied** per the repo "propose schema
+  changes separately, don't auto-apply" rule.
+
 ## Explicitly NOT done (by constraint)
 - No changes to `server/**` authorization, tenancy, crypto, rate limiting, mobile
   auth tokens, payments, or migrations.

@@ -7,8 +7,8 @@ Environment used for verification: Node **22.13.0**, dependencies installed with
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Unit tests (full) | `npm run test:unit` | **364 pass · 0 fail · 14 todo** (378 total) |
-| New focused tests | login error-states (13) + today-summary all-roles (8) | **21 pass · 0 fail** |
+| Unit tests (full) | `npm run test:unit` | **375 pass · 0 fail · 14 todo** (389 total) |
+| New focused tests | login (13) + today-summary all-roles (8) + birthdays (4) + staff-punch safeguards (7) | **32 pass · 0 fail** |
 | Type check | `npm run typecheck` (`tsc --noEmit`) | **0 errors** |
 | Lint | `npm run lint` (`eslint .`) | **0 errors** |
 | Web build | `npm run build` (vinext build) | **Build complete** — `/login`, `/password/forgot`, `/password/reset`, `/invitation/accept`, and new `GET /api/v1/mobile/today` all emitted |

@@ -35,6 +35,13 @@ A source-only archive must contain only these files. It must **NOT** include:
 | `tests/emergent-today-summary.test.ts` | All-roles Today-summary fail-closed tests. |
 | `.github/workflows/mobile-apk.yml` | PR CI: Flutter analyze + tests + unsigned debug APKs (x86_64). |
 | `docs/screenshots/after-v2/*.png` | Two-panel responsive auth screens (brand consistency). |
+| `server/mobile-app/birthdays.ts` | Privacy-safe "birthdays this week" helper (first name + weekday only). |
+| `tests/emergent-birthdays.test.ts` | Birthday helper privacy/window tests. |
+| `app/api/v1/schools/[schoolId]/today/route.ts` | Read-only web School "Today" endpoint (fail-closed, counts only). |
+| `app/school/TodayPanel.tsx` + `app/school/today-panel.module.css` | School dashboard Today panel (loading/empty/error+retry). |
+| `server/attendance/staff-punch-safeguards.ts` | PURE geofence + device-clock + ordering safeguards (Staff Punch). |
+| `tests/emergent-staff-punch-safeguards.test.ts` | Staff punch safeguard tests (7). |
+| `docs/proposals/STAFF_PUNCH.md` | Staff self-attendance punch proposal (migration up/down, endpoint, RLS, rollback). |
 
 ## Modified (round 2)
 
@@ -44,6 +51,14 @@ A source-only archive must contain only these files. It must **NOT** include:
 | `app/password/forgot/page.tsx`, `app/password/reset/page.tsx`, `app/invitation/accept/page.tsx` | Wrapped in responsive two-panel; forgot surfaces safe 5xx/429. |
 | `server/mobile-app/service.ts` | `mobileTodaySummary()`; additive `today` + `unreadNotices` on home snapshot. |
 | `mobile/packages/hig_mobile_core/lib/src/hig_mobile_ui.dart` | Unread badge on bell; Today summary strip + tiles. |
+
+## Modified (round 3)
+
+| File | Change |
+| --- | --- |
+| `mobile/packages/hig_mobile_core/lib/src/hig_mobile_ui.dart` | Birthdays card added alongside the Today strip + unread badge. |
+| `server/mobile-app/service.ts` | Additive `birthdays` on home snapshot (parent/student, authorized records only). |
+| `app/school/page.tsx` | Injected `<SchoolTodayPanel/>` into the School dashboard (one line + import). |
 
 ## Modified
 
