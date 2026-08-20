@@ -7,7 +7,7 @@ import 'package:hig_mobile_core/hig_mobile_core.dart';
 
 const apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://10.0.2.2:3002',
+  defaultValue: 'https://staging-school.higaai.com',
 );
 
 void main() {
