@@ -32,4 +32,29 @@ void main() {
     expect(restored.idempotencyKey, queued.idempotencyKey);
     expect(restored.path, queued.path);
   });
+
+  test('sign-in failures use safe, actionable user-facing messages', () {
+    expect(
+      higFriendlyAuthMessage(
+        const MobileApiException('server detail', 401),
+      ),
+      HigAuthMessages.invalidCredentials,
+    );
+    expect(
+      higFriendlyAuthMessage(
+        const MobileApiException('server detail', 429),
+      ),
+      HigAuthMessages.rateLimited,
+    );
+    expect(
+      higFriendlyAuthMessage(
+        const MobileApiException('server detail', 503),
+      ),
+      HigAuthMessages.unavailable,
+    );
+    expect(
+      higFriendlyAuthMessage(Exception('internal detail')),
+      HigAuthMessages.unavailable,
+    );
+  });
 }
