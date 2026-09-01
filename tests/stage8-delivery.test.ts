@@ -120,6 +120,7 @@ test("worker image and staging compose expose health without a public port", () 
   assert.match(worker, /stage8:worker:health/);
   assert.doesNotMatch(worker, /ports:/);
   const operator = compose.split("\n  operator:\n")[1]?.split("\nvolumes:\n")[0] ?? "";
+  assert.match(operator, /HIG_QUEUE_HEARTBEAT_PATH: \/logs\/staging-school\/notification-worker-heartbeat\.json/);
   assert.match(operator, /staging_school_logs:\/logs\/staging-school:ro/);
 });
 
