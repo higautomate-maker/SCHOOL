@@ -80,6 +80,7 @@ services:
       - ../.env.staging.operator
     volumes:
       - staging_school_backups:/backups/staging-school
+      - staging_school_logs:/logs/staging-school:ro
     profiles:
       - operator
 

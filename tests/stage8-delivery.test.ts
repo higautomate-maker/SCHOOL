@@ -119,6 +119,8 @@ test("worker image and staging compose expose health without a public port", () 
   assert.match(worker, /restart: unless-stopped/);
   assert.match(worker, /stage8:worker:health/);
   assert.doesNotMatch(worker, /ports:/);
+  const operator = compose.split("\n  operator:\n")[1]?.split("\nvolumes:\n")[0] ?? "";
+  assert.match(operator, /staging_school_logs:\/logs\/staging-school:ro/);
 });
 
 test("delivery persistence records adapter status and provider without business-table access", () => {
