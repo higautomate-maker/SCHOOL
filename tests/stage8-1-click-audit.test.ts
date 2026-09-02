@@ -22,3 +22,11 @@ test("School portal has no known silent click handlers", () => {
   assert.match(page, /Cross-session browsing is planned/);
   assert.match(page, /Result analytics requires the reporting aggregation API/);
 });
+
+test("Add New Class opens its dedicated tenant-scoped creation form", () => {
+  const page = readFileSync("app/school/page.tsx", "utf8");
+  assert.match(page, /onAddClass=\{\(\)=>setClassOpen\(true\)\}/);
+  assert.match(page, /function ReferenceClassModal/);
+  assert.match(page, /action:"create_class"/);
+  assert.doesNotMatch(page, /onClick=\{onSettings\}>＋ Add New Class/);
+});
