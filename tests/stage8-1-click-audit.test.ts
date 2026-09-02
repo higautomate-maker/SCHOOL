@@ -30,3 +30,23 @@ test("Add New Class opens its dedicated tenant-scoped creation form", () => {
   assert.match(page, /action:"create_class"/);
   assert.doesNotMatch(page, /onClick=\{onSettings\}>＋ Add New Class/);
 });
+
+test("Academic creation buttons open dedicated tenant-scoped forms", () => {
+  const page = readFileSync("app/school/page.tsx", "utf8");
+  const validation = readFileSync("server/foundation/validation.ts", "utf8");
+  const postgres = readFileSync("server/foundation/postgres-repository.ts", "utf8");
+  assert.match(page, /onAddSession=\{\(\)=>setSessionOpen\(true\)\}/);
+  assert.match(page, /onAddSection=\{\(\)=>setSectionOpen\(true\)\}/);
+  assert.match(page, /onAddSubject=\{\(\)=>setSubjectOpen\(true\)\}/);
+  assert.match(page, /function ReferenceSessionModal/);
+  assert.match(page, /function ReferenceSectionModal/);
+  assert.match(page, /function ReferenceSubjectModal/);
+  assert.match(page, /action:"create_session"/);
+  assert.match(page, /action:"create_section"/);
+  assert.match(page, /action:"create_subject"/);
+  assert.match(validation, /z\.literal\("create_section"\)/);
+  assert.match(postgres, /WHERE tenant_id = \$1[\s\S]*AND id = \$2[\s\S]*AND active = true/);
+  assert.doesNotMatch(page, /action="Add New Session"[\s\S]{0,300}onAdd=\{onSettings\}/);
+  assert.doesNotMatch(page, /action="Add New Section"[\s\S]{0,300}onAdd=\{onSettings\}/);
+  assert.doesNotMatch(page, /action="Add New Subject"[\s\S]{0,300}onAdd=\{onSettings\}/);
+});
