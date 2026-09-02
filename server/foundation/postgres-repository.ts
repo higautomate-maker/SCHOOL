@@ -152,6 +152,25 @@ export function applyPostgresFoundationAction(
             [tenantId, resourceId, section, action.capacity],
           );
         }
+      } else if (action.action === "create_section") {
+        const schoolClass = await client.query<{ id: string }>(
+          `SELECT id
+           FROM school_classes
+           WHERE tenant_id = $1
+             AND id = $2
+             AND active = true
+           LIMIT 1`,
+          [tenantId, action.classId],
+        );
+        if (!schoolClass.rows[0]) throw new Error("Class not found");
+        resourceType = "class_section";
+        resourceId = crypto.randomUUID();
+        await client.query(
+          `INSERT INTO class_sections (
+             id, tenant_id, class_id, name, capacity
+           ) VALUES ($1, $2, $3, $4, $5)`,
+          [resourceId, tenantId, action.classId, action.name, action.capacity],
+        );
       } else if (action.action === "create_subject") {
         resourceType = "subject";
         resourceId = crypto.randomUUID();

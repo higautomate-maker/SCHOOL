@@ -70,6 +70,11 @@ export async function applyFoundationAction(tenantId: string, action: Foundation
     const id = crypto.randomUUID(); resourceType = "class"; resourceId = id;
     const count = await database.prepare("SELECT COUNT(*) AS count FROM school_classes WHERE tenant_id = ?").bind(tenantId).first<{ count: number }>();
     await database.batch([database.prepare("INSERT INTO school_classes (id, tenant_id, name, code, display_order, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)").bind(id, tenantId, action.name, action.code, Number(count?.count ?? 0) + 1, now, now), ...action.sections.map((name) => database.prepare("INSERT INTO class_sections (id, tenant_id, class_id, name, capacity, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(crypto.randomUUID(), tenantId, id, name, action.capacity, now, now))]);
+  } else if (action.action === "create_section") {
+    const schoolClass = await database.prepare("SELECT id FROM school_classes WHERE id = ? AND tenant_id = ? AND active = 1").bind(action.classId, tenantId).first();
+    if (!schoolClass) throw new Error("Class not found");
+    const id = crypto.randomUUID(); resourceType = "class_section"; resourceId = id;
+    await database.prepare("INSERT INTO class_sections (id, tenant_id, class_id, name, capacity, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(id, tenantId, action.classId, action.name, action.capacity, now, now).run();
   } else if (action.action === "create_subject") {
     const id = crypto.randomUUID(); resourceType = "subject"; resourceId = id;
     await database.prepare("INSERT INTO subjects (id, tenant_id, name, code, type, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)").bind(id, tenantId, action.name, action.code, action.type, now, now).run();
