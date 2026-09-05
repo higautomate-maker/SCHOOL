@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 part 'src/hig_mobile_ui.dart';
+part 'src/hig_attendance_ui.dart';
 
 const _uuid = Uuid();
 
@@ -1118,7 +1119,7 @@ class _HomeViewState extends State<HomeView> {
           NavigationDestination(
             icon: Icon(Icons.apps_outlined),
             selectedIcon: Icon(Icons.apps),
-            label: 'Workspace',
+            label: 'More',
           ),
           NavigationDestination(
             icon: Icon(Icons.notifications_outlined),
@@ -1748,98 +1749,16 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
   }
 
   Future<void> attendanceAction() async {
-    final studentId = TextEditingController();
-    String? selectedStudentId;
-    final date = TextEditingController(
-      text: DateTime.now().toIso8601String().substring(0, 10),
-    );
-    var status = 'present';
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Mark attendance'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (widget.availableStudents.isNotEmpty)
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedStudentId,
-                    decoration: const InputDecoration(
-                      labelText: 'Student',
-                      prefixIcon: Icon(Icons.school_outlined),
-                    ),
-                    items: widget.availableStudents
-                        .map(
-                          (student) => DropdownMenuItem(
-                            value: student['id']?.toString(),
-                            child: Text(
-                              student['fullName']?.toString() ?? 'Student',
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => selectedStudentId = value),
-                  )
-                else
-                  TextField(
-                    controller: studentId,
-                    decoration: const InputDecoration(labelText: 'Student ID'),
-                  ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: date,
-                  decoration: const InputDecoration(
-                    labelText: 'Date (YYYY-MM-DD)',
-                  ),
-                ),
-                DropdownButtonFormField<String>(
-                  initialValue: status,
-                  decoration: const InputDecoration(labelText: 'Status'),
-                  items: const ['present', 'late', 'absent', 'excused']
-                      .map(
-                        (entry) => DropdownMenuItem(
-                          value: entry,
-                          child: Text(_title(entry)),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) => setDialogState(() => status = value!),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final result = await widget.api.operation({
-                  'action': 'mark_attendance',
-                  'studentId': selectedStudentId ?? studentId.text.trim(),
-                  'attendanceDate': date.text.trim(),
-                  'status': status,
-                  'note': 'Marked from Hig Staff & Admin mobile app',
-                });
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-                await load();
-                if (!context.mounted) return;
-                if (result['queued'] == true) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Attendance queued for sync')),
-                  );
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
+    final saved = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HigAttendancePage(
+          api: widget.api,
+          students: widget.availableStudents,
         ),
       ),
     );
+    if (saved == true) await load();
   }
 
   Future<void> invoiceAction() async {
@@ -2024,6 +1943,106 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
     );
   }
 
+  void showRecordDetails(JsonMap record, String moduleTitle) {
+    final recordTitle = record['title']?.toString() ??
+        record['studentName']?.toString() ??
+        moduleTitle;
+    final description = record['description']?.toString();
+    final details = <MapEntry<String, String>>[];
+    void addDetail(String label, Object? value, {bool date = false}) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isEmpty) return;
+      details
+          .add(MapEntry(label, date ? _formatMobileDate(text) : _title(text)));
+    }
+
+    addDetail('Status', record['status']);
+    addDetail('Date', record['attendanceDate'] ?? record['recordDate'],
+        date: true);
+    addDetail('Due date', record['dueDate'], date: true);
+    addDetail('Paid on', record['paidOn'], date: true);
+    addDetail(
+        'Class',
+        [
+          record['className']?.toString() ?? '',
+          record['sectionName']?.toString() ?? '',
+        ].where((value) => value.isNotEmpty).join(' · '));
+    addDetail('Assigned to', record['assignee']);
+    addDetail('Priority', record['priority']);
+
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            22,
+            4,
+            22,
+            22 + MediaQuery.viewInsetsOf(sheetContext).bottom,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  recordTitle,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(moduleTitle,
+                    style: const TextStyle(color: HigPalette.muted)),
+                if (description?.isNotEmpty == true) ...[
+                  const SizedBox(height: 18),
+                  Text(description!, style: const TextStyle(fontSize: 16)),
+                ],
+                if (details.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  for (final detail in details)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 96,
+                            child: Text(
+                              detail.key,
+                              style: const TextStyle(color: HigPalette.muted),
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              detail.value,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final title = widget.item['label']?.toString() ?? key;
@@ -2131,8 +2150,18 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                                     (entry as Map).cast<String, dynamic>();
                                 final status =
                                     record['status']?.toString() ?? '';
+                                final attendanceDate =
+                                    record['attendanceDate']?.toString() ?? '';
+                                final classLabel = [
+                                  record['className']?.toString() ?? '',
+                                  record['sectionName']?.toString() ?? '',
+                                ]
+                                    .where((value) => value.isNotEmpty)
+                                    .join(' · ');
                                 return Card(
                                   child: ListTile(
+                                    onTap: () =>
+                                        showRecordDetails(record, title),
                                     minVerticalPadding: 14,
                                     leading: CircleAvatar(
                                       backgroundColor:
@@ -2151,8 +2180,16 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                                       ),
                                     ),
                                     subtitle: Text(
-                                      record['description']?.toString() ??
-                                          status,
+                                      key == 'attendance'
+                                          ? [
+                                              if (attendanceDate.isNotEmpty)
+                                                _formatMobileDate(
+                                                    attendanceDate),
+                                              if (classLabel.isNotEmpty)
+                                                classLabel,
+                                            ].join(' • ')
+                                          : record['description']?.toString() ??
+                                              status,
                                       maxLines: 3,
                                       overflow: TextOverflow.ellipsis,
                                     ),
