@@ -47,6 +47,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
   final Set<String> completedWrites = {};
   bool loading = true;
   bool saving = false;
+  bool dirty = false;
   String? error;
 
   List<String> get classes {
@@ -112,6 +113,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
 
   void _restoreStatuses() {
     statuses.clear();
+    completedWrites.clear();
     final date = _mobileIsoDate(selectedDate);
     for (final record in existing) {
       if (record['attendanceDate']?.toString() == date) {
@@ -119,6 +121,37 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
             record['status']?.toString() ?? 'present';
       }
     }
+    dirty = false;
+  }
+
+  Future<bool> _confirmDiscardChanges() async {
+    if (!dirty) return true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded),
+        title: const Text('Discard attendance changes?'),
+        content: const Text(
+          'The attendance you marked has not been saved. You will lose these changes if you leave.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep editing'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    return discard == true;
+  }
+
+  Future<void> _refresh() async {
+    if (!await _confirmDiscardChanges()) return;
+    await _load();
   }
 
   Future<void> _chooseDate() async {
@@ -130,7 +163,12 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
       lastDate: DateTime(now.year, now.month, now.day),
       helpText: 'Attendance date',
     );
-    if (chosen == null) return;
+    if (chosen == null ||
+        _mobileIsoDate(chosen) == _mobileIsoDate(selectedDate)) {
+      return;
+    }
+    if (!await _confirmDiscardChanges()) return;
+    if (!mounted) return;
     setState(() {
       selectedDate = chosen;
       _restoreStatuses();
@@ -144,6 +182,17 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
         statuses[studentId] = 'present';
         completedWrites.remove(_writeKey(studentId));
       }
+      dirty = true;
+    });
+  }
+
+  Future<void> _changeClass(String? value) async {
+    if (value == null || value == selectedClass) return;
+    if (!await _confirmDiscardChanges()) return;
+    if (!mounted) return;
+    setState(() {
+      selectedClass = value;
+      _restoreStatuses();
     });
   }
 
@@ -218,6 +267,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
         ),
       ),
     );
+    dirty = false;
     Navigator.pop(context, true);
   }
 
@@ -228,119 +278,129 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
         .where((student) => statuses[student['id']?.toString()] != null)
         .length;
     final allMarked = students.isNotEmpty && marked == students.length;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Take attendance')),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
-                children: [
-                  Text(
-                    'Choose the class and date, mark everyone present, then change only the exceptions.',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: HigPalette.muted,
-                        ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (classes.isNotEmpty)
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedClass,
-                      decoration: const InputDecoration(
-                        labelText: 'Class and section',
-                        prefixIcon: Icon(Icons.groups_rounded),
-                      ),
-                      items: classes
-                          .map(
-                            (value) => DropdownMenuItem(
-                              value: value,
-                              child: Text(value),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: saving
-                          ? null
-                          : (value) => setState(() => selectedClass = value),
+    return PopScope(
+      canPop: !dirty && !saving,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop || saving || !dirty) return;
+        if (await _confirmDiscardChanges() && mounted) {
+          dirty = false;
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Take attendance')),
+        body: loading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                  children: [
+                    Text(
+                      'Choose the class and date, mark everyone present, then change only the exceptions.',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: HigPalette.muted,
+                          ),
                     ),
-                  const SizedBox(height: 12),
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.calendar_month_rounded),
-                      title: const Text('Attendance date'),
-                      subtitle: Text(
-                        _formatMobileDate(_mobileIsoDate(selectedDate)),
-                      ),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: saving ? null : _chooseDate,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '$marked of ${students.length} marked',
-                          style: const TextStyle(fontWeight: FontWeight.w800),
+                    const SizedBox(height: 16),
+                    if (classes.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedClass,
+                        decoration: const InputDecoration(
+                          labelText: 'Class and section',
+                          prefixIcon: Icon(Icons.groups_rounded),
                         ),
+                        items: classes
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: saving ? null : _changeClass,
                       ),
-                      OutlinedButton.icon(
-                        onPressed:
-                            saving || students.isEmpty ? null : _markAllPresent,
-                        icon: const Icon(Icons.done_all_rounded),
-                        label: const Text('All present'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  LinearProgressIndicator(
-                    value: students.isEmpty ? 0 : marked / students.length,
-                    minHeight: 7,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  if (error != null) ...[
                     const SizedBox(height: 12),
-                    _HigEmptyCard(
-                      icon: Icons.error_outline_rounded,
-                      title: 'Action needed',
-                      message: error!,
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.calendar_month_rounded),
+                        title: const Text('Attendance date'),
+                        subtitle: Text(
+                          _formatMobileDate(_mobileIsoDate(selectedDate)),
+                        ),
+                        trailing: const Icon(Icons.chevron_right_rounded),
+                        onTap: saving ? null : _chooseDate,
+                      ),
                     ),
-                  ],
-                  const SizedBox(height: 16),
-                  for (var index = 0; index < students.length; index++) ...[
-                    _AttendanceStudentRow(
-                      student: students[index],
-                      index: index,
-                      status: statuses[students[index]['id']?.toString()],
-                      enabled: !saving,
-                      onChanged: (status) => setState(() {
-                        final studentId = students[index]['id'].toString();
-                        statuses[studentId] = status;
-                        completedWrites.remove(_writeKey(studentId));
-                      }),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '$marked of ${students.length} marked',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: saving || students.isEmpty
+                              ? null
+                              : _markAllPresent,
+                          icon: const Icon(Icons.done_all_rounded),
+                          label: const Text('All present'),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
+                    LinearProgressIndicator(
+                      value: students.isEmpty ? 0 : marked / students.length,
+                      minHeight: 7,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    if (error != null) ...[
+                      const SizedBox(height: 12),
+                      _HigEmptyCard(
+                        icon: Icons.error_outline_rounded,
+                        title: 'Action needed',
+                        message: error!,
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    for (var index = 0; index < students.length; index++) ...[
+                      _AttendanceStudentRow(
+                        student: students[index],
+                        index: index,
+                        status: statuses[students[index]['id']?.toString()],
+                        enabled: !saving,
+                        onChanged: (status) => setState(() {
+                          final studentId = students[index]['id'].toString();
+                          statuses[studentId] = status;
+                          completedWrites.remove(_writeKey(studentId));
+                          dirty = true;
+                        }),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                   ],
-                ],
+                ),
               ),
+        bottomNavigationBar: SafeArea(
+          minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: FilledButton.icon(
+            onPressed: saving || !allMarked ? null : _save,
+            icon: saving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.cloud_done_rounded),
+            label: Text(
+              saving
+                  ? 'Saving attendance…'
+                  : allMarked
+                      ? 'Save ${students.length} students'
+                      : 'Mark every student to save',
             ),
-      bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-        child: FilledButton.icon(
-          onPressed: saving || !allMarked ? null : _save,
-          icon: saving
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.cloud_done_rounded),
-          label: Text(
-            saving
-                ? 'Saving attendance…'
-                : allMarked
-                    ? 'Save ${students.length} students'
-                    : 'Mark every student to save',
           ),
         ),
       ),
