@@ -16,7 +16,12 @@ const approvedAudit = {
         { url: "https://github.com/advisories/GHSA-5p2g-fcmc-qvqq" },
       ],
     },
-    vinext: { severity: "high", isDirect: true, via: ["image-size"] },
+    "@vercel/og": { severity: "moderate", isDirect: false, via: ["satori"] },
+    vinext: {
+      severity: "high",
+      isDirect: true,
+      via: ["@vercel/og", "image-size"],
+    },
   },
 };
 
@@ -51,6 +56,15 @@ test("dependency audit policy rejects an advisory-set change", () => {
   const result = runPolicy(audit, approvedLock);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /image-size/);
+});
+
+test("dependency audit policy rejects a new severe vinext path", () => {
+  const audit = structuredClone(approvedAudit);
+  audit.vulnerabilities["@vercel/og"].severity = "high";
+  const result = runPolicy(audit, approvedLock);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /@vercel\/og/);
+  assert.match(result.stderr, /vinext/);
 });
 
 test("dependency audit policy rejects locked-version drift", () => {

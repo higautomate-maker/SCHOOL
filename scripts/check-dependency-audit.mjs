@@ -10,6 +10,7 @@ const approvedException = {
     "https://github.com/advisories/GHSA-5p2g-fcmc-qvqq",
     "https://github.com/advisories/GHSA-w3rx-r6r6-pgpr",
   ]),
+  vinextVia: new Set(["@vercel/og", "image-size"]),
 };
 
 const args = process.argv.slice(2);
@@ -69,7 +70,7 @@ function evaluate(report, packageLock) {
       approvedExceptions.push(name);
       continue;
     }
-    if (name === "vinext" && approvedVinextFinding(finding, packageLock)) {
+    if (name === "vinext" && approvedVinextFinding(finding, packageLock, report)) {
       approvedExceptions.push(name);
       continue;
     }
@@ -100,13 +101,21 @@ function approvedImageSizeFinding(finding, packageLock) {
     && [...approvedException.advisoryUrls].every((url) => urls.has(url));
 }
 
-function approvedVinextFinding(finding, packageLock) {
+function approvedVinextFinding(finding, packageLock, report) {
   if (finding.severity !== "high" || finding.isDirect !== true) return false;
   if (lockedVersion(packageLock, "vinext") !== approvedException.packages.vinext) {
     return false;
   }
-  const via = finding.via ?? [];
-  return via.length === 1 && via[0] === "image-size";
+  const via = new Set(finding.via ?? []);
+  if (via.size !== approvedException.vinextVia.size) return false;
+  if (![...approvedException.vinextVia].every((name) => via.has(name))) {
+    return false;
+  }
+  return [...via]
+    .filter((name) => name !== "image-size")
+    .every((name) => !["high", "critical"].includes(
+      report.vulnerabilities?.[name]?.severity,
+    ));
 }
 
 function lockedVersion(packageLock, name) {

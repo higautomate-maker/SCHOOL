@@ -28,33 +28,34 @@ class _AttendanceApi extends HigMobileApi {
 }
 
 void main() {
+  List<JsonMap> students() => <JsonMap>[
+        {
+          'id': '11111111-1111-4111-8111-111111111111',
+          'fullName': 'Aarav Sharma',
+          'admissionNumber': 'GF-001',
+          'rollNumber': '1',
+          'className': 'Grade 8',
+          'sectionName': 'A',
+        },
+        {
+          'id': '22222222-2222-4222-8222-222222222222',
+          'fullName': 'Anaya Sharma',
+          'admissionNumber': 'GF-002',
+          'rollNumber': '2',
+          'className': 'Grade 8',
+          'sectionName': 'A',
+        },
+      ];
+
   testWidgets(
       'teacher marks a class present, changes an exception, and saves once',
       (tester) async {
     final api = _AttendanceApi();
-    final students = <JsonMap>[
-      {
-        'id': '11111111-1111-4111-8111-111111111111',
-        'fullName': 'Aarav Sharma',
-        'admissionNumber': 'GF-001',
-        'rollNumber': '1',
-        'className': 'Grade 8',
-        'sectionName': 'A',
-      },
-      {
-        'id': '22222222-2222-4222-8222-222222222222',
-        'fullName': 'Anaya Sharma',
-        'admissionNumber': 'GF-002',
-        'rollNumber': '2',
-        'className': 'Grade 8',
-        'sectionName': 'A',
-      },
-    ];
 
     await tester.pumpWidget(
       MaterialApp(
         theme: higMobileTheme(const Color(0xff2459d3)),
-        home: HigAttendancePage(api: api, students: students),
+        home: HigAttendancePage(api: api, students: students()),
       ),
     );
     await tester.pumpAndSettle();
@@ -83,5 +84,32 @@ void main() {
         api.writes.where((write) => write['status'] == 'absent'), hasLength(1));
     expect(
         api.writes.every((write) => write['attendanceDate'] != null), isTrue);
+  });
+
+  testWidgets('teacher is warned before discarding marked attendance',
+      (tester) async {
+    final api = _AttendanceApi();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: higMobileTheme(const Color(0xff2459d3)),
+        home: HigAttendancePage(api: api, students: students()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('All present'));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Discard attendance changes?'), findsOneWidget);
+    expect(find.text('Keep editing'), findsOneWidget);
+    expect(find.text('Discard'), findsOneWidget);
+
+    await tester.tap(find.text('Keep editing'));
+    await tester.pumpAndSettle();
+    expect(find.text('Take attendance'), findsOneWidget);
+    expect(find.text('2 of 2 marked'), findsOneWidget);
+    expect(api.writes, isEmpty);
   });
 }
