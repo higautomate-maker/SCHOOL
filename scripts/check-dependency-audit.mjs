@@ -107,8 +107,8 @@ function approvedVinextFinding(finding, packageLock, report) {
     return false;
   }
   const via = new Set(finding.via ?? []);
-  if (via.size !== approvedException.vinextVia.size) return false;
-  if (![...approvedException.vinextVia].every((name) => via.has(name))) {
+  if (!via.has("image-size")) return false;
+  if (![...via].every((name) => approvedException.vinextVia.has(name))) {
     return false;
   }
   return [...via]

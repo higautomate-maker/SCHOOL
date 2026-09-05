@@ -38,6 +38,14 @@ test("dependency audit policy accepts only the documented upstream exception", (
   assert.deepEqual(result.report.approvedExceptions.sort(), ["image-size", "vinext"]);
 });
 
+test("dependency audit policy accepts npm's compact vinext dependency path", () => {
+  const audit = structuredClone(approvedAudit);
+  audit.vulnerabilities.vinext.via = ["image-size"];
+  const result = runPolicy(audit, approvedLock);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.report.approvedExceptions.sort(), ["image-size", "vinext"]);
+});
+
 test("dependency audit policy rejects another high-severity finding", () => {
   const audit = structuredClone(approvedAudit);
   const vulnerabilities = audit.vulnerabilities as Record<string, unknown>;
