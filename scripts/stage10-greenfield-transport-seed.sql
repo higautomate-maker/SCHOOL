@@ -173,6 +173,13 @@ ON CONFLICT (tenant_id, id) DO UPDATE SET
   status = 'active',
   updated_at = now();
 
+-- This script is an explicit staging acceptance reset. Clear only the fixed
+-- Greenfield fixture trip's captured events so a completed road test can be
+-- safely repeated without touching any other school or trip.
+DELETE FROM mobile_transport_events
+WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid
+  AND trip_id = '47000000-0000-4000-8000-000000000001'::uuid;
+
 INSERT INTO transport_trips (
   id, tenant_id, driver_assignment_id, route_id,
   service_date, direction, scheduled_start_at, status
@@ -190,10 +197,7 @@ VALUES (
 ON CONFLICT (tenant_id, route_id, service_date, direction) DO UPDATE SET
   driver_assignment_id = EXCLUDED.driver_assignment_id,
   scheduled_start_at = EXCLUDED.scheduled_start_at,
-  status = CASE
-    WHEN transport_trips.status = 'completed' THEN transport_trips.status
-    ELSE 'scheduled'
-  END,
+  status = 'scheduled',
   updated_at = now();
 
 -- Driver access is resolved from transport_driver_assignments.

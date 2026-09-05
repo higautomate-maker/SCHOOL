@@ -143,6 +143,71 @@ ThemeData higMobileTheme(Color seedColor) {
   );
 }
 
+class HigStartupView extends StatelessWidget {
+  const HigStartupView({
+    super.key,
+    required this.title,
+    required this.icon,
+    this.message = 'Preparing your secure workspace',
+  });
+
+  final String title;
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 82,
+                  height: 82,
+                  decoration: BoxDecoration(
+                    color: primary.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(26),
+                  ),
+                  child: Icon(icon, size: 42, color: primary),
+                ),
+                const SizedBox(height: 22),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: HigPalette.muted),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class HigRecentFeatureStore {
   static String _key(String principalType) =>
       'hig.mobile.recent.${principalType.isEmpty ? 'unknown' : principalType}.v1';
@@ -387,24 +452,6 @@ class HigRoleDashboardPage extends StatelessWidget {
               const SizedBox(height: 22),
               _HigBirthdaysCard(birthdays: birthdays),
             ],
-            if (students.isNotEmpty) ...[
-              const SizedBox(height: 22),
-              const _HigSectionTitle(
-                  title: 'Linked students',
-                  subtitle: 'Your authorized student profiles'),
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 86,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: students.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (_, index) => _HigStudentPill(
-                    student: (students[index] as Map).cast<String, dynamic>(),
-                  ),
-                ),
-              ),
-            ],
             if (daily.isNotEmpty) ...[
               const SizedBox(height: 24),
               _HigSectionTitle(
@@ -423,10 +470,22 @@ class HigRoleDashboardPage extends StatelessWidget {
               const _HigEmptyCard(
                 icon: Icons.lock_outline_rounded,
                 title: 'No actions available yet',
-                message:
-                    'Your school hasn’t enabled any features for you yet. '
+                message: 'Your school hasn’t enabled any features for you yet. '
                     'Please check back later or contact your school office.',
               ),
+            ],
+            if (students.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              const _HigSectionTitle(
+                  title: 'Linked students',
+                  subtitle: 'Your authorized student profiles'),
+              const SizedBox(height: 10),
+              for (var index = 0; index < students.length; index++) ...[
+                _HigStudentPill(
+                  student: (students[index] as Map).cast<String, dynamic>(),
+                ),
+                if (index < students.length - 1) const SizedBox(height: 10),
+              ],
             ],
             if (recent.isNotEmpty) ...[
               const SizedBox(height: 24),
@@ -591,11 +650,12 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
   Future<void> load() async {
     try {
       final next = await widget.api.notifications();
-      if (mounted)
+      if (mounted) {
         setState(() {
           data = next;
           error = null;
         });
+      }
     } catch (exception) {
       if (mounted) setState(() => error = exception.toString());
     }
@@ -684,8 +744,15 @@ class HigProfileView extends StatelessWidget {
                               style: const TextStyle(
                                   fontSize: 20, fontWeight: FontWeight.w900)),
                           const SizedBox(height: 3),
-                          Text(user['email']?.toString() ?? '',
-                              style: const TextStyle(color: HigPalette.muted)),
+                          Tooltip(
+                            message: user['email']?.toString() ?? '',
+                            child: Text(
+                              user['email']?.toString() ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: HigPalette.muted),
+                            ),
+                          ),
                           const SizedBox(height: 8),
                           _HigRoleBadge(
                               label: role == 'school'
@@ -853,8 +920,8 @@ class _HigTodayTile extends StatelessWidget {
           Text(label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w800)),
+              style:
+                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
           const SizedBox(height: 3),
           Text(hint,
               maxLines: 2,
@@ -1115,7 +1182,7 @@ class _HigStudentPill extends StatelessWidget {
     final classLabel =
         '${student['className'] ?? ''} ${student['sectionName'] ?? ''}'.trim();
     return Container(
-      width: 220,
+      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
           color: Colors.white,
