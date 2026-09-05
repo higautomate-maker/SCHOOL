@@ -86,7 +86,11 @@ class _DriverRootState extends State<DriverRoot> {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const HigStartupView(
+        title: 'Hig School Transport',
+        icon: Icons.directions_bus_rounded,
+        message: 'Preparing your route and trip controls',
+      );
     }
     if (api.session == null) {
       return DriverLogin(api: api, error: error, onAuthenticated: load);
@@ -147,7 +151,9 @@ class _DriverLoginState extends State<DriverLogin> {
   Future<void> submit() async {
     final tenantIssue = _tenantPreconfigured
         ? null
-        : (tenant.text.trim().isEmpty ? HigAuthMessages.schoolIdRequired : null);
+        : (tenant.text.trim().isEmpty
+            ? HigAuthMessages.schoolIdRequired
+            : null);
     final emailIssue = higValidateEmail(email.text);
     final passwordIssue = higValidatePassword(password.text);
     setState(() {
@@ -222,7 +228,10 @@ class _DriverLoginState extends State<DriverLogin> {
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
                 autocorrect: false,
-                autofillHints: const [AutofillHints.username, AutofillHints.email],
+                autofillHints: const [
+                  AutofillHints.username,
+                  AutofillHints.email
+                ],
                 decoration: InputDecoration(
                   labelText: 'Email address',
                   prefixIcon: const Icon(Icons.mail_outline_rounded),
@@ -1173,7 +1182,7 @@ class _DriverDashboardState extends State<DriverDashboard>
       body: RefreshIndicator(
         onRefresh: widget.onRefresh,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 110),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 142),
           children: [
             Text(
               'Hello, $driverName',
@@ -1305,7 +1314,8 @@ class _DriverDashboardState extends State<DriverDashboard>
         _InfoTile(
           icon: Icons.people_outline,
           title: 'Assigned students',
-          value: '${students.length} students',
+          value:
+              '${students.length} ${students.length == 1 ? 'student' : 'students'}',
           trailing: 'View list',
           onTap: () => setState(() => selectedTab = 2),
         ),
@@ -1366,7 +1376,10 @@ class _DriverDashboardState extends State<DriverDashboard>
                   stop['name']?.toString() ?? 'Route stop',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-                subtitle: Text('${stop['studentCount'] ?? 0} students'),
+                subtitle: Text(
+                  '${stop['studentCount'] ?? 0} '
+                  '${(stop['studentCount'] as num?)?.toInt() == 1 ? 'student' : 'students'}',
+                ),
                 trailing: Text(
                   stop['pickupTime']?.toString() ?? '',
                   style: const TextStyle(fontWeight: FontWeight.w700),

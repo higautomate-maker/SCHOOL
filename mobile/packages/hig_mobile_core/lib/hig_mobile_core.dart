@@ -682,7 +682,12 @@ class _HigMobileRootState extends State<HigMobileRoot> {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return HigStartupView(
+        title: widget.config.title,
+        icon: widget.config.allowedPrincipalTypes.contains('school')
+            ? Icons.school_rounded
+            : Icons.family_restroom_rounded,
+      );
     }
     if (api.session == null) {
       return LoginView(
@@ -758,7 +763,9 @@ class _LoginViewState extends State<LoginView> {
     // Validate required fields locally before sending any request.
     final tenantIssue = _tenantPreconfigured
         ? null
-        : (tenant.text.trim().isEmpty ? HigAuthMessages.schoolIdRequired : null);
+        : (tenant.text.trim().isEmpty
+            ? HigAuthMessages.schoolIdRequired
+            : null);
     final emailIssue = higValidateEmail(email.text);
     final passwordIssue = higValidatePassword(password.text);
     setState(() {
@@ -884,7 +891,10 @@ class _LoginViewState extends State<LoginView> {
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
                   autocorrect: false,
-                  autofillHints: const [AutofillHints.username, AutofillHints.email],
+                  autofillHints: const [
+                    AutofillHints.username,
+                    AutofillHints.email
+                  ],
                   decoration: InputDecoration(
                     labelText: 'Email address',
                     prefixIcon: const Icon(Icons.mail_outline_rounded),

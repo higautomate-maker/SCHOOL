@@ -11,6 +11,10 @@ const roleUi = readFileSync(
   "utf8",
 );
 const driver = readFileSync("mobile/driver_gps_app/lib/main.dart", "utf8");
+const transportFixture = readFileSync(
+  "scripts/stage10-greenfield-transport-seed.sql",
+  "utf8",
+);
 const experience = readFileSync("docs/MOBILE-ROLE-EXPERIENCE.md", "utf8");
 
 test("mobile shell provides role-focused daily work and discoverable navigation", () => {
@@ -23,6 +27,22 @@ test("mobile shell provides role-focused daily work and discoverable navigation"
   assert.match(roleUi, /Search your workspace/);
   assert.match(roleUi, /Linked students/);
   assert.match(roleUi, /higMobileTheme/);
+  assert.match(core, /HigStartupView/);
+  assert.match(roleUi, /Preparing your secure workspace/);
+  assert.doesNotMatch(
+    core,
+    /return const Scaffold\(body: Center\(child: CircularProgressIndicator\(\)\)\);/,
+  );
+});
+
+test("mobile role screens prioritize work and remain readable on narrow devices", () => {
+  assert.ok(
+    roleUi.indexOf("Today’s work") < roleUi.indexOf("title: 'Linked students'"),
+  );
+  assert.match(roleUi, /width: double\.infinity/);
+  assert.match(roleUi, /overflow: TextOverflow\.ellipsis/);
+  assert.match(driver, /students\.length == 1 \? 'student' : 'students'/);
+  assert.match(driver, /EdgeInsets\.fromLTRB\(16, 12, 16, 142\)/);
 });
 
 test("role workspace remains server-authoritative and permission-aware", () => {
@@ -50,6 +70,8 @@ test("transporter experience keeps trip and emergency controls prominent", () =>
   assert.match(driver, /Assigned students/);
   assert.match(driver, /label: 'Route'/);
   assert.match(driver, /higMobileTheme/);
+  assert.match(transportFixture, /DELETE FROM mobile_transport_events/);
+  assert.match(transportFixture, /status = 'scheduled'/);
 });
 
 test("final acceptance explicitly covers all mobile roles and real daily tasks", () => {
