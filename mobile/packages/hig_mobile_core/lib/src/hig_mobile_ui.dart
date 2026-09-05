@@ -414,7 +414,7 @@ class HigRoleDashboardPage extends StatelessWidget {
     final today = (home['today'] as Map?)?.cast<String, dynamic>();
     final birthdays = (home['birthdays'] as List?) ?? const [];
     final daily =
-        _orderedMatches(modules, _dailyKeys[role] ?? const []).take(6).toList();
+        _orderedMatches(modules, _dailyKeys[role] ?? const []).take(4).toList();
     final recent = _recentMatches(modules, recentKeys).take(4).toList();
     final roleLabel = role == 'school'
         ? 'Teacher & staff workspace'
@@ -585,10 +585,10 @@ class _HigRoleWorkspacePageState extends State<HigRoleWorkspacePage> {
       groups.putIfAbsent(category, () => []).add(item);
     }
     final title = widget.principalType == 'parent'
-        ? 'Family'
+        ? 'More family tools'
         : widget.principalType == 'student'
-            ? 'Learn'
-            : 'Workspace';
+            ? 'More learning tools'
+            : 'More school tools';
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),

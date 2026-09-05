@@ -10,6 +10,10 @@ const roleUi = readFileSync(
   "mobile/packages/hig_mobile_core/lib/src/hig_mobile_ui.dart",
   "utf8",
 );
+const attendanceUi = readFileSync(
+  "mobile/packages/hig_mobile_core/lib/src/hig_attendance_ui.dart",
+  "utf8",
+);
 const driver = readFileSync("mobile/driver_gps_app/lib/main.dart", "utf8");
 const transportFixture = readFileSync(
   "scripts/stage10-greenfield-transport-seed.sql",
@@ -60,6 +64,35 @@ test("teacher and parent actions use task language and guided selection", () => 
   assert.match(core, /Send school request/);
   assert.match(core, /DropdownButtonFormField<String>/);
   assert.match(core, /availableStudents/);
+});
+
+test("teacher attendance is date-aware and supports class-wide exception marking", () => {
+  assert.match(core, /HigAttendancePage/);
+  assert.match(attendanceUi, /Take attendance/);
+  assert.match(attendanceUi, /Class and section/);
+  assert.match(attendanceUi, /showDatePicker/);
+  assert.match(attendanceUi, /Attendance date/);
+  assert.match(attendanceUi, /All present/);
+  assert.match(attendanceUi, /Mark every student to save/);
+  assert.match(attendanceUi, /\['present', 'absent', 'late', 'excused'\]/);
+  assert.match(attendanceUi, /offset < pending\.length; offset \+= 4/);
+  assert.match(attendanceUi, /completedWrites\.add/);
+  assert.doesNotMatch(core, /Date \(YYYY-MM-DD\)/);
+});
+
+test("mobile navigation keeps daily work small and puts secondary tools under More", () => {
+  assert.match(core, /label: 'More'/);
+  assert.match(roleUi, /take\(4\)/);
+  assert.match(roleUi, /More school tools/);
+  assert.match(roleUi, /More family tools/);
+  assert.match(roleUi, /More learning tools/);
+});
+
+test("mobile record rows open details instead of showing a dead chevron", () => {
+  assert.match(core, /void showRecordDetails\(/);
+  assert.match(core, /showModalBottomSheet<void>/);
+  assert.match(core, /onTap: \(\) =>\s*showRecordDetails\(record, title\)/);
+  assert.match(core, /_formatMobileDate\(\s*attendanceDate\)/);
 });
 
 test("transporter experience keeps trip and emergency controls prominent", () => {

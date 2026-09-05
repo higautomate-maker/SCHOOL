@@ -19,14 +19,16 @@ The home screen is not a catalogue. It answers three questions first:
 2. What is important today?
 3. What can I do next with one tap?
 
-The complete authorized catalogue remains under **Work**, **Family** or
-**Learn**, grouped into understandable categories with search. Recently opened
+The complete authorized catalogue remains under **More**, grouped into
+role-specific categories with search. Recently opened
 items are stored on-device for convenience; they never grant access. Every
 destination still comes from the server-issued effective-access response.
 
 ## Shared interaction rules
 
-- Four stable destinations: Home, role workspace, Alerts and Profile.
+- Four stable destinations: Home, More, Alerts and Profile.
+- Home contains no more than four primary role-specific actions. Secondary
+  modules stay discoverable under More without competing with daily work.
 - The server remains authoritative for all visible modules and actions.
 - No disabled or unlicensed feature is teased in the interface.
 - Daily actions use plain verbs: Mark attendance, View timetable, Track bus,
@@ -61,6 +63,13 @@ assessment/examinations and communication when those modules are authorized.
 Management actions appear only when `canManage` is true. Staff with narrower
 permissions see a smaller workspace, not inaccessible controls.
 
+Attendance uses a dedicated classroom workflow rather than a generic record
+form. The teacher chooses a class/section and calendar date, can mark the whole
+class present in one tap, changes only absent/late/excused exceptions, sees
+completion progress, and cannot save an incomplete register. Existing marks
+for the selected date are restored for safe correction. Historical attendance
+rows always show a human-readable date and class context.
+
 ## Transporter daily flow
 
 The transporter app remains trip-first. The primary screen shows assignment,
@@ -75,6 +84,8 @@ Transporter accounts on small and large Android devices plus iPhone. Test:
 
 - first-time sign-in, session restoration and recovery guidance;
 - every entitled feature and the absence of every prohibited feature;
+- every visible navigation target, module tile and record row opens the
+  promised destination; disabled controls explain their prerequisite;
 - one-handed navigation and common daily tasks;
 - offline reads, queued writes and reconnection;
 - dynamic text sizing, screen-reader labels, contrast and 48px targets;
