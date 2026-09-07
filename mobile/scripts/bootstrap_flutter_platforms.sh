@@ -70,6 +70,7 @@ with plist_path.open('rb') as handle:
     plist = plistlib.load(handle)
 plist['CFBundleDisplayName'] = display_name
 plist['CFBundleName'] = display_name
+plist['NSPhotoLibraryUsageDescription'] = 'Choose a photo for your school profile.'
 if location_mode == 'foreground':
     plist['NSLocationWhenInUseUsageDescription'] = 'Hig Driver uses location while an active trip is open.'
 plist.pop('NSLocationAlwaysAndWhenInUseUsageDescription', None)

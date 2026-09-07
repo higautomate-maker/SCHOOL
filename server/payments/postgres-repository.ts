@@ -3,6 +3,7 @@ import { readGatewayCredentials } from "./credentials.ts";
 import {
   calculatePaymentSurchargePaise,
   createRazorpayOrder,
+  fetchRazorpayOrderState,
   createRazorpayRefund,
   findRazorpayOrderByReceipt,
   paymentOrderReceipt,
@@ -19,6 +20,25 @@ import type {
 } from "./contracts.ts";
 
 type UnknownRecord = Record<string, unknown>;
+
+export async function parentPaymentStatus(tenantId: string, userId: string,
+  allowedStudentIds: readonly string[], paymentOrderId: string) {
+  return withTenantDatabase(tenantId, async (_database, client) => {
+    const result = await client.query(`SELECT student_id AS "studentId",
+      initiated_by_user_id AS "userId", provider_order_id AS "orderId",
+      amount_paise::text AS amount, currency, status
+      FROM payment_orders WHERE tenant_id=$1::uuid AND id=$2::uuid AND provider='razorpay'`,
+      [tenantId, paymentOrderId]);
+    const row = result.rows[0];
+    if (!row || row.userId !== userId) throw new Error('Payment order not found');
+    requireAssignedStudent(allowedStudentIds, row.studentId);
+    const remote = await fetchRazorpayOrderState(await runtimeGateway(client,tenantId), row.orderId);
+    if (remote.order.id !== row.orderId || remote.order.amount !== Number(row.amount) || remote.order.currency !== row.currency)
+      throw new Error('Payment status mismatch');
+    return {status: row.status, providerStatus: remote.order.status,
+      retryAllowed: ['created','attempted','failed'].includes(row.status) && remote.retryAllowed};
+  });
+}
 
 type RuntimeGateway = RazorpayRuntimeCredentials & {
   surchargeEnabled: boolean;
@@ -79,6 +99,10 @@ export async function createParentPostgresRazorpayOrder(
     async (_database, client) => {
       const runtime = await runtimeGateway(client, tenantId);
 
+      // Serialize order creation for the invoice, including a new app session
+      // or a second guardian, before checking for an existing pending order.
+      await client.query('SELECT id FROM fee_invoices WHERE tenant_id=$1::uuid AND id=$2::uuid FOR UPDATE', [tenantId, invoiceId]);
+
       const existing = await client.query(
         `SELECT
            id,
@@ -94,9 +118,11 @@ export async function createParentPostgresRazorpayOrder(
          FROM payment_orders
          WHERE tenant_id = $1::uuid
            AND provider = 'razorpay'
-           AND idempotency_key = $2::text
+           AND (idempotency_key = $2::text OR
+             (invoice_id = $3::uuid AND status IN ('created', 'attempted')))
+         ORDER BY (idempotency_key = $2::text) DESC, created_at DESC
          LIMIT 1`,
-        [tenantId, idempotencyKey],
+        [tenantId, idempotencyKey, invoiceId],
       );
 
       if (existing.rows[0]) {
@@ -109,6 +135,16 @@ export async function createParentPostgresRazorpayOrder(
         }
 
         requireAssignedStudent(allowedStudentIds, order.studentId);
+        if (order.initiatedByUserId !== userId) throw new Error('Another guardian has a pending payment for this invoice. Contact the school.');
+        const currentInvoice = await client.query(
+          `SELECT (amount_paise - paid_paise)::text AS outstanding
+           FROM fee_invoices WHERE tenant_id=$1::uuid AND id=$2::uuid`,
+          [tenantId, invoiceId],
+        );
+        const outstanding = moneyNumber(currentInvoice.rows[0]?.outstanding);
+        if (outstanding <= 0 || outstanding !== order.invoiceAmountPaise) {
+          throw new Error('Invoice balance changed. Refresh fees and contact the school before retrying payment.');
+        }
         return { order, runtime };
       }
 

@@ -1,7 +1,9 @@
 import type { PoolClient } from "pg";
 import type { ChatGPTUser } from "../../app/chatgpt-auth";
-import type { OperationsState } from "./repository.ts";
+import type { AttendanceAuthority, OperationsState } from "./repository.ts";
 import type { OperationAction } from "./validation.ts";
+import { currentAttendanceAdmin, readTeacherAssignments } from "./teacher-assignment-repository.ts";
+import { evaluateTeacherAttendance } from "./teacher-attendance-policy.ts";
 import {
   ensurePostgresActor,
   isPostgresUniqueViolation,
@@ -83,6 +85,7 @@ export async function applyPostgresOperation(
   action: OperationAction,
   actor: ChatGPTUser,
   idempotencyKey: string,
+  attendanceAuthority?: AttendanceAuthority,
 ): Promise<OperationsState> {
   try {
     const committed = await withTenantDatabase(tenantId, async (_database, client) => {
@@ -104,12 +107,64 @@ export async function applyPostgresOperation(
       const sessionId = await activeSessionId(client, tenantId);
       if (!sessionId) throw new Error("Create and activate an academic session first");
       const actorId = await ensurePostgresActor(client, actor);
+      if (attendanceAuthority && actorId !== attendanceAuthority.userId) {
+        throw new Error("Attendance identity denied");
+      }
 
       let resourceType: "attendance" | "fee_invoice" | "fee_payment";
       let resourceId: string;
       let notificationPayload: Record<string, unknown>;
       if (action.action === "mark_attendance") {
         await requireStudent(client, tenantId, action.studentId);
+        let attendanceAuditReason = "School operations workflow";
+        if (attendanceAuthority) {
+          if (!action.academicSessionId || !action.classId || !action.sectionId) {
+            throw new Error("Attendance teaching context required");
+          }
+          if (sessionId !== action.academicSessionId) {
+            throw new Error("Attendance assignment scope invalid");
+          }
+          const studentScope = await client.query(
+            `SELECT s.id
+             FROM students s
+             JOIN school_classes c
+               ON c.tenant_id = s.tenant_id
+              AND c.id = $4::uuid
+              AND c.name = s.class_name
+              AND c.active
+             JOIN class_sections cs
+               ON cs.tenant_id = c.tenant_id
+              AND cs.class_id = c.id
+              AND cs.id = $5::uuid
+              AND cs.name = s.section_name
+             WHERE s.tenant_id = $1::uuid
+               AND s.id = $2::uuid
+               AND s.academic_session_id = $3::uuid
+             FOR SHARE OF s, c, cs`,
+            [tenantId, action.studentId, sessionId, action.classId, action.sectionId],
+          );
+          if (!studentScope.rowCount) throw new Error("Attendance student scope invalid");
+          const grants = await readTeacherAssignments(client, tenantId, attendanceAuthority.userId);
+          const decision = evaluateTeacherAttendance({
+            tenantId,
+            userId: attendanceAuthority.userId,
+            canManageAttendance: attendanceAuthority.canManageAttendance,
+            isSchoolAdmin: attendanceAuthority.isSchoolAdmin && await currentAttendanceAdmin(client, tenantId, attendanceAuthority.userId),
+          }, {
+            tenantId,
+            academicSessionId: action.academicSessionId,
+            classId: action.classId,
+            sectionId: action.sectionId,
+            kind: "daily",
+          }, grants, action.overrideReason);
+          if (!decision.allowed) {
+            if (decision.reason === "override_reason_required") {
+              throw new Error("Attendance override reason required");
+            }
+            throw new Error("Attendance assignment required");
+          }
+          attendanceAuditReason = decision.auditReason;
+        }
         const result = await client.query<{ id: string }>(
           `INSERT INTO student_attendance (
              id, tenant_id, academic_session_id, student_id, attendance_date,
@@ -138,6 +193,16 @@ export async function applyPostgresOperation(
         resourceType = "attendance";
         resourceId = requireReturnedId(result.rows[0], "Attendance");
         notificationPayload = { ...action, studentId: action.studentId };
+        await insertAudit(
+          client,
+          tenantId,
+          actorId,
+          operation,
+          resourceType,
+          resourceId,
+          action,
+          attendanceAuditReason,
+        );
       } else if (action.action === "create_invoice") {
         await requireStudent(client, tenantId, action.studentId);
         const result = await client.query<{ id: string }>(
@@ -227,15 +292,9 @@ export async function applyPostgresOperation(
         );
       }
 
-      await insertAudit(
-        client,
-        tenantId,
-        actorId,
-        operation,
-        resourceType,
-        resourceId,
-        action,
-      );
+      if (action.action !== "mark_attendance") {
+        await insertAudit(client, tenantId, actorId, operation, resourceType, resourceId, action);
+      }
       const outboxEventId = await insertOutbox(
         client,
         tenantId,
@@ -445,6 +504,7 @@ async function insertAudit(
   resourceType: string,
   resourceId: string,
   action: OperationAction,
+  reason = "School operations workflow",
 ): Promise<void> {
   await client.query(
     `INSERT INTO audit_events (
@@ -452,7 +512,7 @@ async function insertAudit(
        reason, metadata, occurred_at
      ) VALUES (
        gen_random_uuid(), $1::uuid, $2::uuid, $3::text, $4::text, $5::text,
-       'School operations workflow', $6::jsonb, now()
+       $6::text, $7::jsonb, now()
      )`,
     [
       tenantId,
@@ -460,6 +520,7 @@ async function insertAudit(
       operation,
       resourceType,
       resourceId,
+      reason,
       JSON.stringify(action),
     ],
   );

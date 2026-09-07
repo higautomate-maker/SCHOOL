@@ -1,6 +1,7 @@
 import { validIdempotencyKey } from "../http/idempotency.ts";
 import {
   activeAssignmentsForPrincipal,
+  effectiveAccessForPrincipal,
 } from "../mobile-auth/service.ts";
 import type {
   MobileAuthenticatedPrincipal,
@@ -13,7 +14,14 @@ import {
   createParentPostgresRazorpayOrder,
   verifyParentPostgresRazorpayCheckout,
   processPostgresRazorpayWebhook,
+  parentPaymentStatus,
 } from "./postgres-repository.ts";
+
+export async function getParentPaymentStatus(principal: MobileAuthenticatedPrincipal, orderId: string) {
+  if (principal.principalType !== 'parent') throw new Error('Parent identity required');
+  const id = paymentOrderCreateSchema.shape.invoiceId.parse(orderId);
+  return parentPaymentStatus(principal.tenantId, principal.userId, await assignedStudentIds(principal), id);
+}
 
 export async function createParentRazorpayCheckout(
   principal: MobileAuthenticatedPrincipal,
@@ -35,6 +43,10 @@ export async function createParentRazorpayCheckout(
   }
 
   const input = paymentOrderCreateSchema.parse(value);
+  const access = await effectiveAccessForPrincipal(principal);
+  if (!access.features.some((feature) => feature.key === 'fees_payments')) {
+    throw new Error('Fee payments are not enabled for this account');
+  }
   const studentIds = await assignedStudentIds(principal);
 
   return createParentPostgresRazorpayOrder(

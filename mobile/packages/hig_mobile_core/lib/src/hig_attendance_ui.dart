@@ -42,17 +42,85 @@ class HigAttendancePage extends StatefulWidget {
 class _HigAttendancePageState extends State<HigAttendancePage> {
   DateTime selectedDate = DateTime.now();
   String? selectedClass;
+  bool lessonMode = false;
+  String? selectedSubject;
+  int selectedPeriod = 1;
+  List<JsonMap> lessonRecords = const [];
+  List<JsonMap> teachingContexts = const [];
   List<JsonMap> existing = const [];
   final Map<String, String> statuses = {};
   final Set<String> completedWrites = {};
   bool loading = true;
+  bool registerReady = false;
   bool saving = false;
   bool dirty = false;
   String? error;
 
+  List<JsonMap> get dailyContexts => teachingContexts
+      .where((context) =>
+          context['kind']?.toString() ==
+          (lessonMode ? 'subject_teacher' : 'class_teacher'))
+      .toList();
+
+  List<JsonMap> get subjects => dailyContexts
+      .where((item) => _teachingContextLabel(item) == selectedClass)
+      .toList();
+
+  void _selectAvailable() {
+    final available = classes;
+    if (!available.contains(selectedClass)) {
+      selectedClass = available.isEmpty ? null : available.first;
+    }
+    if (!subjects.any((item) => item['subjectId'] == selectedSubject)) {
+      selectedSubject =
+          subjects.isEmpty ? null : subjects.first['subjectId']?.toString();
+    }
+  }
+
+  Future<void> _changeRegister(bool value) async {
+    if (value == lessonMode || !await _confirmDiscardChanges() || !mounted) {
+      return;
+    }
+    setState(() {
+      lessonMode = value;
+      registerReady = !value;
+      _selectAvailable();
+      _restoreStatuses();
+    });
+    if (value) await _loadLessons();
+  }
+
+  Future<void> _loadLessons() async {
+    setState(() {
+      loading = true;
+      registerReady = false;
+    });
+    try {
+      final response =
+          await widget.api.lessonAttendance(_mobileIsoDate(selectedDate));
+      if (!mounted) return;
+      setState(() {
+        lessonRecords = ((response['attendance'] as List?) ?? [])
+            .map((item) => (item as Map).cast<String, dynamic>())
+            .toList();
+        loading = false;
+        registerReady = true;
+        error = null;
+        _restoreStatuses();
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          loading = false;
+          error = 'Lesson register could not be loaded. Pull to refresh.';
+        });
+      }
+    }
+  }
+
   List<String> get classes {
-    final values = widget.students
-        .map(_studentClass)
+    final values = dailyContexts
+        .map(_teachingContextLabel)
         .where((value) => value.isNotEmpty)
         .toSet()
         .toList()
@@ -62,9 +130,9 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
 
   List<JsonMap> get roster {
     final selected = selectedClass;
+    if (selected == null || selectedTeachingContext == null) return [];
     final values = widget.students
-        .where(
-            (student) => selected == null || _studentClass(student) == selected)
+        .where((student) => _studentClass(student) == selected)
         .toList();
     values.sort((left, right) {
       final leftRoll = int.tryParse(left['rollNumber']?.toString() ?? '');
@@ -78,26 +146,51 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
     return values;
   }
 
+  JsonMap? get selectedTeachingContext {
+    final selected = selectedClass;
+    if (selected == null) return null;
+    for (final context in dailyContexts) {
+      if (_teachingContextLabel(context) == selected &&
+          (!lessonMode || context['subjectId'] == selectedSubject)) {
+        return context;
+      }
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
-    final options = classes;
-    selectedClass = options.isEmpty ? null : options.first;
     _load();
   }
 
   Future<void> _load() async {
+    setState(() {
+      loading = true;
+      registerReady = false;
+    });
     try {
-      final response = await widget.api.operations();
+      final responses = await Future.wait([
+        widget.api.operations(),
+        widget.api.teachingContexts(),
+      ]);
+      final response = responses[0];
+      final contextResponse = responses[1];
       final operations =
           (response['operations'] as Map?)?.cast<String, dynamic>();
       final attendance = ((operations?['attendance'] as List?) ?? const [])
           .map((item) => (item as Map).cast<String, dynamic>())
           .toList();
+      final contexts = ((contextResponse['contexts'] as List?) ?? const [])
+          .map((item) => (item as Map).cast<String, dynamic>())
+          .toList();
       if (!mounted) return;
       setState(() {
         existing = attendance;
+        teachingContexts = contexts;
+        _selectAvailable();
         loading = false;
+        registerReady = !lessonMode;
         error = null;
         _restoreStatuses();
       });
@@ -115,8 +208,14 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
     statuses.clear();
     completedWrites.clear();
     final date = _mobileIsoDate(selectedDate);
-    for (final record in existing) {
-      if (record['attendanceDate']?.toString() == date) {
+    for (final record in lessonMode ? lessonRecords : existing) {
+      if (record['attendanceDate']?.toString() == date &&
+          (!lessonMode ||
+              (record['subjectId'] == selectedSubject &&
+                  record['lessonId'] == 'period-$selectedPeriod' &&
+                  record['classId'] == selectedTeachingContext?['classId'] &&
+                  record['sectionId'] ==
+                      selectedTeachingContext?['sectionId']))) {
         statuses[record['studentId'].toString()] =
             record['status']?.toString() ?? 'present';
       }
@@ -152,6 +251,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
   Future<void> _refresh() async {
     if (!await _confirmDiscardChanges()) return;
     await _load();
+    if (lessonMode && mounted) await _loadLessons();
   }
 
   Future<void> _chooseDate() async {
@@ -173,6 +273,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
       selectedDate = chosen;
       _restoreStatuses();
     });
+    if (lessonMode) await _loadLessons();
   }
 
   void _markAllPresent() {
@@ -192,6 +293,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
     if (!mounted) return;
     setState(() {
       selectedClass = value;
+      _selectAvailable();
       _restoreStatuses();
     });
   }
@@ -201,7 +303,11 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
 
   Future<void> _save() async {
     final students = roster;
-    if (students.isEmpty ||
+    final teachingContext = selectedTeachingContext;
+    if (!registerReady ||
+        saving ||
+        students.isEmpty ||
+        teachingContext == null ||
         students.any(
           (student) => statuses[student['id']?.toString()] == null,
         )) {
@@ -211,6 +317,47 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
       saving = true;
       error = null;
     });
+
+    if (lessonMode) {
+      try {
+        final result = await widget.api.saveLessonAttendance({
+          'academicSessionId': teachingContext['academicSessionId'],
+          'classId': teachingContext['classId'],
+          'sectionId': teachingContext['sectionId'],
+          'subjectId': teachingContext['subjectId'],
+          'lessonId': 'period-$selectedPeriod',
+          'attendanceDate': _mobileIsoDate(selectedDate),
+          'entries': students
+              .map((student) => {
+                    'studentId': student['id'],
+                    'status': statuses[student['id'].toString()],
+                    'note': '',
+                  })
+              .toList(),
+        });
+        if (!mounted) return;
+        setState(() {
+          saving = false;
+          dirty = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+          result['queued'] == true
+              ? 'Lesson attendance queued for sync.'
+              : 'Lesson attendance saved.',
+        )));
+        Navigator.pop(context, true);
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            saving = false;
+            error =
+                'Lesson attendance could not be saved. Your marks are retained; try again.';
+          });
+        }
+      }
+      return;
+    }
 
     final pending = students
         .where(
@@ -232,6 +379,9 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
               'attendanceDate': _mobileIsoDate(selectedDate),
               'status': statuses[studentId],
               'note': 'Marked from Hig Staff & Admin mobile app',
+              'academicSessionId': teachingContext['academicSessionId'],
+              'classId': teachingContext['classId'],
+              'sectionId': teachingContext['sectionId'],
             });
             return (studentId, result['queued'] == true ? 'queued' : 'saved');
           } catch (_) {
@@ -282,7 +432,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
       canPop: !dirty && !saving,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop || saving || !dirty) return;
-        if (await _confirmDiscardChanges() && mounted) {
+        if (await _confirmDiscardChanges() && context.mounted) {
           dirty = false;
           Navigator.pop(context);
         }
@@ -297,6 +447,23 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
                   children: [
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                            value: false,
+                            label: Text('Daily'),
+                            icon: Icon(Icons.calendar_today)),
+                        ButtonSegment(
+                            value: true,
+                            label: Text('Subject lesson'),
+                            icon: Icon(Icons.menu_book)),
+                      ],
+                      selected: {lessonMode},
+                      onSelectionChanged: saving
+                          ? null
+                          : (value) => _changeRegister(value.first),
+                    ),
+                    const SizedBox(height: 12),
                     Text(
                       'Choose the class and date, mark everyone present, then change only the exceptions.',
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
@@ -306,6 +473,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
                     const SizedBox(height: 16),
                     if (classes.isNotEmpty)
                       DropdownButtonFormField<String>(
+                        key: ValueKey('class-$lessonMode-$selectedClass'),
                         initialValue: selectedClass,
                         decoration: const InputDecoration(
                           labelText: 'Class and section',
@@ -320,6 +488,71 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
                             )
                             .toList(),
                         onChanged: saving ? null : _changeClass,
+                      ),
+                    if (lessonMode && subjects.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        key:
+                            ValueKey('subject-$selectedClass-$selectedSubject'),
+                        initialValue: selectedSubject,
+                        decoration: const InputDecoration(labelText: 'Subject'),
+                        items: subjects
+                            .map((item) => DropdownMenuItem(
+                                  value: item['subjectId'].toString(),
+                                  child: Text(item['subjectName']?.toString() ??
+                                      'Subject'),
+                                ))
+                            .toList(),
+                        onChanged: saving
+                            ? null
+                            : (value) async {
+                                if (!await _confirmDiscardChanges() ||
+                                    !mounted) {
+                                  return;
+                                }
+                                setState(() {
+                                  selectedSubject = value;
+                                  _restoreStatuses();
+                                });
+                              },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        key: ValueKey('period-$selectedPeriod'),
+                        initialValue: selectedPeriod,
+                        decoration: const InputDecoration(labelText: 'Period'),
+                        items: List.generate(
+                            12,
+                            (index) => DropdownMenuItem(
+                                value: index + 1,
+                                child: Text('Period ${index + 1}'))),
+                        onChanged: saving
+                            ? null
+                            : (value) async {
+                                if (value == null ||
+                                    !await _confirmDiscardChanges() ||
+                                    !mounted) {
+                                  return;
+                                }
+                                setState(() {
+                                  selectedPeriod = value;
+                                  _restoreStatuses();
+                                });
+                              },
+                      ),
+                    ],
+                    if (classes.isEmpty)
+                      Card(
+                        color: HigPalette.warning.withValues(alpha: .1),
+                        child: ListTile(
+                          leading: const Icon(Icons.assignment_late_outlined),
+                          title: Text(lessonMode
+                              ? 'No subject-teacher assignment'
+                              : 'No class-teacher assignment'),
+                          subtitle: Text(
+                            'Ask the school administrator to assign your class before taking daily attendance.',
+                          ),
+                        ),
                       ),
                     const SizedBox(height: 12),
                     Card(
@@ -387,7 +620,9 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
         bottomNavigationBar: SafeArea(
           minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: FilledButton.icon(
-            onPressed: saving || !allMarked ? null : _save,
+            onPressed: loading || saving || !allMarked || !registerReady
+                ? null
+                : _save,
             icon: saving
                 ? const SizedBox.square(
                     dimension: 18,
@@ -500,6 +735,11 @@ class _AttendanceStudentRow extends StatelessWidget {
 String _studentClass(JsonMap student) => [
       student['className']?.toString() ?? '',
       student['sectionName']?.toString() ?? '',
+    ].where((value) => value.isNotEmpty).join(' · ');
+
+String _teachingContextLabel(JsonMap context) => [
+      context['className']?.toString() ?? '',
+      context['sectionName']?.toString() ?? '',
     ].where((value) => value.isNotEmpty).join(' · ');
 
 Color _attendanceColor(String status) {

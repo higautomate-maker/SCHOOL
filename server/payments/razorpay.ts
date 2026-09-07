@@ -182,6 +182,18 @@ export async function createRazorpayOrder(
   return parseRazorpayOrder(response);
 }
 
+export async function fetchRazorpayOrderState(credentials: RazorpayRuntimeCredentials, orderId: string) {
+  if (!/^order_[A-Za-z0-9]+$/.test(orderId)) throw new Error('Invalid payment order');
+  const order = parseRazorpayOrder(await razorpayRequest(credentials, 'GET', `/v1/orders/${orderId}`));
+  const result = asRecord(await razorpayRequest(credentials, 'GET', `/v1/orders/${orderId}/payments`));
+  if (!Array.isArray(result.items) || result.count !== result.items.length) throw new Error('Invalid payment status response');
+  // Unknown, authorized and captured attempts all block retry. Only retry the
+  // same provider order after every reported attempt has definitively failed.
+  const retryAllowed = order.status !== 'paid' && result.items.every((item) =>
+    asRecord(item).order_id === orderId && asRecord(item).status === 'failed');
+  return { order, retryAllowed };
+}
+
 async function razorpayRequest(
   credentials: RazorpayRuntimeCredentials,
   method: "GET" | "POST",

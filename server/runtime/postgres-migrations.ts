@@ -16,4 +16,7 @@ export const POSTGRES_MIGRATION_NAMES = [
   "0012_transport_geofencing.sql",
   "0013_transport_student_journey.sql",
   "0014_payment_foundation.sql",
+  "0015_teacher_assignments.sql",
+  "0016_lesson_attendance.sql",
+  "0017_mobile_diary_profiles.sql",
 ] as const;
