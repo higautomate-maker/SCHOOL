@@ -1148,10 +1148,6 @@ class _HomeViewState extends State<HomeView> {
         : ((access['features'] as List?) ?? const []);
     final modules =
         entries.map((entry) => (entry as Map).cast<String, dynamic>()).toList();
-    final linkedStudents = ((home['students'] as List?) ?? const [])
-        .map((entry) => (entry as Map).cast<String, dynamic>())
-        .where((student) => (student['id']?.toString() ?? '').isNotEmpty)
-        .toList();
     if (principalType == 'school' &&
         modules.any((m) => m['key'] == 'study_center')) {
       modules.add({
@@ -1173,12 +1169,7 @@ class _HomeViewState extends State<HomeView> {
         onOpen: _openModule,
         onAlerts: () => setState(() => index = 2),
       ),
-      HigRoleWorkspacePage(
-        principalType: principalType,
-        modules: modules,
-        students: linkedStudents,
-        onOpen: _openModule,
-      ),
+      HigDiaryPage(api: widget.api, role: principalType),
       HigNotificationsView(api: widget.api),
       HigProfileView(
         home: home,
@@ -1201,14 +1192,14 @@ class _HomeViewState extends State<HomeView> {
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.apps_outlined),
-            selectedIcon: Icon(Icons.apps),
-            label: 'More',
+            icon: Icon(Icons.menu_book_outlined),
+            selectedIcon: Icon(Icons.menu_book),
+            label: 'Diary',
           ),
           NavigationDestination(
-            icon: Icon(Icons.notifications_outlined),
-            selectedIcon: Icon(Icons.notifications),
-            label: 'Alerts',
+            icon: Icon(Icons.campaign_outlined),
+            selectedIcon: Icon(Icons.campaign),
+            label: 'Notices',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

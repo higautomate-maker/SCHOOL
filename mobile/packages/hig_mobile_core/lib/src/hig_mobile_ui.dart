@@ -331,7 +331,8 @@ _HigFeatureVisual _featureVisual(String key) {
         Icons.devices_other_rounded, Color(0xff795548), 'Operations'),
   };
   return values[key] ??
-      const _HigFeatureVisual(Icons.grid_view_rounded, HigPalette.blue, 'More');
+      const _HigFeatureVisual(
+          Icons.grid_view_rounded, HigPalette.blue, 'Available');
 }
 
 const _dailyKeys = <String, List<String>>{
@@ -363,21 +364,6 @@ const _dailyKeys = <String, List<String>>{
     'emergency_alerts'
   ],
 };
-
-String _rolePriorityHint(String role) {
-  switch (role) {
-    case 'parent':
-      return 'Your child’s day at a glance';
-    case 'student':
-      return 'What you need for today';
-    case 'school':
-      return 'Attendance, homework and school updates';
-    case 'transporter':
-      return 'Your trip and safety controls';
-    default:
-      return 'Only actions currently allowed for you';
-  }
-}
 
 class HigRoleDashboardPage extends StatelessWidget {
   const HigRoleDashboardPage({
@@ -423,16 +409,22 @@ class HigRoleDashboardPage extends StatelessWidget {
         0;
     final today = (home['today'] as Map?)?.cast<String, dynamic>();
     final birthdays = (home['birthdays'] as List?) ?? const [];
-    final daily =
-        _orderedMatches(modules, _dailyKeys[role] ?? const []).take(4).toList();
-    final quickAccess = role == 'parent'
-        ? _orderedMatches(modules, const [
-            'leave_requests',
-            'timetable',
-            'notices',
-            'examinations',
-          ]).take(4).toList()
-        : const <JsonMap>[];
+    final homeTools = _orderedMatches(
+      modules,
+      [
+        ...(_dailyKeys[role] ?? const []),
+        'leave_requests',
+        'timetable',
+        'notices',
+        'examinations',
+        'results',
+      ],
+    ).where((item) {
+      final key = item['key']?.toString();
+      // Diary and Notices have dedicated bottom tabs.  All other authorized
+      // features stay discoverable from Home, including tenant-specific ones.
+      return key != 'diary' && key != 'homework' && key != 'notices';
+    }).toList();
     final recent = _recentMatches(modules, recentKeys).take(4).toList();
     final roleLabel = role == 'school'
         ? 'Teacher & staff workspace'
@@ -472,19 +464,19 @@ class HigRoleDashboardPage extends StatelessWidget {
               const SizedBox(height: 22),
               _HigBirthdaysCard(birthdays: birthdays),
             ],
-            if (daily.isNotEmpty) ...[
+            if (homeTools.isNotEmpty) ...[
               const SizedBox(height: 24),
-              _HigSectionTitle(
-                title: role == 'school' ? 'Today’s work' : 'Daily priorities',
-                subtitle: _rolePriorityHint(role),
+              const _HigSectionTitle(
+                title: 'Home actions',
+                subtitle: 'Everything currently available to you',
               ),
               const SizedBox(height: 12),
-              _HigFeatureGrid(items: daily, onOpen: onOpen, primary: true),
+              _HigFeatureGrid(items: homeTools, onOpen: onOpen, primary: true),
             ] else ...[
               const SizedBox(height: 24),
-              _HigSectionTitle(
-                title: role == 'school' ? 'Today’s work' : 'Daily priorities',
-                subtitle: _rolePriorityHint(role),
+              const _HigSectionTitle(
+                title: 'Home actions',
+                subtitle: 'Everything currently available to you',
               ),
               const SizedBox(height: 12),
               const _HigEmptyCard(
@@ -493,15 +485,6 @@ class HigRoleDashboardPage extends StatelessWidget {
                 message: 'Your school hasn’t enabled any features for you yet. '
                     'Please check back later or contact your school office.',
               ),
-            ],
-            if (quickAccess.isNotEmpty) ...[
-              const SizedBox(height: 24),
-              const _HigSectionTitle(
-                title: 'Quick access',
-                subtitle: 'Requests, schedule, notices and examinations',
-              ),
-              const SizedBox(height: 12),
-              _HigFeatureGrid(items: quickAccess, onOpen: onOpen),
             ],
             if (students.isNotEmpty &&
                 role != 'school' &&
@@ -566,82 +549,6 @@ class HigRoleDashboardPage extends StatelessWidget {
   }
 }
 
-class HigRoleWorkspacePage extends StatefulWidget {
-  const HigRoleWorkspacePage({
-    super.key,
-    required this.principalType,
-    required this.modules,
-    this.students = const [],
-    required this.onOpen,
-  });
-  final String principalType;
-  final List<JsonMap> modules;
-  final List<JsonMap> students;
-  final Future<void> Function(JsonMap item) onOpen;
-
-  @override
-  State<HigRoleWorkspacePage> createState() => _HigRoleWorkspacePageState();
-}
-
-class _HigRoleWorkspacePageState extends State<HigRoleWorkspacePage> {
-  String query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final filtered = widget.modules.where((item) {
-      final value = '${item['label'] ?? ''} ${item['key'] ?? ''}'.toLowerCase();
-      return value.contains(query.trim().toLowerCase());
-    }).toList();
-    final groups = <String, List<JsonMap>>{};
-    for (final item in filtered) {
-      final category = _featureVisual(item['key']?.toString() ?? '').category;
-      groups.putIfAbsent(category, () => []).add(item);
-    }
-    final title = widget.principalType == 'parent'
-        ? 'More family tools'
-        : widget.principalType == 'student'
-            ? 'More learning tools'
-            : 'More school tools';
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
-        children: [
-          Text(title,
-              style:
-                  const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 4),
-          Text(
-            '${widget.modules.length} authorized ${widget.modules.length == 1 ? 'feature' : 'features'}',
-            style: const TextStyle(color: HigPalette.muted),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            onChanged: (value) => setState(() => query = value),
-            decoration: const InputDecoration(
-              hintText: 'Search your workspace',
-              prefixIcon: Icon(Icons.search_rounded),
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (groups.isEmpty)
-            const _HigEmptyCard(
-              icon: Icons.search_off_rounded,
-              title: 'No matching feature',
-              message: 'Try a different word or clear the search.',
-            )
-          else
-            for (final group in groups.entries) ...[
-              _HigSectionTitle(title: group.key),
-              const SizedBox(height: 10),
-              _HigFeatureGrid(items: group.value, onOpen: widget.onOpen),
-              const SizedBox(height: 24),
-            ],
-        ],
-      ),
-    );
-  }
-}
-
 class HigNotificationsView extends StatefulWidget {
   const HigNotificationsView({super.key, required this.api});
   final HigMobileApi api;
@@ -684,7 +591,7 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
           children: [
-            const Text('Alerts',
+            const Text('Notices',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
             const SizedBox(height: 4),
             const Text('School announcements and task updates',
@@ -693,7 +600,7 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
             if (error != null)
               _HigEmptyCard(
                   icon: Icons.cloud_off_rounded,
-                  title: 'Alerts unavailable',
+                  title: 'Notices unavailable',
                   message: error!)
             else if (data == null)
               const Center(
@@ -704,7 +611,7 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
               const _HigEmptyCard(
                   icon: Icons.notifications_none_rounded,
                   title: 'You’re all caught up',
-                  message: 'New school alerts will appear here.')
+                  message: 'New school notices will appear here.')
             else
               for (final entry in entries) ...[
                 _HigNotificationCard(

@@ -21,15 +21,12 @@ const transportFixture = readFileSync(
 );
 const experience = readFileSync("docs/MOBILE-ROLE-EXPERIENCE.md", "utf8");
 
-test("mobile shell provides role-focused daily work and discoverable navigation", () => {
+test("mobile shell provides role-focused home actions and discoverable navigation", () => {
   assert.match(core, /HigRoleDashboardPage/);
-  assert.match(core, /HigRoleWorkspacePage/);
   assert.match(core, /HigNotificationsView/);
   assert.match(core, /HigProfileView/);
   assert.match(roleUi, /Recently used/);
-  assert.match(roleUi, /Daily priorities/);
-  assert.match(roleUi, /Search your workspace/);
-  assert.match(roleUi, /Your children/);
+  assert.match(roleUi, /Home actions/);
   assert.match(roleUi, /higMobileTheme/);
   assert.match(core, /HigStartupView/);
   assert.match(roleUi, /Preparing your secure workspace/);
@@ -41,7 +38,7 @@ test("mobile shell provides role-focused daily work and discoverable navigation"
 
 test("mobile role screens prioritize work and remain readable on narrow devices", () => {
   assert.ok(
-    roleUi.indexOf("Today’s work") < roleUi.indexOf("title: 'Quick access'"),
+    roleUi.indexOf("Home actions") < roleUi.indexOf("Recently used"),
   );
   assert.match(roleUi, /width: double\.infinity/);
   assert.match(roleUi, /overflow: TextOverflow\.ellipsis/);
@@ -53,7 +50,7 @@ test("role workspace remains server-authoritative and permission-aware", () => {
   assert.match(core, /access\['modules'\]/);
   assert.match(core, /access\['features'\]/);
   assert.match(core, /item\['canManage'\] == true/);
-  assert.match(roleUi, /Attendance, homework and school updates/);
+  assert.match(roleUi, /Everything currently available to you/);
   assert.match(roleUi, /HigRecentFeatureStore/);
   assert.doesNotMatch(roleUi, /eSchool|WRTeam|codecanyon/i);
 });
@@ -80,13 +77,11 @@ test("teacher attendance is date-aware and supports class-wide exception marking
   assert.doesNotMatch(core, /Date \(YYYY-MM-DD\)/);
 });
 
-test("mobile navigation keeps daily work small and puts secondary tools under More", () => {
-  assert.match(core, /label: 'More'/);
+test("mobile navigation keeps Diary and Notices as dedicated destinations", () => {
+  assert.match(core, /label: 'Diary'/);
+  assert.match(core, /label: 'Notices'/);
+  assert.doesNotMatch(core, /label: 'More'/);
   assert.match(roleUi, /take\(4\)/);
-  assert.match(roleUi, /More school tools/);
-  assert.match(roleUi, /More family tools/);
-  assert.match(roleUi, /More learning tools/);
-  assert.match(roleUi, /Requests, schedule, notices and examinations/);
   assert.match(roleUi, /leave_requests/);
   assert.match(roleUi, /notices/);
 });
@@ -98,14 +93,14 @@ test("mobile record rows open details instead of showing a dead chevron", () => 
   assert.match(core, /_formatMobileDate\(\s*attendanceDate\)/);
 });
 
-test("parent attendance uses a date-browsable calendar and More shows linked children", () => {
+test("parent attendance uses a date-browsable calendar and Diary is dedicated", () => {
   assert.match(core, /ParentAttendanceCalendarPage/);
   assert.match(core, /Previous month/);
   assert.match(core, /Next month/);
   assert.match(core, /P Present/);
   assert.match(core, /A Absent/);
   assert.match(core, /L Late/);
-  assert.match(core, /students: linkedStudents/);
+  assert.match(core, /HigDiaryPage\(api: widget.api, role: principalType\)/);
   assert.match(roleUi, /'child_overview'/);
   assert.doesNotMatch(roleUi, /Linked student profiles and class details/);
 });
