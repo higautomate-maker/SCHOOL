@@ -209,16 +209,18 @@ class _HigDiaryPageState extends State<HigDiaryPage> {
                                         'date': _mobileIsoDate(date),
                                         'dueDate': _mobileIsoDate(due)
                                       });
-                                      if (dialogContext.mounted)
+                                      if (dialogContext.mounted) {
                                         Navigator.pop(
                                             dialogContext, {'saved': true});
+                                      }
                                     } catch (_) {
-                                      if (dialogContext.mounted)
+                                      if (dialogContext.mounted) {
                                         update(() {
                                           publishing = false;
                                           formError =
                                               'Could not confirm publication. Your text is retained. Retry without changing it.';
                                         });
+                                      }
                                     }
                                   }
                                 },
