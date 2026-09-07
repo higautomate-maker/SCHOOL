@@ -570,10 +570,12 @@ class HigRoleWorkspacePage extends StatefulWidget {
     super.key,
     required this.principalType,
     required this.modules,
+    this.students = const [],
     required this.onOpen,
   });
   final String principalType;
   final List<JsonMap> modules;
+  final List<JsonMap> students;
   final Future<void> Function(JsonMap item) onOpen;
 
   @override
@@ -611,6 +613,20 @@ class _HigRoleWorkspacePageState extends State<HigRoleWorkspacePage> {
             '${widget.modules.length} authorized ${widget.modules.length == 1 ? 'feature' : 'features'}',
             style: const TextStyle(color: HigPalette.muted),
           ),
+          if (widget.principalType == 'parent' &&
+              widget.students.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            const _HigSectionTitle(
+              title: 'Your children',
+              subtitle: 'Linked student profiles and class details',
+            ),
+            const SizedBox(height: 10),
+            for (var index = 0; index < widget.students.length; index++) ...[
+              _HigStudentPill(student: widget.students[index]),
+              if (index < widget.students.length - 1)
+                const SizedBox(height: 10),
+            ],
+          ],
           const SizedBox(height: 16),
           TextField(
             onChanged: (value) => setState(() => query = value),

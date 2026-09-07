@@ -95,6 +95,27 @@ test("mobile record rows open details instead of showing a dead chevron", () => 
   assert.match(core, /_formatMobileDate\(\s*attendanceDate\)/);
 });
 
+test("parent attendance uses a date-browsable calendar and More shows linked children", () => {
+  assert.match(core, /ParentAttendanceCalendarPage/);
+  assert.match(core, /Previous month/);
+  assert.match(core, /Next month/);
+  assert.match(core, /P Present/);
+  assert.match(core, /A Absent/);
+  assert.match(core, /L Late/);
+  assert.match(core, /students: linkedStudents/);
+  assert.match(roleUi, /Linked student profiles and class details/);
+});
+
+test("staging classroom fixture seeds mobile diary records and teacher scope", () => {
+  const fixture = readFileSync("scripts/staging-classroom-fixture.sql", "utf8");
+  assert.match(fixture, /INSERT INTO teacher_assignments/);
+  assert.match(fixture, /kind = 'class_teacher'/);
+  assert.match(fixture, /kind = 'subject_teacher'/);
+  assert.match(fixture, /INSERT INTO mobile_diary/);
+  assert.match(fixture, /Linear equations practice/);
+  assert.match(fixture, /The Last Leaf/);
+});
+
 test("transporter experience keeps trip and emergency controls prominent", () => {
   assert.match(driver, /Hig School Transport/);
   assert.match(driver, /START TRIP/);

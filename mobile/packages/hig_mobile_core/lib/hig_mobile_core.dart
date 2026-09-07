@@ -1148,6 +1148,10 @@ class _HomeViewState extends State<HomeView> {
         : ((access['features'] as List?) ?? const []);
     final modules =
         entries.map((entry) => (entry as Map).cast<String, dynamic>()).toList();
+    final linkedStudents = ((home['students'] as List?) ?? const [])
+        .map((entry) => (entry as Map).cast<String, dynamic>())
+        .where((student) => (student['id']?.toString() ?? '').isNotEmpty)
+        .toList();
     if (principalType == 'school' &&
         modules.any((m) => m['key'] == 'study_center')) {
       modules.add({
@@ -1172,6 +1176,7 @@ class _HomeViewState extends State<HomeView> {
       HigRoleWorkspacePage(
         principalType: principalType,
         modules: modules,
+        students: linkedStudents,
         onOpen: _openModule,
       ),
       HigNotificationsView(api: widget.api),
@@ -2153,13 +2158,16 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
   Widget build(BuildContext context) {
     final title = widget.item['label']?.toString() ?? key;
     final operations = (data?['operations'] as Map?)?.cast<String, dynamic>();
-    final records = isOperations
+    final rawRecords = isOperations
         ? ((key == 'fees_finance' ||
                 key == 'fees_payments' ||
                 key == 'fees_summary')
             ? ((operations?['invoices'] as List?) ?? const [])
             : ((operations?['attendance'] as List?) ?? const []))
         : (((data?['content'] as Map?)?['records'] as List?) ?? const []);
+    final records = rawRecords
+        .map((entry) => (entry as Map).cast<String, dynamic>())
+        .toList();
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -2241,7 +2249,9 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                           ),
                         ),
                         const SizedBox(height: 18),
-                        if (records.isEmpty)
+                        if (widget.principalType == 'parent' && key == 'attendance')
+                          ParentAttendanceCalendarPage(records: records)
+                        else if (records.isEmpty)
                           _HigEmptyCard(
                             icon: visual.icon,
                             title: 'Nothing here yet',
@@ -2324,6 +2334,251 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                 ),
     );
   }
+}
+
+class ParentAttendanceCalendarPage extends StatefulWidget {
+  const ParentAttendanceCalendarPage({
+    super.key,
+    required this.records,
+  });
+
+  final List<JsonMap> records;
+
+  @override
+  State<ParentAttendanceCalendarPage> createState() =>
+      _ParentAttendanceCalendarPageState();
+}
+
+class _ParentAttendanceCalendarPageState
+    extends State<ParentAttendanceCalendarPage> {
+  late DateTime month;
+  String? selectedStudent;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    month = DateTime(now.year, now.month);
+    selectedStudent = _students.isEmpty ? null : _students.first;
+  }
+
+  List<String> get _students => widget.records
+      .map((record) => record['studentName']?.toString() ?? '')
+      .where((name) => name.isNotEmpty)
+      .toSet()
+      .toList()
+    ..sort();
+
+  Map<int, String> get _statusByDay {
+    final result = <int, String>{};
+    for (final record in widget.records) {
+      if (selectedStudent != null &&
+          record['studentName']?.toString() != selectedStudent) {
+        continue;
+      }
+      final date = DateTime.tryParse(record['attendanceDate']?.toString() ?? '');
+      if (date == null || date.year != month.year || date.month != month.month) {
+        continue;
+      }
+      result[date.day] = record['status']?.toString() ?? 'present';
+    }
+    return result;
+  }
+
+  Color _statusColor(String? status) {
+    switch (status) {
+      case 'absent':
+        return const Color(0xffc94f55);
+      case 'late':
+        return const Color(0xffb8731c);
+      case 'excused':
+        return const Color(0xff6f55ae);
+      default:
+        return const Color(0xff16866b);
+    }
+  }
+
+  String _statusLetter(String? status) {
+    switch (status) {
+      case 'absent':
+        return 'A';
+      case 'late':
+        return 'L';
+      case 'excused':
+        return 'E';
+      case 'present':
+        return 'P';
+      default:
+        return '—';
+    }
+  }
+
+  String _monthLabel() {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${months[month.month - 1]} ${month.year}';
+  }
+
+  Widget _dayCell(int day, Map<int, String> statuses) {
+    final status = statuses[day];
+    final color = _statusColor(status);
+    return Container(
+      margin: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: status == null ? Colors.white : color.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: status == null ? HigPalette.line : color.withValues(alpha: .35),
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('$day', style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 3),
+          Text(
+            _statusLetter(status),
+            style: TextStyle(
+              color: status == null ? HigPalette.muted : color,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final statuses = _statusByDay;
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+    final leading = DateTime(month.year, month.month, 1).weekday - 1;
+    final cells = <Widget>[];
+    for (var index = 0; index < leading; index++) {
+      cells.add(const SizedBox.shrink());
+    }
+    for (var day = 1; day <= daysInMonth; day++) {
+      cells.add(_dayCell(day, statuses));
+    }
+    final present = statuses.values.where((value) => value == 'present').length;
+    final absent = statuses.values.where((value) => value == 'absent').length;
+    final late = statuses.values.where((value) => value == 'late').length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_students.length > 1)
+          DropdownButtonFormField<String>(
+            initialValue: selectedStudent,
+            decoration: const InputDecoration(
+              labelText: 'Child',
+              prefixIcon: Icon(Icons.school_outlined),
+            ),
+            items: _students
+                .map((name) => DropdownMenuItem(value: name, child: Text(name)))
+                .toList(),
+            onChanged: (value) => setState(() => selectedStudent = value),
+          ),
+        if (_students.length > 1) const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    IconButton(
+                      tooltip: 'Previous month',
+                      onPressed: () => setState(() => month = DateTime(month.year, month.month - 1)),
+                      icon: const Icon(Icons.chevron_left),
+                    ),
+                    Expanded(
+                      child: Text(
+                        _monthLabel(),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Next month',
+                      onPressed: () => setState(() => month = DateTime(month.year, month.month + 1)),
+                      icon: const Icon(Icons.chevron_right),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: const [
+                    Expanded(child: Center(child: Text('M', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
+                    Expanded(child: Center(child: Text('T', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
+                    Expanded(child: Center(child: Text('W', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
+                    Expanded(child: Center(child: Text('T', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
+                    Expanded(child: Center(child: Text('F', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
+                    Expanded(child: Center(child: Text('S', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
+                    Expanded(child: Center(child: Text('S', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                GridView.count(
+                  crossAxisCount: 7,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  childAspectRatio: 1.0,
+                  children: cells,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 14,
+          runSpacing: 8,
+          children: [
+            _AttendanceLegend(color: _statusColor('present'), label: 'P Present'),
+            _AttendanceLegend(color: _statusColor('absent'), label: 'A Absent'),
+            _AttendanceLegend(color: _statusColor('late'), label: 'L Late'),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          '$present present · $absent absent · $late late this month',
+          style: const TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700),
+        ),
+        if (statuses.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 18),
+            child: Text('No attendance records for this month. Choose another month.'),
+          ),
+      ],
+    );
+  }
+}
+
+class _AttendanceLegend extends StatelessWidget {
+  const _AttendanceLegend({required this.color, required this.label});
+  final Color color;
+  final String label;
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 5),
+          Text(label),
+        ],
+      );
 }
 
 class NotificationsPage extends StatefulWidget {
