@@ -411,9 +411,20 @@ class HigRoleDashboardPage extends StatelessWidget {
     final role = home['principalType']?.toString() ?? '';
     final user = (home['user'] as Map?)?.cast<String, dynamic>() ?? {};
     final students = (home['students'] as List?) ?? const [];
-    final notifications =
+    final rawNotifications =
         ((home['notifications'] as Map?)?['notifications'] as List?) ??
             const [];
+    // Attendance writes can generate the same notification more than once
+    // during a sync.  Home should read like a bulletin board, not a log of
+    // duplicate events, so collapse identical title/message pairs here.
+    final notifications = <JsonMap>[];
+    final seenNotifications = <String>{};
+    for (final entry in rawNotifications) {
+      final item = (entry as Map).cast<String, dynamic>();
+      final signature =
+          '${item['title']?.toString() ?? ''}\u0000${item['message']?.toString() ?? ''}';
+      if (seenNotifications.add(signature)) notifications.add(item);
+    }
     final unread = (home['unreadNotices'] as num?)?.toInt() ??
         ((home['notifications'] as Map?)?['unreadCount'] as num?)?.toInt() ??
         0;
@@ -482,7 +493,9 @@ class HigRoleDashboardPage extends StatelessWidget {
                     'Please check back later or contact your school office.',
               ),
             ],
-            if (students.isNotEmpty && role != 'school') ...[
+            if (students.isNotEmpty &&
+                role != 'school' &&
+                role != 'parent') ...[
               const SizedBox(height: 22),
               _HigSectionTitle(
                   title: role == 'parent' ? 'Your children' : 'Student details',
@@ -613,20 +626,6 @@ class _HigRoleWorkspacePageState extends State<HigRoleWorkspacePage> {
             '${widget.modules.length} authorized ${widget.modules.length == 1 ? 'feature' : 'features'}',
             style: const TextStyle(color: HigPalette.muted),
           ),
-          if (widget.principalType == 'parent' &&
-              widget.students.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            const _HigSectionTitle(
-              title: 'Your children',
-              subtitle: 'Linked student profiles and class details',
-            ),
-            const SizedBox(height: 10),
-            for (var index = 0; index < widget.students.length; index++) ...[
-              _HigStudentPill(student: widget.students[index]),
-              if (index < widget.students.length - 1)
-                const SizedBox(height: 10),
-            ],
-          ],
           const SizedBox(height: 16),
           TextField(
             onChanged: (value) => setState(() => query = value),

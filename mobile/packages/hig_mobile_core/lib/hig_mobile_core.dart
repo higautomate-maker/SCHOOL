@@ -2237,7 +2237,10 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '${records.length} authorized ${records.length == 1 ? 'record' : 'records'} · ${widget.item['canManage'] == true ? 'Manage access' : 'View access'}',
+                                      widget.principalType == 'parent' &&
+                                              key == 'attendance'
+                                          ? '${records.length} attendance ${records.length == 1 ? 'entry' : 'entries'} · History'
+                                          : '${records.length} authorized ${records.length == 1 ? 'record' : 'records'} · ${widget.item['canManage'] == true ? 'Manage access' : 'View access'}',
                                       style: const TextStyle(
                                         color: Colors.white70,
                                       ),
@@ -2249,7 +2252,8 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                           ),
                         ),
                         const SizedBox(height: 18),
-                        if (widget.principalType == 'parent' && key == 'attendance')
+                        if (widget.principalType == 'parent' &&
+                            key == 'attendance')
                           ParentAttendanceCalendarPage(records: records)
                         else if (records.isEmpty)
                           _HigEmptyCard(
@@ -2376,8 +2380,11 @@ class _ParentAttendanceCalendarPageState
           record['studentName']?.toString() != selectedStudent) {
         continue;
       }
-      final date = DateTime.tryParse(record['attendanceDate']?.toString() ?? '');
-      if (date == null || date.year != month.year || date.month != month.month) {
+      final date =
+          DateTime.tryParse(record['attendanceDate']?.toString() ?? '');
+      if (date == null ||
+          date.year != month.year ||
+          date.month != month.month) {
         continue;
       }
       result[date.day] = record['status']?.toString() ?? 'present';
@@ -2440,7 +2447,8 @@ class _ParentAttendanceCalendarPageState
         color: status == null ? Colors.white : color.withValues(alpha: .10),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: status == null ? HigPalette.line : color.withValues(alpha: .35),
+          color:
+              status == null ? HigPalette.line : color.withValues(alpha: .35),
         ),
       ),
       child: Column(
@@ -2501,32 +2509,70 @@ class _ParentAttendanceCalendarPageState
                   children: [
                     IconButton(
                       tooltip: 'Previous month',
-                      onPressed: () => setState(() => month = DateTime(month.year, month.month - 1)),
+                      onPressed: () => setState(
+                          () => month = DateTime(month.year, month.month - 1)),
                       icon: const Icon(Icons.chevron_left),
                     ),
                     Expanded(
                       child: Text(
                         _monthLabel(),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w900, fontSize: 17),
                       ),
                     ),
                     IconButton(
                       tooltip: 'Next month',
-                      onPressed: () => setState(() => month = DateTime(month.year, month.month + 1)),
+                      onPressed: () => setState(
+                          () => month = DateTime(month.year, month.month + 1)),
                       icon: const Icon(Icons.chevron_right),
                     ),
                   ],
                 ),
                 Row(
                   children: const [
-                    Expanded(child: Center(child: Text('M', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
-                    Expanded(child: Center(child: Text('T', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
-                    Expanded(child: Center(child: Text('W', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
-                    Expanded(child: Center(child: Text('T', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
-                    Expanded(child: Center(child: Text('F', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
-                    Expanded(child: Center(child: Text('S', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
-                    Expanded(child: Center(child: Text('S', style: TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700)))),
+                    Expanded(
+                        child: Center(
+                            child: Text('M',
+                                style: TextStyle(
+                                    color: HigPalette.muted,
+                                    fontWeight: FontWeight.w700)))),
+                    Expanded(
+                        child: Center(
+                            child: Text('T',
+                                style: TextStyle(
+                                    color: HigPalette.muted,
+                                    fontWeight: FontWeight.w700)))),
+                    Expanded(
+                        child: Center(
+                            child: Text('W',
+                                style: TextStyle(
+                                    color: HigPalette.muted,
+                                    fontWeight: FontWeight.w700)))),
+                    Expanded(
+                        child: Center(
+                            child: Text('T',
+                                style: TextStyle(
+                                    color: HigPalette.muted,
+                                    fontWeight: FontWeight.w700)))),
+                    Expanded(
+                        child: Center(
+                            child: Text('F',
+                                style: TextStyle(
+                                    color: HigPalette.muted,
+                                    fontWeight: FontWeight.w700)))),
+                    Expanded(
+                        child: Center(
+                            child: Text('S',
+                                style: TextStyle(
+                                    color: HigPalette.muted,
+                                    fontWeight: FontWeight.w700)))),
+                    Expanded(
+                        child: Center(
+                            child: Text('S',
+                                style: TextStyle(
+                                    color: HigPalette.muted,
+                                    fontWeight: FontWeight.w700)))),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -2534,7 +2580,10 @@ class _ParentAttendanceCalendarPageState
                   crossAxisCount: 7,
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 1.0,
+                  // Leave enough vertical room for the date and status mark on
+                  // compact phones.  A square cell is a few pixels too short
+                  // once its border/margin and two text rows are laid out.
+                  childAspectRatio: .88,
                   children: cells,
                 ),
               ],
@@ -2546,7 +2595,8 @@ class _ParentAttendanceCalendarPageState
           spacing: 14,
           runSpacing: 8,
           children: [
-            _AttendanceLegend(color: _statusColor('present'), label: 'P Present'),
+            _AttendanceLegend(
+                color: _statusColor('present'), label: 'P Present'),
             _AttendanceLegend(color: _statusColor('absent'), label: 'A Absent'),
             _AttendanceLegend(color: _statusColor('late'), label: 'L Late'),
           ],
@@ -2554,12 +2604,14 @@ class _ParentAttendanceCalendarPageState
         const SizedBox(height: 10),
         Text(
           '$present present · $absent absent · $late late this month',
-          style: const TextStyle(color: HigPalette.muted, fontWeight: FontWeight.w700),
+          style: const TextStyle(
+              color: HigPalette.muted, fontWeight: FontWeight.w700),
         ),
         if (statuses.isEmpty)
           const Padding(
             padding: EdgeInsets.only(top: 18),
-            child: Text('No attendance records for this month. Choose another month.'),
+            child: Text(
+                'No attendance records for this month. Choose another month.'),
           ),
       ],
     );
@@ -2574,7 +2626,10 @@ class _AttendanceLegend extends StatelessWidget {
   Widget build(BuildContext context) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 12, height: 12, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
           const SizedBox(width: 5),
           Text(label),
         ],
