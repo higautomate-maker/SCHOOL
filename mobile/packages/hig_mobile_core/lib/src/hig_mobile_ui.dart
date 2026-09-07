@@ -335,14 +335,7 @@ _HigFeatureVisual _featureVisual(String key) {
 }
 
 const _dailyKeys = <String, List<String>>{
-  'parent': [
-    'homework',
-    'fees_payments',
-    'transport_tracking',
-    'attendance',
-    'child_overview',
-    'timetable'
-  ],
+  'parent': ['homework', 'fees_payments', 'transport_tracking', 'attendance'],
   'student': [
     'timetable',
     'homework',
@@ -432,6 +425,14 @@ class HigRoleDashboardPage extends StatelessWidget {
     final birthdays = (home['birthdays'] as List?) ?? const [];
     final daily =
         _orderedMatches(modules, _dailyKeys[role] ?? const []).take(4).toList();
+    final quickAccess = role == 'parent'
+        ? _orderedMatches(modules, const [
+            'leave_requests',
+            'timetable',
+            'notices',
+            'examinations',
+          ]).take(4).toList()
+        : const <JsonMap>[];
     final recent = _recentMatches(modules, recentKeys).take(4).toList();
     final roleLabel = role == 'school'
         ? 'Teacher & staff workspace'
@@ -493,6 +494,15 @@ class HigRoleDashboardPage extends StatelessWidget {
                     'Please check back later or contact your school office.',
               ),
             ],
+            if (quickAccess.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const _HigSectionTitle(
+                title: 'Quick access',
+                subtitle: 'Requests, schedule, notices and examinations',
+              ),
+              const SizedBox(height: 12),
+              _HigFeatureGrid(items: quickAccess, onOpen: onOpen),
+            ],
             if (students.isNotEmpty &&
                 role != 'school' &&
                 role != 'parent') ...[
@@ -529,28 +539,6 @@ class HigRoleDashboardPage extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: 24),
-            _HigSectionTitle(
-              title: 'School updates',
-              subtitle: notifications.isEmpty
-                  ? 'You are all caught up'
-                  : '${notifications.length} recent ${notifications.length == 1 ? 'update' : 'updates'}',
-            ),
-            const SizedBox(height: 10),
-            if (notifications.isEmpty)
-              const _HigEmptyCard(
-                icon: Icons.notifications_none_rounded,
-                title: 'No new school updates',
-                message: 'Announcements and task alerts will appear here.',
-              )
-            else
-              ...notifications.take(3).map((entry) {
-                final item = (entry as Map).cast<String, dynamic>();
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _HigUpdateCard(item: item),
-                );
-              }),
           ],
         ),
       ),
@@ -1397,27 +1385,6 @@ class _HigRecentCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _HigUpdateCard extends StatelessWidget {
-  const _HigUpdateCard({required this.item});
-  final JsonMap item;
-  @override
-  Widget build(BuildContext context) => Card(
-          child: ListTile(
-        minVerticalPadding: 14,
-        leading: CircleAvatar(
-            backgroundColor: const Color(0xffffeceb),
-            child: Icon(
-                item['read'] == true
-                    ? Icons.notifications_none_rounded
-                    : Icons.notifications_active_rounded,
-                color: const Color(0xffc34c47))),
-        title: Text(item['title']?.toString() ?? 'School update',
-            style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: Text(item['message']?.toString() ?? '',
-            maxLines: 2, overflow: TextOverflow.ellipsis),
-      ));
 }
 
 class _HigNotificationCard extends StatelessWidget {

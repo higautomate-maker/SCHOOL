@@ -41,7 +41,7 @@ test("mobile shell provides role-focused daily work and discoverable navigation"
 
 test("mobile role screens prioritize work and remain readable on narrow devices", () => {
   assert.ok(
-    roleUi.indexOf("Today’s work") < roleUi.indexOf("title: role == 'parent' ? 'Your children'"),
+    roleUi.indexOf("Today’s work") < roleUi.indexOf("title: 'Quick access'"),
   );
   assert.match(roleUi, /width: double\.infinity/);
   assert.match(roleUi, /overflow: TextOverflow\.ellipsis/);
@@ -86,6 +86,9 @@ test("mobile navigation keeps daily work small and puts secondary tools under Mo
   assert.match(roleUi, /More school tools/);
   assert.match(roleUi, /More family tools/);
   assert.match(roleUi, /More learning tools/);
+  assert.match(roleUi, /Requests, schedule, notices and examinations/);
+  assert.match(roleUi, /leave_requests/);
+  assert.match(roleUi, /notices/);
 });
 
 test("mobile record rows open details instead of showing a dead chevron", () => {
@@ -103,7 +106,8 @@ test("parent attendance uses a date-browsable calendar and More shows linked chi
   assert.match(core, /A Absent/);
   assert.match(core, /L Late/);
   assert.match(core, /students: linkedStudents/);
-  assert.match(roleUi, /Linked student profiles and class details/);
+  assert.match(roleUi, /'child_overview'/);
+  assert.doesNotMatch(roleUi, /Linked student profiles and class details/);
 });
 
 test("staging classroom fixture seeds mobile diary records and teacher scope", () => {
