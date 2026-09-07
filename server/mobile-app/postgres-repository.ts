@@ -333,7 +333,7 @@ function liveFreshness(
   ageSeconds: number;
 } {
   const capturedMs = Date.parse(capturedAt);
-  const ageSeconds = Number.isFinite(capturedMs)
+  const ageSeconds = Number.isFinite(capturedMs) && capturedMs <= nowMs
     ? Math.max(0, Math.floor((nowMs - capturedMs) / 1_000))
     : 24 * 60 * 60;
   return {
@@ -352,7 +352,7 @@ function etaMinutes(
   stopRadiusMeters: number,
   freshness: "online" | "delayed" | "offline",
 ): number | null {
-  if (freshness === "offline") return null;
+  if (freshness !== "online") return null;
   if (distance <= Math.max(stopRadiusMeters, 25)) return 0;
   const effectiveSpeedKph = speedKph !== null && speedKph >= 5
     ? Math.min(Math.max(speedKph, 10), 60)

@@ -232,6 +232,12 @@ export async function performMobileOperation(
   const access = await effectiveAccessForPrincipal(principal);
   const requiredModule = action.action === "mark_attendance" ? "attendance" : "fees_finance";
   requireSchoolModule(access, requiredModule, true);
+  if (action.action === "mark_attendance" && (
+    !action.academicSessionId || !action.classId || !action.sectionId
+  )) {
+    throw new Error("Attendance teaching context required");
+  }
+  const attendanceModule = access.modules.find((module) => module.key === "attendance");
   return filterSchoolOperations(
     access,
     await applyOperation(
@@ -239,6 +245,11 @@ export async function performMobileOperation(
       action,
       mobileActor(principal),
       idempotencyKey,
+      action.action === "mark_attendance" ? {
+        userId: principal.userId,
+        canManageAttendance: attendanceModule?.canManage === true,
+        isSchoolAdmin: principal.roleKey === "school_admin",
+      } : undefined,
     ),
   );
 }

@@ -249,6 +249,8 @@ _HigFeatureVisual _featureVisual(String key) {
         Icons.fact_check_rounded, Color(0xff159570), 'Daily work'),
     'homework': _HigFeatureVisual(
         Icons.menu_book_rounded, Color(0xffe77817), 'Learning'),
+    'diary': _HigFeatureVisual(
+        Icons.menu_book_rounded, Color(0xffe77817), 'Learning'),
     'timetable': _HigFeatureVisual(
         Icons.calendar_month_rounded, Color(0xff286ea8), 'Learning'),
     'academics':
@@ -334,11 +336,11 @@ _HigFeatureVisual _featureVisual(String key) {
 
 const _dailyKeys = <String, List<String>>{
   'parent': [
-    'child_overview',
-    'attendance',
     'homework',
-    'transport_tracking',
     'fees_payments',
+    'transport_tracking',
+    'attendance',
+    'child_overview',
     'timetable'
   ],
   'student': [
@@ -351,11 +353,13 @@ const _dailyKeys = <String, List<String>>{
   ],
   'school': [
     'attendance',
-    'student_information',
+    'diary',
     'academics',
+    'communication',
+    'student_information',
     'lesson_planner',
     'examinations',
-    'communication'
+    'study_center'
   ],
   'transporter': [
     'trip_control',
@@ -444,7 +448,7 @@ class HigRoleDashboardPage extends StatelessWidget {
               alertCount: notifications.length,
               moduleCount: modules.length,
             ),
-            if (today != null) ...[
+            if (today != null && role != 'school' && role != 'parent') ...[
               const SizedBox(height: 22),
               _HigTodaySummary(summary: today),
             ],
@@ -474,7 +478,7 @@ class HigRoleDashboardPage extends StatelessWidget {
                     'Please check back later or contact your school office.',
               ),
             ],
-            if (students.isNotEmpty) ...[
+            if (students.isNotEmpty && role != 'school') ...[
               const SizedBox(height: 22),
               const _HigSectionTitle(
                   title: 'Linked students',
@@ -712,13 +716,82 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
   }
 }
 
-class HigProfileView extends StatelessWidget {
-  const HigProfileView({super.key, required this.home, required this.onLogout});
+class HigProfileView extends StatefulWidget {
+  const HigProfileView(
+      {super.key,
+      required this.home,
+      required this.onLogout,
+      required this.api});
   final JsonMap home;
   final Future<void> Function() onLogout;
+  final HigMobileApi api;
+  @override
+  State<HigProfileView> createState() => _HigProfileViewState();
+}
+
+class _HigProfileViewState extends State<HigProfileView> {
+  String? photo;
+  bool photoBusy = false;
+  @override
+  void initState() {
+    super.initState();
+    _loadPhoto();
+  }
+
+  Future<void> _loadPhoto() async {
+    try {
+      final value = await widget.api.profilePhoto();
+      if (mounted) setState(() => photo = value['photo'] as String?);
+    } catch (_) {/* Keep the initials placeholder available. */}
+  }
+
+  Future<void> _editPhoto({bool remove = false}) async {
+    setState(() => photoBusy = true);
+    try {
+      String? next;
+      if (!remove) {
+        final image = await ImagePicker().pickImage(
+            source: ImageSource.gallery,
+            maxWidth: 512,
+            maxHeight: 512,
+            imageQuality: 75);
+        if (image == null) return;
+        final bytes = await image.readAsBytes();
+        if (bytes.length > 290000) {
+          throw const FormatException('Choose a smaller photo');
+        }
+        final png = bytes.length > 8 && bytes[0] == 137 && bytes[1] == 80;
+        next =
+            'data:image/${png ? 'png' : 'jpeg'};base64,${base64Encode(bytes)}';
+      }
+      await widget.api.changeProfilePhoto(next);
+      if (mounted) setState(() => photo = next);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Photo could not be saved. Choose a small JPG or PNG and try again.')));
+      }
+    } finally {
+      if (mounted) setState(() => photoBusy = false);
+    }
+  }
+
+  void _info(String title, String text) => showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+              title: Text(title),
+              content: Text(text),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(c),
+                    child: const Text('Close'))
+              ]));
 
   @override
   Widget build(BuildContext context) {
+    final home = widget.home;
+    final onLogout = widget.onLogout;
     final user = (home['user'] as Map?)?.cast<String, dynamic>() ?? {};
     final role = home['principalType']?.toString() ?? '';
     return SafeArea(
@@ -733,8 +806,24 @@ class HigProfileView extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  _HigAvatar(
-                      name: user['name']?.toString() ?? 'User', radius: 34),
+                  Column(children: [
+                    if (photo == null)
+                      _HigAvatar(
+                          name: user['name']?.toString() ?? 'User', radius: 34)
+                    else
+                      CircleAvatar(
+                          radius: 34,
+                          backgroundImage: MemoryImage(
+                              base64Decode(photo!.split(',').last))),
+                    TextButton(
+                        onPressed: photoBusy ? null : () => _editPhoto(),
+                        child: Text(photoBusy ? 'Saving…' : 'Change photo')),
+                    if (photo != null)
+                      TextButton(
+                          onPressed:
+                              photoBusy ? null : () => _editPhoto(remove: true),
+                          child: const Text('Remove')),
+                  ]),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -748,8 +837,7 @@ class HigProfileView extends StatelessWidget {
                             message: user['email']?.toString() ?? '',
                             child: Text(
                               user['email']?.toString() ?? '',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              softWrap: true,
                               style: const TextStyle(color: HigPalette.muted),
                             ),
                           ),
@@ -768,21 +856,39 @@ class HigProfileView extends StatelessWidget {
           Card(
             child: Column(children: [
               _HigSettingsTile(
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => Scaffold(
+                              appBar:
+                                  AppBar(title: const Text('Notifications')),
+                              body: HigNotificationsView(api: widget.api)))),
                   icon: Icons.notifications_outlined,
                   title: 'Notifications',
                   subtitle: 'School and task alerts'),
               const Divider(height: 1, indent: 64),
               _HigSettingsTile(
+                  onTap: () async {
+                    final queue = await widget.api.offlineStore.readQueue();
+                    if (mounted) {
+                      _info('Offline access',
+                          '${queue.length} updates waiting to sync. Connect to the internet and refresh the home screen. Payments and profile changes require a connection.');
+                    }
+                  },
                   icon: Icons.cloud_done_outlined,
                   title: 'Offline access',
                   subtitle: 'Secure cache and queued updates'),
               const Divider(height: 1, indent: 64),
               _HigSettingsTile(
+                  onTap: () => _info('Privacy & security',
+                      'Your school controls your access. Parent accounts show linked children only. Sign out before sharing this device. Contact the school office to correct your account details.'),
                   icon: Icons.shield_outlined,
                   title: 'Privacy & security',
                   subtitle: 'Protected role-based access'),
               const Divider(height: 1, indent: 64),
               _HigSettingsTile(
+                  onTap: () => _info('Help',
+                      'Contact your school office for class assignments, account access, fees or transport support. Include the screen name and time of the issue. Never share your password.'),
                   icon: Icons.help_outline_rounded,
                   title: 'Help',
                   subtitle: 'Contact your school administrator'),
@@ -1035,11 +1141,11 @@ class _HigWelcomeCard extends StatelessWidget {
             ? '$moduleCount authorized work areas · $alertCount recent alerts'
             : '$moduleCount available features · $alertCount recent alerts';
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(26),
         gradient: const LinearGradient(
-            colors: [HigPalette.navy, HigPalette.blue],
+            colors: [Color(0xff153d35), Color(0xff276454)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight),
         boxShadow: [
@@ -1056,13 +1162,11 @@ class _HigWelcomeCard extends StatelessWidget {
           Text('Welcome, $firstName',
               style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 24,
+                  fontSize: 20,
                   fontWeight: FontWeight.w900)),
           const SizedBox(height: 7),
           Text(summary,
               style: const TextStyle(color: Color(0xffd8e9f7), height: 1.4)),
-          const SizedBox(height: 16),
-          const _HigRoleBadge(label: 'Secure personalized access', dark: true),
         ])),
         const SizedBox(width: 12),
         Container(
@@ -1071,14 +1175,12 @@ class _HigWelcomeCard extends StatelessWidget {
           decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: .12),
               borderRadius: BorderRadius.circular(20)),
-          child: Icon(
-              role == 'parent'
-                  ? Icons.family_restroom_rounded
-                  : role == 'school'
-                      ? Icons.school_rounded
-                      : Icons.auto_stories_rounded,
-              color: Colors.white,
-              size: 34),
+          clipBehavior: Clip.antiAlias,
+          child: Image.asset('assets/school-campus.png',
+              package: 'hig_mobile_core',
+              fit: BoxFit.cover,
+              alignment: Alignment.bottomRight,
+              excludeFromSemantics: true),
         ),
       ]),
     );
@@ -1348,21 +1450,17 @@ class _HigEmptyCard extends StatelessWidget {
 }
 
 class _HigRoleBadge extends StatelessWidget {
-  const _HigRoleBadge({required this.label, this.dark = false});
+  const _HigRoleBadge({required this.label});
   final String label;
-  final bool dark;
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-            color: dark
-                ? Colors.white.withValues(alpha: .14)
-                : Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
             borderRadius: BorderRadius.circular(20)),
         child: Text(label,
             style: TextStyle(
-                color:
-                    dark ? Colors.white : Theme.of(context).colorScheme.primary,
+                color: Theme.of(context).colorScheme.primary,
                 fontSize: 11,
                 fontWeight: FontWeight.w800)),
       );
@@ -1370,12 +1468,18 @@ class _HigRoleBadge extends StatelessWidget {
 
 class _HigSettingsTile extends StatelessWidget {
   const _HigSettingsTile(
-      {required this.icon, required this.title, required this.subtitle});
+      {required this.icon,
+      required this.title,
+      required this.subtitle,
+      this.onTap});
+  final VoidCallback? onTap;
   final IconData icon;
   final String title;
   final String subtitle;
   @override
   Widget build(BuildContext context) => ListTile(
+        onTap: onTap,
+        trailing: onTap == null ? null : const Icon(Icons.chevron_right),
         minVerticalPadding: 12,
         leading: CircleAvatar(
             backgroundColor:

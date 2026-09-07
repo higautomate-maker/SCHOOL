@@ -112,6 +112,7 @@ export const classSections = pgTable("class_sections", {
 }, (table) => [
   uniqueIndex("class_sections_class_name_uq").on(table.classId, table.name),
   unique("class_sections_tenant_id_uq").on(table.tenantId, table.id),
+  unique("class_sections_tenant_class_id_uq").on(table.tenantId, table.classId, table.id),
   index("class_sections_tenant_idx").on(table.tenantId),
   foreignKey({
     name: "class_sections_tenant_class_fk",
@@ -131,6 +132,7 @@ export const subjects = pgTable("subjects", {
   ...timestamps,
 }, (table) => [
   uniqueIndex("subjects_tenant_code_uq").on(table.tenantId, table.code),
+  unique("subjects_tenant_id_uq").on(table.tenantId, table.id),
   index("subjects_tenant_idx").on(table.tenantId),
 ]);
 
@@ -181,6 +183,29 @@ export const memberships = pgTable("memberships", {
     columns: [table.tenantId, table.campusId],
     foreignColumns: [campuses.tenantId, campuses.id],
   }),
+]);
+
+export const teacherAssignments = pgTable("teacher_assignments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  academicSessionId: uuid("academic_session_id").notNull(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  classId: uuid("class_id").notNull(),
+  sectionId: uuid("section_id").notNull(),
+  kind: text("kind").notNull(),
+  subjectId: uuid("subject_id"),
+  active: boolean("active").notNull().default(true),
+  updatedBy: uuid("updated_by").notNull().references(() => users.id),
+  ...timestamps,
+}, (table) => [
+  check("teacher_assignments_kind_ck", sql`${table.kind} IN ('class_teacher', 'subject_teacher')`),
+  check("teacher_assignments_kind_subject_ck", sql`(${table.kind} = 'class_teacher' AND ${table.subjectId} IS NULL) OR (${table.kind} = 'subject_teacher' AND ${table.subjectId} IS NOT NULL)`),
+  foreignKey({ name: "teacher_assignments_session_fk", columns: [table.tenantId, table.academicSessionId], foreignColumns: [academicSessions.tenantId, academicSessions.id] }),
+  foreignKey({ name: "teacher_assignments_section_fk", columns: [table.tenantId, table.classId, table.sectionId], foreignColumns: [classSections.tenantId, classSections.classId, classSections.id] }),
+  foreignKey({ name: "teacher_assignments_subject_fk", columns: [table.tenantId, table.subjectId], foreignColumns: [subjects.tenantId, subjects.id] }),
+  uniqueIndex("teacher_assignments_class_uq").on(table.tenantId, table.academicSessionId, table.userId, table.classId, table.sectionId).where(sql`${table.kind} = 'class_teacher'`),
+  uniqueIndex("teacher_assignments_subject_uq").on(table.tenantId, table.academicSessionId, table.userId, table.classId, table.sectionId, table.subjectId).where(sql`${table.kind} = 'subject_teacher'`),
+  index("teacher_assignments_lookup_idx").on(table.tenantId, table.userId, table.academicSessionId).where(sql`${table.active}`),
 ]);
 
 export const authCredentials = pgTable("auth_credentials", {
@@ -411,6 +436,31 @@ export const studentAttendance = pgTable("student_attendance", {
     columns: [table.tenantId, table.studentId],
     foreignColumns: [students.tenantId, students.id],
   }),
+]);
+
+export const lessonAttendance = pgTable("lesson_attendance", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  academicSessionId: uuid("academic_session_id").notNull(),
+  classId: uuid("class_id").notNull(),
+  sectionId: uuid("section_id").notNull(),
+  subjectId: uuid("subject_id").notNull(),
+  lessonKey: text("lesson_key").notNull(),
+  attendanceDate: date("attendance_date", { mode: "string" }).notNull(),
+  studentId: uuid("student_id").notNull(),
+  status: attendanceStatus("status").notNull(),
+  note: text("note").notNull().default(""),
+  markedBy: uuid("marked_by").notNull().references(() => users.id),
+  ...timestamps,
+}, (table) => [
+  check("lesson_attendance_key_ck", sql`char_length(${table.lessonKey}) BETWEEN 1 AND 120`),
+  check("lesson_attendance_note_ck", sql`char_length(${table.note}) <= 240`),
+  uniqueIndex("lesson_attendance_student_uq").on(table.tenantId, table.academicSessionId, table.classId, table.sectionId, table.subjectId, table.attendanceDate, table.lessonKey, table.studentId),
+  index("lesson_attendance_register_idx").on(table.tenantId, table.academicSessionId, table.classId, table.sectionId, table.subjectId, table.attendanceDate),
+  foreignKey({ name: "lesson_attendance_session_fk", columns: [table.tenantId, table.academicSessionId], foreignColumns: [academicSessions.tenantId, academicSessions.id] }),
+  foreignKey({ name: "lesson_attendance_section_fk", columns: [table.tenantId, table.classId, table.sectionId], foreignColumns: [classSections.tenantId, classSections.classId, classSections.id] }),
+  foreignKey({ name: "lesson_attendance_subject_fk", columns: [table.tenantId, table.subjectId], foreignColumns: [subjects.tenantId, subjects.id] }),
+  foreignKey({ name: "lesson_attendance_student_fk", columns: [table.tenantId, table.studentId], foreignColumns: [students.tenantId, students.id] }),
 ]);
 
 export const feeInvoices = pgTable("fee_invoices", {
@@ -768,6 +818,53 @@ export const mobileDeviceRegistrations = pgTable("mobile_device_registrations", 
     "mobile_device_registrations_status_timestamp_ck",
     sql`(${table.status} = 'active' AND ${table.revokedAt} IS NULL) OR (${table.status} = 'revoked' AND ${table.revokedAt} IS NOT NULL)`,
   ),
+]);
+
+export const mobileDiary = pgTable("mobile_diary", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  academicSessionId: uuid("academic_session_id").notNull(),
+  classId: uuid("class_id").notNull(),
+  sectionId: uuid("section_id").notNull(),
+  subjectId: uuid("subject_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  recordDate: date("record_date").notNull(),
+  dueDate: date("due_date").notNull(),
+  createdBy: uuid("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique().on(t.tenantId, t.id),
+  index("mobile_diary_date_idx").on(t.tenantId, t.recordDate),
+  foreignKey({ columns: [t.tenantId, t.academicSessionId], foreignColumns: [academicSessions.tenantId, academicSessions.id] }),
+  foreignKey({ columns: [t.tenantId, t.classId, t.sectionId], foreignColumns: [classSections.tenantId, classSections.classId, classSections.id] }),
+  foreignKey({ columns: [t.tenantId, t.subjectId], foreignColumns: [subjects.tenantId, subjects.id] }),
+  check("mobile_diary_title_check", sql`char_length(${t.title}) BETWEEN 2 AND 140`),
+  check("mobile_diary_description_check", sql`char_length(${t.description}) <= 4000`),
+  check("mobile_diary_due_date_check", sql`${t.dueDate} >= ${t.recordDate}`),
+]);
+
+export const mobileDiaryCompletion = pgTable("mobile_diary_completion", {
+  tenantId: uuid("tenant_id").notNull(),
+  diaryId: uuid("diary_id").notNull(),
+  studentId: uuid("student_id").notNull(),
+  completed: boolean("completed").notNull(),
+  updatedBy: uuid("updated_by").notNull().references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.diaryId, t.studentId] }),
+  foreignKey({ columns: [t.tenantId, t.diaryId], foreignColumns: [mobileDiary.tenantId, mobileDiary.id] }),
+  foreignKey({ columns: [t.tenantId, t.studentId], foreignColumns: [students.tenantId, students.id] }),
+]);
+
+export const mobileProfilePhotos = pgTable("mobile_profile_photos", {
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  photo: text("photo").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.tenantId, t.userId] }),
+  check("mobile_profile_photos_photo_check", sql`char_length(${t.photo}) <= 400000`),
 ]);
 
 export const mobileTransportEvents = pgTable("mobile_transport_events", {

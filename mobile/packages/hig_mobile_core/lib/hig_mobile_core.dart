@@ -8,13 +8,21 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 part 'src/hig_mobile_ui.dart';
 part 'src/hig_attendance_ui.dart';
+part 'src/hig_connected_services.dart';
+part 'src/hig_diary.dart';
 
 const _uuid = Uuid();
 
@@ -326,6 +334,24 @@ class HigMobileApi {
   Future<JsonMap> operations() =>
       _cachedGet('/api/v1/mobile/operations', 'operations');
 
+  Future<JsonMap> teachingContexts() =>
+      _cachedGet('/api/v1/mobile/teaching-context', 'teaching-context');
+
+  Future<JsonMap> diary(String date) =>
+      _cachedGet('/api/v1/mobile/diary?date=$date', 'diary:$date');
+  Future<JsonMap> diaryUpdate(JsonMap body) =>
+      write('/api/v1/mobile/diary', body, queueWhenOffline: false);
+  Future<JsonMap> profilePhoto() =>
+      _send('GET', '/api/v1/mobile/profile-photo');
+  Future<JsonMap> changeProfilePhoto(String? photo) =>
+      _send('PUT', '/api/v1/mobile/profile-photo', body: {'photo': photo});
+
+  Future<JsonMap> lessonAttendance(String date) => _cachedGet(
+      '/api/v1/mobile/lesson-attendance?date=$date', 'lesson-attendance:$date');
+
+  Future<JsonMap> saveLessonAttendance(JsonMap body) =>
+      write('/api/v1/mobile/lesson-attendance', body);
+
   Future<JsonMap> content({String? featureKey, String? moduleKey}) {
     final query = <String, String>{};
     if (featureKey != null) query['featureKey'] = featureKey;
@@ -357,6 +383,21 @@ class HigMobileApi {
 
   Future<JsonMap> transport() =>
       _cachedGet('/api/v1/mobile/transport', 'transport');
+
+  // Payments must never enter the offline write queue.
+  Future<JsonMap> createPaymentOrder(String invoiceId, String retryKey) =>
+      _send(
+        'POST',
+        '/api/v1/mobile/payments/orders',
+        body: {'invoiceId': invoiceId},
+        extraHeaders: {'idempotency-key': retryKey},
+      );
+
+  Future<JsonMap> verifyPayment(JsonMap body) => _send(
+        'POST',
+        '/api/v1/mobile/payments/razorpay/verify',
+        body: body,
+      );
 
   Future<JsonMap> transportEvent(
     JsonMap body, {
@@ -1056,12 +1097,14 @@ class _HomeViewState extends State<HomeView> {
       MaterialPageRoute(
         builder: (_) => principalType == 'parent' && key == 'transport_tracking'
             ? ParentTransportTrackingPage(api: widget.api)
-            : ModuleDetailPage(
-                api: widget.api,
-                principalType: principalType,
-                item: item,
-                availableStudents: availableStudents,
-              ),
+            : key == 'homework' || key == 'diary'
+                ? HigDiaryPage(api: widget.api, role: principalType)
+                : ModuleDetailPage(
+                    api: widget.api,
+                    principalType: principalType,
+                    item: item,
+                    availableStudents: availableStudents,
+                  ),
       ),
     );
   }
@@ -1088,6 +1131,17 @@ class _HomeViewState extends State<HomeView> {
         : ((access['features'] as List?) ?? const []);
     final modules =
         entries.map((entry) => (entry as Map).cast<String, dynamic>()).toList();
+    if (principalType == 'school' &&
+        modules.any((m) => m['key'] == 'study_center')) {
+      modules.add({
+        ...modules.firstWhere((m) => m['key'] == 'study_center'),
+        'key': 'diary',
+        'label': 'Diary'
+      });
+    }
+    for (final item in modules) {
+      if (item['key'] == 'homework') item['label'] = 'Diary';
+    }
     final pages = [
       HigRoleDashboardPage(
         home: home,
@@ -1103,7 +1157,7 @@ class _HomeViewState extends State<HomeView> {
         onOpen: _openModule,
       ),
       HigNotificationsView(api: widget.api),
-      HigProfileView(home: home, onLogout: widget.onLogout),
+      HigProfileView(home: home, onLogout: widget.onLogout, api: widget.api),
     ];
     return Scaffold(
       body: IndexedStack(index: index, children: pages),
@@ -1313,29 +1367,46 @@ class ParentTransportTrackingPage extends StatefulWidget {
 }
 
 class _ParentTransportTrackingPageState
-    extends State<ParentTransportTrackingPage> {
+    extends State<ParentTransportTrackingPage> with WidgetsBindingObserver {
   JsonMap? data;
   String? error;
   bool loading = true;
   Timer? refreshTimer;
+  bool fetching = false;
+  bool foreground = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     load();
     refreshTimer = Timer.periodic(
       const Duration(seconds: 15),
-      (_) => load(silent: true),
+      (_) {
+        if (mounted && foreground) {
+          setState(() {}); // Age previously received positions even on failure.
+          load(silent: true);
+        }
+      },
     );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     refreshTimer?.cancel();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    foreground = state == AppLifecycleState.resumed;
+    if (foreground) load();
+  }
+
   Future<void> load({bool silent = false}) async {
+    if (fetching) return;
+    fetching = true;
     if (!silent && mounted) {
       setState(() {
         loading = true;
@@ -1355,10 +1426,12 @@ class _ParentTransportTrackingPageState
     } catch (exception) {
       if (mounted) {
         setState(() {
-          error = exception.toString();
+          error = 'Unable to refresh the vehicle location. Please retry.';
           loading = false;
         });
       }
+    } finally {
+      fetching = false;
     }
   }
 
@@ -1367,7 +1440,11 @@ class _ParentTransportTrackingPageState
     if (capturedAt == null) return 'Location unavailable';
 
     final age = DateTime.now().toUtc().difference(capturedAt.toUtc());
-    if (age.inSeconds <= 120) return 'Live now';
+    if (age.isNegative) return 'Location time unavailable';
+    if (data?['offline'] == true || error != null) {
+      return 'Offline · saved location';
+    }
+    if (age.inSeconds <= 120) return 'Updated ${age.inSeconds} seconds ago';
     if (age.inMinutes <= 15) {
       return 'Delayed · ${age.inMinutes} min old';
     }
@@ -1390,7 +1467,9 @@ class _ParentTransportTrackingPageState
     final journey = (child['journey'] as Map?)?.cast<String, dynamic>();
     final targetStop = (live?['targetStop'] as Map?)?.cast<String, dynamic>();
 
-    final eta = live?['etaMinutes'];
+    final fresh = transportLocationIsFresh(live,
+        offline: data?['offline'] == true || error != null);
+    final eta = fresh ? (live?['etaMinutes']) : null;
     final etaText = eta is num
         ? eta.toInt() == 0
             ? 'At stop'
@@ -1470,6 +1549,8 @@ class _ParentTransportTrackingPageState
                 ],
               ),
             ] else ...[
+              _HigVehicleMap(live: live, fresh: fresh),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   const Icon(Icons.my_location),
@@ -2148,6 +2229,14 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                               builder: (context) {
                                 final record =
                                     (entry as Map).cast<String, dynamic>();
+                                if (widget.principalType == 'parent' &&
+                                    key == 'fees_payments') {
+                                  return _HigInvoiceCard(
+                                      api: widget.api,
+                                      invoice: record,
+                                      offline: data?['offline'] == true,
+                                      onRefresh: load);
+                                }
                                 final status =
                                     record['status']?.toString() ?? '';
                                 final attendanceDate =

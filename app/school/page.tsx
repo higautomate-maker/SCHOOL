@@ -20,6 +20,7 @@ import { advancedSettingsPages, SettingsWorkspace } from "./settings-workspaces"
 import styles from "./school.module.css";
 import { LogoutButton } from "../components/logout-button";
 import { SchoolTodayPanel } from "./TodayPanel";
+import { TeacherAssignmentsPanel } from "./teacher-assignments";
 
 type School={tenantId?:string;name:string;location:string;code:string};
 type Student={id:string;admissionNumber:string;rollNumber:string;firstName:string;lastName:string;fullName:string;gender:"female"|"male"|"other";dateOfBirth:string;admissionDate:string;className:string;sectionName:string;guardianName:string;guardianPhone:string;status:"active"|"inactive"|"graduated";createdAt:string};
@@ -1048,6 +1049,7 @@ function AccountsReferencePage({page,operations,workspace,onPage,onAdd,onStatus}
 }
 
 function AcademicReferencePage({page,foundation,students,workspace,onPage,onSettings,onAddSession,onAddClass,onAddSection,onAddSubject,onRecord,onStatus}:{page:string;foundation:Foundation;students:Student[];workspace:Workspace;onPage:(page:string)=>void;onSettings:()=>void;onAddSession:()=>void;onAddClass:()=>void;onAddSection:()=>void;onAddSubject:()=>void;onRecord:()=>void;onStatus:(p:Record<string,unknown>)=>Promise<boolean>}){
+  if(page==='Assign Class Teacher')return <TeacherAssignmentsPanel/>;
   if(page==="Bulk Class Upload")return <BulkImportPage title="Bulk Class Upload" subtitle="Upload School Classes Data" accept=".csv" primary="Start Bulk Import" requirements={[["Name","Yes","Class name, for example Grade 8"],["Coordinator Email","No","Email of the staff member coordinating the class"]]} onBack={()=>onPage("Classes")} onProcess={onRecord}/>;
   if(page==="Bulk Subject Upload")return <BulkImportPage title="Bulk Subject Upload" subtitle="Upload Subject Data" accept=".csv" primary="Start Bulk Import" requirements={[["Name","Yes","Subject display name"],["Subject Code","No","Unique short code"],["Type","Yes","Use compulsory or elective"],["Elective Group","Conditional","Required when Type is elective"]]} onBack={()=>onPage("Subjects")} onProcess={onRecord}/>;
   const tabs=["Academic Dashboard","Academic Sessions","Classes","Sections","Subjects","Assign Subjects","Assign Electives","Assign Class Teacher","Manage Periods","Class Timetable","Promote Students"];

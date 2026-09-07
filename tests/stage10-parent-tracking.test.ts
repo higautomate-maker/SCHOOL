@@ -66,7 +66,7 @@ test("ETA is freshness-aware and stop-targeted", () => {
   assert.match(postgres, /earthRadiusMeters = 6_371_000/);
   assert.match(postgres, /ageSeconds <= 120/);
   assert.match(postgres, /ageSeconds <= 900/);
-  assert.match(postgres, /freshness === "offline"/);
+  assert.match(postgres, /freshness !== "online"/);
   assert.match(
     postgres,
     /Math\.min\(Math\.max\(speedKph, 10\), 60\)/,

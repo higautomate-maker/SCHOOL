@@ -11,6 +11,12 @@ type InvoiceRow = { id:string; studentId:string; studentName:string; admissionNu
 type PaymentRow = { id:string; invoiceId:string; studentName:string; amountPaise:number; method:string; reference:string; paidOn:string };
 export type OperationsState = { attendance:AttendanceRow[]; invoices:InvoiceRow[]; payments:PaymentRow[]; metrics:{present:number;absent:number;late:number;attendanceMarked:number;invoicedPaise:number;collectedPaise:number;outstandingPaise:number} };
 
+export type AttendanceAuthority = {
+  userId: string;
+  canManageAttendance: boolean;
+  isSchoolAdmin: boolean;
+};
+
 export async function getOperations(tenantId:string, sessionId?:string|null):Promise<OperationsState>{
   if(repositoryBackend()==="postgres"){
     return (await import("./postgres-repository.ts")).getPostgresOperations(tenantId,sessionId);
@@ -28,10 +34,11 @@ export async function getOperations(tenantId:string, sessionId?:string|null):Pro
   return state;
 }
 
-export async function applyOperation(tenantId:string, action:OperationAction, actor:ChatGPTUser, idempotencyKey=crypto.randomUUID()):Promise<OperationsState>{
+export async function applyOperation(tenantId:string, action:OperationAction, actor:ChatGPTUser, idempotencyKey=crypto.randomUUID(), attendanceAuthority?:AttendanceAuthority):Promise<OperationsState>{
   if(repositoryBackend()==="postgres"){
-    return (await import("./postgres-repository.ts")).applyPostgresOperation(tenantId,action,actor,idempotencyKey);
+    return (await import("./postgres-repository.ts")).applyPostgresOperation(tenantId,action,actor,idempotencyKey,attendanceAuthority);
   }
+  if(action.action==="mark_attendance" && attendanceAuthority)throw new Error("Teaching assignments unavailable");
   await requireSchool(tenantId); const session=await activeSession(tenantId); if(!session)throw new Error("Create and activate an academic session first");
   const now=new Date().toISOString(), actorId=await stableUserId(actor.email); await ensureUser(actorId,actor,now);
   let resourceType="operation", resourceId="";

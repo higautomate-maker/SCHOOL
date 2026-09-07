@@ -3,9 +3,51 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hig_mobile_core/hig_mobile_core.dart';
 
 class _AttendanceApi extends HigMobileApi {
-  _AttendanceApi() : super(baseUrl: 'https://example.invalid', appId: 'test');
+  _AttendanceApi({this.hasAssignments = true})
+      : super(baseUrl: 'https://example.invalid', appId: 'test');
+  final bool hasAssignments;
+  bool failLesson = false;
+  final List<JsonMap> lessons = [];
 
   final List<JsonMap> writes = [];
+
+  @override
+  Future<JsonMap> teachingContexts() async => {
+        'contexts': !hasAssignments
+            ? <JsonMap>[]
+            : <JsonMap>[
+                {
+                  'id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                  'academicSessionId': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  'classId': 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                  'sectionId': 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+                  'kind': 'class_teacher',
+                  'className': 'Grade 8',
+                  'sectionName': 'A',
+                },
+                {
+                  'id': 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+                  'academicSessionId': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                  'classId': 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+                  'sectionId': 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+                  'subjectId': 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+                  'kind': 'subject_teacher',
+                  'className': 'Grade 8',
+                  'sectionName': 'A',
+                  'subjectName': 'Mathematics',
+                },
+              ],
+      };
+
+  @override
+  Future<JsonMap> lessonAttendance(String date) async =>
+      {'attendance': <JsonMap>[]};
+  @override
+  Future<JsonMap> saveLessonAttendance(JsonMap body) async {
+    if (failLesson) throw Exception('Temporary test failure');
+    lessons.add(body);
+    return {'saved': true};
+  }
 
   @override
   Future<JsonMap> operations() async => {
@@ -47,6 +89,45 @@ void main() {
         },
       ];
 
+  testWidgets('no assignment never exposes the supplied roster',
+      (tester) async {
+    final api = _AttendanceApi(hasAssignments: false);
+    await tester.pumpWidget(
+        MaterialApp(home: HigAttendancePage(api: api, students: students())));
+    await tester.pumpAndSettle();
+    expect(find.text('No class-teacher assignment'), findsOneWidget);
+    expect(find.text('Aarav Sharma'), findsNothing);
+    expect(api.writes, isEmpty);
+  });
+
+  testWidgets(
+      'subject lesson saves separately and failed save retains marks for retry',
+      (tester) async {
+    final api = _AttendanceApi()..failLesson = true;
+    await tester.pumpWidget(
+        MaterialApp(home: HigAttendancePage(api: api, students: students())));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Subject lesson'));
+    await tester.pumpAndSettle();
+    expect(find.text('Mathematics'), findsOneWidget);
+    await tester.ensureVisible(find.text('All present'));
+    await tester.tap(find.text('All present'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save 2 students'));
+    await tester.pumpAndSettle();
+    expect(api.lessons, isEmpty);
+    expect(find.textContaining('Your marks are retained'), findsOneWidget);
+    api.failLesson = false;
+    await tester.tap(find.text('Save 2 students'));
+    await tester.pumpAndSettle();
+    expect(api.lessons, hasLength(1));
+    expect(api.lessons.single['subjectId'],
+        'ffffffff-ffff-4fff-8fff-ffffffffffff');
+    expect(api.lessons.single['lessonId'], 'period-1');
+    expect(api.lessons.single['entries'], hasLength(2));
+    expect(api.writes, isEmpty);
+  });
+
   testWidgets(
       'teacher marks a class present, changes an exception, and saves once',
       (tester) async {
@@ -84,6 +165,13 @@ void main() {
         api.writes.where((write) => write['status'] == 'absent'), hasLength(1));
     expect(
         api.writes.every((write) => write['attendanceDate'] != null), isTrue);
+    expect(
+        api.writes.every((write) =>
+            write['academicSessionId'] ==
+                'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' &&
+            write['classId'] == 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' &&
+            write['sectionId'] == 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'),
+        isTrue);
   });
 
   testWidgets('teacher is warned before discarding marked attendance',
