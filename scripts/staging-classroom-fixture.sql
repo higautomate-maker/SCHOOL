@@ -127,6 +127,119 @@ SELECT tenant_id, session_id, module_key, workflow, title, description, record_d
        jsonb_build_object('fixture','greenfield-classroom-v1','class','Grade 8','section','A'), teacher_id
 FROM target CROSS JOIN records;
 
+-- Provision realistic teaching scope for the acceptance teacher.  The mobile
+-- diary is intentionally assignment-scoped, so a fixture that only creates
+-- module_records will make the parent diary look empty even though the school
+-- has homework in the web workspace.
+WITH target AS (
+  SELECT
+    '1c602856-3fec-486f-b18d-a791f124b206'::uuid AS tenant_id,
+    (SELECT id FROM academic_sessions WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND status = 'active' ORDER BY starts_on LIMIT 1) AS session_id,
+    (SELECT id FROM users WHERE lower(email) = 'greenfield.teacher.test@higschool.test') AS teacher_id,
+    (SELECT id FROM school_classes WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'G8') AS class_id,
+    (SELECT id FROM class_sections WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND class_id = (SELECT id FROM school_classes WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'G8') AND name = 'A') AS section_id
+)
+INSERT INTO teacher_assignments (
+  id, tenant_id, academic_session_id, user_id, class_id, section_id,
+  kind, subject_id, active, updated_by
+)
+SELECT 'a1000000-0000-4000-8000-000000000001'::uuid, tenant_id, session_id,
+       teacher_id, class_id, section_id, 'class_teacher', NULL, true, teacher_id
+FROM target
+ON CONFLICT (tenant_id, academic_session_id, user_id, class_id, section_id)
+  WHERE kind = 'class_teacher'
+DO UPDATE SET active = true, updated_by = EXCLUDED.updated_by, updated_at = now();
+
+WITH target AS (
+  SELECT
+    '1c602856-3fec-486f-b18d-a791f124b206'::uuid AS tenant_id,
+    (SELECT id FROM academic_sessions WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND status = 'active' ORDER BY starts_on LIMIT 1) AS session_id,
+    (SELECT id FROM users WHERE lower(email) = 'greenfield.teacher.test@higschool.test') AS teacher_id,
+    (SELECT id FROM school_classes WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'G8') AS class_id,
+    (SELECT id FROM class_sections WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND class_id = (SELECT id FROM school_classes WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'G8') AND name = 'A') AS section_id,
+    (SELECT id FROM subjects WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'ENG') AS subject_id
+)
+INSERT INTO teacher_assignments (
+  id, tenant_id, academic_session_id, user_id, class_id, section_id,
+  kind, subject_id, active, updated_by
+)
+SELECT 'a1000000-0000-4000-8000-000000000002'::uuid, tenant_id, session_id,
+       teacher_id, class_id, section_id, 'subject_teacher', subject_id, true, teacher_id
+FROM target
+ON CONFLICT (tenant_id, academic_session_id, user_id, class_id, section_id, subject_id)
+  WHERE kind = 'subject_teacher'
+DO UPDATE SET active = true, updated_by = EXCLUDED.updated_by, updated_at = now();
+
+WITH target AS (
+  SELECT
+    '1c602856-3fec-486f-b18d-a791f124b206'::uuid AS tenant_id,
+    (SELECT id FROM academic_sessions WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND status = 'active' ORDER BY starts_on LIMIT 1) AS session_id,
+    (SELECT id FROM users WHERE lower(email) = 'greenfield.teacher.test@higschool.test') AS teacher_id,
+    (SELECT id FROM school_classes WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'G8') AS class_id,
+    (SELECT id FROM class_sections WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND class_id = (SELECT id FROM school_classes WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'G8') AND name = 'A') AS section_id,
+    (SELECT id FROM subjects WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'MATH') AS subject_id
+)
+INSERT INTO teacher_assignments (
+  id, tenant_id, academic_session_id, user_id, class_id, section_id,
+  kind, subject_id, active, updated_by
+)
+SELECT 'a1000000-0000-4000-8000-000000000003'::uuid, tenant_id, session_id,
+       teacher_id, class_id, section_id, 'subject_teacher', subject_id, true, teacher_id
+FROM target
+ON CONFLICT (tenant_id, academic_session_id, user_id, class_id, section_id, subject_id)
+  WHERE kind = 'subject_teacher'
+DO UPDATE SET active = true, updated_by = EXCLUDED.updated_by, updated_at = now();
+
+-- Two dated diary entries make the parent acceptance account useful on first
+-- login.  They are class-scoped and therefore appear for the linked child.
+WITH target AS (
+  SELECT
+    '1c602856-3fec-486f-b18d-a791f124b206'::uuid AS tenant_id,
+    (SELECT id FROM academic_sessions WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND status = 'active' ORDER BY starts_on LIMIT 1) AS session_id,
+    (SELECT id FROM users WHERE lower(email) = 'greenfield.teacher.test@higschool.test') AS teacher_id,
+    (SELECT id FROM school_classes WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'G8') AS class_id,
+    (SELECT id FROM class_sections WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND class_id = (SELECT id FROM school_classes WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'G8') AND name = 'A') AS section_id
+)
+INSERT INTO mobile_diary (
+  id, tenant_id, academic_session_id, class_id, section_id, subject_id,
+  title, description, record_date, due_date, created_by
+)
+SELECT 'a2000000-0000-4000-8000-000000000001'::uuid, target.tenant_id,
+       target.session_id, target.class_id, target.section_id, subject.id,
+       'Linear equations practice',
+       'Complete exercises 4.1 and 4.2. Show each step in your notebook.',
+       current_date, current_date + 3, target.teacher_id
+FROM target
+JOIN subjects subject ON subject.tenant_id = target.tenant_id AND subject.code = 'MATH'
+ON CONFLICT (tenant_id, id) DO UPDATE SET
+  title = EXCLUDED.title, description = EXCLUDED.description,
+  record_date = EXCLUDED.record_date, due_date = EXCLUDED.due_date,
+  subject_id = EXCLUDED.subject_id;
+
+WITH target AS (
+  SELECT
+    '1c602856-3fec-486f-b18d-a791f124b206'::uuid AS tenant_id,
+    (SELECT id FROM academic_sessions WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND status = 'active' ORDER BY starts_on LIMIT 1) AS session_id,
+    (SELECT id FROM users WHERE lower(email) = 'greenfield.teacher.test@higschool.test') AS teacher_id,
+    (SELECT id FROM school_classes WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'G8') AS class_id,
+    (SELECT id FROM class_sections WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND class_id = (SELECT id FROM school_classes WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid AND code = 'G8') AND name = 'A') AS section_id
+)
+INSERT INTO mobile_diary (
+  id, tenant_id, academic_session_id, class_id, section_id, subject_id,
+  title, description, record_date, due_date, created_by
+)
+SELECT 'a2000000-0000-4000-8000-000000000002'::uuid, target.tenant_id,
+       target.session_id, target.class_id, target.section_id, subject.id,
+       'The Last Leaf — character sketch',
+       'Write a 250-word character sketch of Behrman and bring it tomorrow.',
+       current_date - 1, current_date + 4, target.teacher_id
+FROM target
+JOIN subjects subject ON subject.tenant_id = target.tenant_id AND subject.code = 'ENG'
+ON CONFLICT (tenant_id, id) DO UPDATE SET
+  title = EXCLUDED.title, description = EXCLUDED.description,
+  record_date = EXCLUDED.record_date, due_date = EXCLUDED.due_date,
+  subject_id = EXCLUDED.subject_id;
+
 -- A visible five-day attendance history for the whole class.
 WITH target AS (
   SELECT '1c602856-3fec-486f-b18d-a791f124b206'::uuid tenant_id,
