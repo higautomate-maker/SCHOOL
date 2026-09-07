@@ -421,9 +421,13 @@ class HigRoleDashboardPage extends StatelessWidget {
       ],
     ).where((item) {
       final key = item['key']?.toString();
-      // Diary and Notices have dedicated bottom tabs.  All other authorized
-      // features stay discoverable from Home, including tenant-specific ones.
-      return key != 'diary' && key != 'homework' && key != 'notices';
+      // Diary and Notices have dedicated bottom tabs.  Teachers also have a
+      // dedicated attendance register, while parents keep attendance on Home.
+      final teacherAttendance = role == 'school' && key == 'attendance';
+      return key != 'diary' &&
+          key != 'homework' &&
+          key != 'notices' &&
+          !teacherAttendance;
     }).toList();
     final recent = _recentMatches(modules, recentKeys).take(4).toList();
     final roleLabel = role == 'school'

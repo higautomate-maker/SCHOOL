@@ -1157,35 +1157,61 @@ class _HomeViewState extends State<HomeView> {
       });
     }
     for (final item in modules) {
-      if (item['key'] == 'homework') item['label'] = 'Diary';
+      if (item['key'] == 'homework') {
+        item['label'] = principalType == 'school' ? 'Homework' : 'Diary';
+      }
     }
-    final pages = [
-      HigRoleDashboardPage(
-        home: home,
-        photo: profilePhoto,
-        modules: modules,
-        recentKeys: recentKeys,
-        onRefresh: widget.onRefresh,
-        onOpen: _openModule,
-        onAlerts: () => setState(() => index = 2),
-      ),
-      HigDiaryPage(api: widget.api, role: principalType),
-      HigNotificationsView(api: widget.api),
-      HigProfileView(
-        home: home,
-        onLogout: widget.onLogout,
-        api: widget.api,
-        onPhotoChanged: (photo) {
-          if (mounted) setState(() => profilePhoto = photo);
-        },
-      ),
-    ];
+    final availableStudents = ((home['students'] as List?) ?? const [])
+        .map((entry) => (entry as Map).cast<String, dynamic>())
+        .where((student) => (student['id']?.toString() ?? '').isNotEmpty)
+        .toList();
+    final isTeacher = principalType == 'school';
+    final homePage = HigRoleDashboardPage(
+      home: home,
+      photo: profilePhoto,
+      modules: modules,
+      recentKeys: recentKeys,
+      onRefresh: widget.onRefresh,
+      onOpen: _openModule,
+      onAlerts: () {
+        if (isTeacher) {
+          Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => HigNotificationsView(api: widget.api)));
+        } else {
+          setState(() => index = 2);
+        }
+      },
+    );
+    final profilePage = HigProfileView(
+      home: home,
+      onLogout: widget.onLogout,
+      api: widget.api,
+      onPhotoChanged: (photo) {
+        if (mounted) setState(() => profilePhoto = photo);
+      },
+    );
+    final pages = isTeacher
+        ? [
+            homePage,
+            HigAttendancePage(
+              api: widget.api,
+              students: availableStudents,
+            ),
+            HigDiaryPage(api: widget.api, role: principalType),
+            profilePage,
+          ]
+        : [
+            homePage,
+            HigDiaryPage(api: widget.api, role: principalType),
+            HigNotificationsView(api: widget.api),
+            profilePage,
+          ];
     return Scaffold(
       body: IndexedStack(index: index, children: pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (value) => setState(() => index = value),
-        destinations: const [
+        destinations: [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
@@ -1194,12 +1220,12 @@ class _HomeViewState extends State<HomeView> {
           NavigationDestination(
             icon: Icon(Icons.menu_book_outlined),
             selectedIcon: Icon(Icons.menu_book),
-            label: 'Diary',
+            label: principalType == 'school' ? 'Attendance' : 'Diary',
           ),
           NavigationDestination(
             icon: Icon(Icons.campaign_outlined),
             selectedIcon: Icon(Icons.campaign),
-            label: 'Notices',
+            label: principalType == 'school' ? 'Homework' : 'Notices',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),

@@ -41,7 +41,9 @@ class _HigDiaryPageState extends State<HigDiaryPage> {
       if (mounted) {
         setState(() {
           loading = false;
-          error = 'Diary could not be loaded. Please retry.';
+          error = widget.role == 'school'
+              ? 'Homework could not be loaded. Please retry.'
+              : 'Diary could not be loaded. Please retry.';
         });
       }
     }
@@ -246,7 +248,8 @@ class _HigDiaryPageState extends State<HigDiaryPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('School diary')),
+        appBar: AppBar(
+            title: Text(widget.role == 'school' ? 'Homework' : 'School diary')),
         body: Column(children: [
           Padding(
               padding: const EdgeInsets.all(12),
@@ -299,10 +302,11 @@ class _HigDiaryPageState extends State<HigDiaryPage> {
                                   child: Text(
                                       'Saved diary. Reconnect to update completion.')),
                             if (records.isEmpty && error == null)
-                              const Padding(
+                              Padding(
                                   padding: EdgeInsets.all(32),
-                                  child: Text(
-                                      'No homework assigned for this date. Choose another day to view its diary.')),
+                                  child: Text(widget.role == 'school'
+                                      ? 'No homework published for this date.'
+                                      : 'No homework assigned for this date. Choose another day to view its diary.')),
                             for (final record in records)
                               Card(
                                   child: Padding(

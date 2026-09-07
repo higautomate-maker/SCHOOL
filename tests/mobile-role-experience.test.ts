@@ -77,9 +77,11 @@ test("teacher attendance is date-aware and supports class-wide exception marking
   assert.doesNotMatch(core, /Date \(YYYY-MM-DD\)/);
 });
 
-test("mobile navigation keeps Diary and Notices as dedicated destinations", () => {
-  assert.match(core, /label: 'Diary'/);
-  assert.match(core, /label: 'Notices'/);
+test("mobile navigation uses role-specific dedicated destinations", () => {
+  assert.match(core, /principalType == 'school' \? 'Attendance' : 'Diary'/);
+  assert.match(core, /principalType == 'school' \? 'Homework' : 'Notices'/);
+  assert.match(core, /HigAttendancePage\(/);
+  assert.match(core, /HigDiaryPage\(api: widget.api, role: principalType\)/);
   assert.doesNotMatch(core, /label: 'More'/);
   assert.match(roleUi, /take\(4\)/);
   assert.match(roleUi, /leave_requests/);
