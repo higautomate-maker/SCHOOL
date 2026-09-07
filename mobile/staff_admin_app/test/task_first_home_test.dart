@@ -10,6 +10,9 @@ void main() {
       final keys = role == 'school'
           ? ['attendance', 'diary', 'academics', 'communication']
           : ['homework', 'fees_payments', 'transport_tracking', 'attendance'];
+      // Attendance/homework are intentionally dedicated bottom tabs for their
+      // respective roles, so exercise a feature that remains on Home.
+      final homeKey = role == 'school' ? 'academics' : 'fees_payments';
       final opened = <String>[];
       await tester.pumpWidget(MaterialApp(
           home: Scaffold(
@@ -32,9 +35,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Recently used'), findsNothing);
       expect(find.textContaining('authorized work areas'), findsNothing);
-      await tester.tap(find.text(keys.first).first);
+      await tester.tap(find.text(homeKey).first);
       await tester.pumpAndSettle();
-      expect(opened, [keys.first]);
+      expect(opened, [homeKey]);
       expect(tester.takeException(), isNull);
     });
   }
