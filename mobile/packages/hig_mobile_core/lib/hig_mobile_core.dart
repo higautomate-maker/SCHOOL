@@ -23,6 +23,7 @@ part 'src/hig_mobile_ui.dart';
 part 'src/hig_attendance_ui.dart';
 part 'src/hig_connected_services.dart';
 part 'src/hig_diary.dart';
+part 'src/hig_students.dart';
 
 const _uuid = Uuid();
 
@@ -1061,6 +1062,7 @@ class HomeView extends StatefulWidget {
 
 class _HomeViewState extends State<HomeView> {
   int index = 0;
+  String? profilePhoto;
   List<String> recentKeys = const [];
 
   @override
@@ -1097,14 +1099,29 @@ class _HomeViewState extends State<HomeView> {
       MaterialPageRoute(
         builder: (_) => principalType == 'parent' && key == 'transport_tracking'
             ? ParentTransportTrackingPage(api: widget.api)
-            : key == 'homework' || key == 'diary'
-                ? HigDiaryPage(api: widget.api, role: principalType)
-                : ModuleDetailPage(
-                    api: widget.api,
-                    principalType: principalType,
-                    item: item,
-                    availableStudents: availableStudents,
-                  ),
+            : principalType == 'school' && key == 'student_information'
+                ? HigStudentDirectoryPage(api: widget.api)
+                : key == 'homework' || key == 'diary'
+                    ? HigDiaryPage(api: widget.api, role: principalType)
+                    : principalType == 'school' &&
+                            key == 'attendance' &&
+                            item['canManage'] == true
+                        ? HigAttendancePage(
+                            api: widget.api,
+                            students: availableStudents,
+                            historyBuilder: (_) => ModuleDetailPage(
+                              api: widget.api,
+                              principalType: principalType,
+                              item: item,
+                              availableStudents: availableStudents,
+                            ),
+                          )
+                        : ModuleDetailPage(
+                            api: widget.api,
+                            principalType: principalType,
+                            item: item,
+                            availableStudents: availableStudents,
+                          ),
       ),
     );
   }
@@ -1145,6 +1162,7 @@ class _HomeViewState extends State<HomeView> {
     final pages = [
       HigRoleDashboardPage(
         home: home,
+        photo: profilePhoto,
         modules: modules,
         recentKeys: recentKeys,
         onRefresh: widget.onRefresh,
@@ -1157,7 +1175,14 @@ class _HomeViewState extends State<HomeView> {
         onOpen: _openModule,
       ),
       HigNotificationsView(api: widget.api),
-      HigProfileView(home: home, onLogout: widget.onLogout, api: widget.api),
+      HigProfileView(
+        home: home,
+        onLogout: widget.onLogout,
+        api: widget.api,
+        onPhotoChanged: (photo) {
+          if (mounted) setState(() => profilePhoto = photo);
+        },
+      ),
     ];
     return Scaffold(
       body: IndexedStack(index: index, children: pages),

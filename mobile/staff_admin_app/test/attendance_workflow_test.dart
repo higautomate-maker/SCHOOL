@@ -3,9 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hig_mobile_core/hig_mobile_core.dart';
 
 class _AttendanceApi extends HigMobileApi {
-  _AttendanceApi({this.hasAssignments = true})
+  _AttendanceApi({this.hasAssignments = true, this.includeEmptyClass = false})
       : super(baseUrl: 'https://example.invalid', appId: 'test');
   final bool hasAssignments;
+  final bool includeEmptyClass;
   bool failLesson = false;
   final List<JsonMap> lessons = [];
 
@@ -16,6 +17,16 @@ class _AttendanceApi extends HigMobileApi {
         'contexts': !hasAssignments
             ? <JsonMap>[]
             : <JsonMap>[
+                if (includeEmptyClass)
+                  {
+                    'id': 'empty-class-assignment',
+                    'academicSessionId': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+                    'classId': 'empty-class',
+                    'sectionId': 'empty-section',
+                    'kind': 'class_teacher',
+                    'className': 'Class 8',
+                    'sectionName': 'A',
+                  },
                 {
                   'id': 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
                   'academicSessionId': 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -70,6 +81,24 @@ class _AttendanceApi extends HigMobileApi {
 }
 
 void main() {
+  testWidgets('register prefers an enrolled class over an empty duplicate',
+      (tester) async {
+    final api = _AttendanceApi(includeEmptyClass: true);
+    await tester.pumpWidget(MaterialApp(
+        home: HigAttendancePage(api: api, students: [
+      {
+        'id': 'student-1',
+        'fullName': 'Anaya',
+        'className': 'Grade 8',
+        'sectionName': 'A',
+        'rollNumber': 1
+      },
+    ])));
+    await tester.pumpAndSettle();
+    expect(find.text('0 of 1 marked'), findsOneWidget);
+    expect(find.text('No students in this class'), findsNothing);
+    expect(api.writes, isEmpty);
+  });
   List<JsonMap> students() => <JsonMap>[
         {
           'id': '11111111-1111-4111-8111-111111111111',
@@ -88,6 +117,27 @@ void main() {
           'sectionName': 'A',
         },
       ];
+
+  testWidgets('class choice survives page reopening without retaining marks',
+      (tester) async {
+    final api = _AttendanceApi(includeEmptyClass: true);
+    Future<void> open() async {
+      await tester.pumpWidget(
+          MaterialApp(home: HigAttendancePage(api: api, students: students())));
+      await tester.pumpAndSettle();
+    }
+
+    await open();
+    final dropdown = tester.widget<DropdownButtonFormField<String>>(
+        find.byType(DropdownButtonFormField<String>).first);
+    dropdown.onChanged!('Class 8 · A');
+    await tester.pumpAndSettle();
+    expect(find.text('No students in this class'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await open();
+    expect(find.text('No students in this class'), findsOneWidget);
+    expect(api.writes, isEmpty);
+  });
 
   testWidgets('no assignment never exposes the supplied roster',
       (tester) async {
@@ -142,8 +192,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Take attendance'), findsOneWidget);
-    expect(find.text('Grade 8 · A'), findsOneWidget);
-    expect(find.text('Attendance date'), findsOneWidget);
+    expect(find.text('Grade 8 · A · 2 students'), findsOneWidget);
+    final today = DateTime.now();
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    expect(
+      find.text('Attendance date · ${today.day} ${months[today.month - 1]} ${today.year}'),
+      findsOneWidget,
+    );
     expect(find.text('0 of 2 marked'), findsOneWidget);
     expect(find.text('Mark every student to save'), findsOneWidget);
 
@@ -152,6 +210,7 @@ void main() {
     expect(find.text('2 of 2 marked'), findsOneWidget);
     expect(find.text('Save 2 students'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('Present').first);
     await tester.tap(find.text('Present').first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Absent').last);

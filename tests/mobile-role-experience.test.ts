@@ -29,7 +29,7 @@ test("mobile shell provides role-focused daily work and discoverable navigation"
   assert.match(roleUi, /Recently used/);
   assert.match(roleUi, /Daily priorities/);
   assert.match(roleUi, /Search your workspace/);
-  assert.match(roleUi, /Linked students/);
+  assert.match(roleUi, /Your children/);
   assert.match(roleUi, /higMobileTheme/);
   assert.match(core, /HigStartupView/);
   assert.match(roleUi, /Preparing your secure workspace/);
@@ -41,7 +41,7 @@ test("mobile shell provides role-focused daily work and discoverable navigation"
 
 test("mobile role screens prioritize work and remain readable on narrow devices", () => {
   assert.ok(
-    roleUi.indexOf("Today’s work") < roleUi.indexOf("title: 'Linked students'"),
+    roleUi.indexOf("Today’s work") < roleUi.indexOf("title: role == 'parent' ? 'Your children'"),
   );
   assert.match(roleUi, /width: double\.infinity/);
   assert.match(roleUi, /overflow: TextOverflow\.ellipsis/);
@@ -53,7 +53,7 @@ test("role workspace remains server-authoritative and permission-aware", () => {
   assert.match(core, /access\['modules'\]/);
   assert.match(core, /access\['features'\]/);
   assert.match(core, /item\['canManage'\] == true/);
-  assert.match(roleUi, /Only actions currently allowed for you/);
+  assert.match(roleUi, /Attendance, homework and school updates/);
   assert.match(roleUi, /HigRecentFeatureStore/);
   assert.doesNotMatch(roleUi, /eSchool|WRTeam|codecanyon/i);
 });

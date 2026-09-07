@@ -378,7 +378,7 @@ String _rolePriorityHint(String role) {
     case 'student':
       return 'What you need for today';
     case 'school':
-      return 'Only actions currently allowed for you';
+      return 'Attendance, homework and school updates';
     case 'transporter':
       return 'Your trip and safety controls';
     default:
@@ -395,6 +395,7 @@ class HigRoleDashboardPage extends StatelessWidget {
     required this.onRefresh,
     required this.onOpen,
     required this.onAlerts,
+    this.photo,
   });
 
   final JsonMap home;
@@ -403,6 +404,7 @@ class HigRoleDashboardPage extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final Future<void> Function(JsonMap item) onOpen;
   final VoidCallback onAlerts;
+  final String? photo;
 
   @override
   Widget build(BuildContext context) {
@@ -431,6 +433,7 @@ class HigRoleDashboardPage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
           children: [
             _HigTopBar(
+              photo: photo,
               name: user['name']?.toString() ?? 'Hig School user',
               subtitle: roleLabel,
               onAlerts: onAlerts,
@@ -441,13 +444,14 @@ class HigRoleDashboardPage extends StatelessWidget {
               const _HigOfflineBanner(),
             ],
             const SizedBox(height: 18),
-            _HigWelcomeCard(
-              role: role,
-              name: user['name']?.toString() ?? 'there',
-              studentCount: students.length,
-              alertCount: notifications.length,
-              moduleCount: modules.length,
-            ),
+            if (role != 'school' && role != 'parent')
+              _HigWelcomeCard(
+                role: role,
+                name: user['name']?.toString() ?? 'there',
+                studentCount: students.length,
+                alertCount: notifications.length,
+                moduleCount: modules.length,
+              ),
             if (today != null && role != 'school' && role != 'parent') ...[
               const SizedBox(height: 22),
               _HigTodaySummary(summary: today),
@@ -463,7 +467,7 @@ class HigRoleDashboardPage extends StatelessWidget {
                 subtitle: _rolePriorityHint(role),
               ),
               const SizedBox(height: 12),
-              _HigFeatureGrid(items: daily, onOpen: onOpen),
+              _HigFeatureGrid(items: daily, onOpen: onOpen, primary: true),
             ] else ...[
               const SizedBox(height: 24),
               _HigSectionTitle(
@@ -480,9 +484,11 @@ class HigRoleDashboardPage extends StatelessWidget {
             ],
             if (students.isNotEmpty && role != 'school') ...[
               const SizedBox(height: 22),
-              const _HigSectionTitle(
-                  title: 'Linked students',
-                  subtitle: 'Your authorized student profiles'),
+              _HigSectionTitle(
+                  title: role == 'parent' ? 'Your children' : 'Student details',
+                  subtitle: role == 'parent'
+                      ? 'Class and school details'
+                      : 'Your school profile'),
               const SizedBox(height: 10),
               for (var index = 0; index < students.length; index++) ...[
                 _HigStudentPill(
@@ -491,7 +497,7 @@ class HigRoleDashboardPage extends StatelessWidget {
                 if (index < students.length - 1) const SizedBox(height: 10),
               ],
             ],
-            if (recent.isNotEmpty) ...[
+            if (recent.isNotEmpty && role != 'school' && role != 'parent') ...[
               const SizedBox(height: 24),
               const _HigSectionTitle(
                   title: 'Recently used',
@@ -721,7 +727,9 @@ class HigProfileView extends StatefulWidget {
       {super.key,
       required this.home,
       required this.onLogout,
+      this.onPhotoChanged,
       required this.api});
+  final ValueChanged<String?>? onPhotoChanged;
   final JsonMap home;
   final Future<void> Function() onLogout;
   final HigMobileApi api;
@@ -741,7 +749,10 @@ class _HigProfileViewState extends State<HigProfileView> {
   Future<void> _loadPhoto() async {
     try {
       final value = await widget.api.profilePhoto();
-      if (mounted) setState(() => photo = value['photo'] as String?);
+      if (mounted) {
+        setState(() => photo = value['photo'] as String?);
+        widget.onPhotoChanged?.call(photo);
+      }
     } catch (_) {/* Keep the initials placeholder available. */}
   }
 
@@ -765,7 +776,10 @@ class _HigProfileViewState extends State<HigProfileView> {
             'data:image/${png ? 'png' : 'jpeg'};base64,${base64Encode(bytes)}';
       }
       await widget.api.changeProfilePhoto(next);
-      if (mounted) setState(() => photo = next);
+      if (mounted) {
+        setState(() => photo = next);
+        widget.onPhotoChanged?.call(next);
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -1044,14 +1058,16 @@ class _HigTopBar extends StatelessWidget {
       {required this.name,
       required this.subtitle,
       required this.onAlerts,
+      this.photo,
       this.unreadCount = 0});
+  final String? photo;
   final String name;
   final String subtitle;
   final VoidCallback onAlerts;
   final int unreadCount;
   @override
   Widget build(BuildContext context) => Row(children: [
-        _HigAvatar(name: name),
+        _homeAvatar(),
         const SizedBox(width: 12),
         Expanded(
             child:
@@ -1088,6 +1104,23 @@ class _HigTopBar extends StatelessWidget {
     if (hour < 12) return 'Good morning';
     if (hour < 17) return 'Good afternoon';
     return 'Good evening';
+  }
+
+  Widget _homeAvatar() {
+    final value = photo;
+    if (value != null) {
+      try {
+        final bytes = base64Decode(value.split(',').last);
+        return ClipOval(
+            child: Image.memory(bytes,
+                width: 50,
+                height: 50,
+                fit: BoxFit.cover,
+                semanticLabel: 'Your profile photo',
+                errorBuilder: (_, error, stack) => _HigAvatar(name: name)));
+      } catch (_) {/* Fall back to initials for invalid cached images. */}
+    }
+    return _HigAvatar(name: name);
   }
 }
 
@@ -1205,7 +1238,9 @@ class _HigSectionTitle extends StatelessWidget {
 }
 
 class _HigFeatureGrid extends StatelessWidget {
-  const _HigFeatureGrid({required this.items, required this.onOpen});
+  const _HigFeatureGrid(
+      {required this.items, required this.onOpen, this.primary = false});
+  final bool primary;
   final List<JsonMap> items;
   final Future<void> Function(JsonMap item) onOpen;
   @override
@@ -1215,10 +1250,13 @@ class _HigFeatureGrid extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           itemCount: items.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: constraints.maxWidth < 340 ? 2 : 3,
+            crossAxisCount: primary || constraints.maxWidth < 340 ? 2 : 3,
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
             childAspectRatio: .93,
+            mainAxisExtent: primary
+                ? 140 * MediaQuery.textScalerOf(context).scale(1).clamp(1, 2)
+                : null,
           ),
           itemBuilder: (_, index) => _HigFeatureTile(
             item: items[index],

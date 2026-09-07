@@ -13,13 +13,22 @@ void main() {
       'profile exposes photo editing, readable identity and working help',
       (tester) async {
     final api = _ProfileApi();
+    final publishedPhotos = <String?>[];
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
-            body: HigProfileView(api: api, onLogout: () async {}, home: {
-      'principalType': 'parent',
-      'user': {'name': 'Parent Tester', 'email': 'parent.tester@higschool.test'}
-    }))));
+            body: HigProfileView(
+                api: api,
+                onLogout: () async {},
+                onPhotoChanged: publishedPhotos.add,
+                home: {
+          'principalType': 'parent',
+          'user': {
+            'name': 'Parent Tester',
+            'email': 'parent.tester@higschool.test'
+          }
+        }))));
     await tester.pumpAndSettle();
+    expect(publishedPhotos, [null]);
     expect(find.text('Change photo'), findsOneWidget);
     expect(find.text('parent.tester@higschool.test'), findsOneWidget);
     await tester.ensureVisible(find.text('Help'));
