@@ -1,7 +1,16 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Upload credentials are local-only. Debug builds do not require them.
+val uploadProperties = Properties()
+val uploadPropertiesFile = rootProject.file("key.properties")
+if (uploadPropertiesFile.isFile) {
+    uploadPropertiesFile.inputStream().use { uploadProperties.load(it) }
 }
 
 android {
@@ -25,11 +34,20 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            keyAlias = uploadProperties.getProperty("keyAlias")
+            keyPassword = uploadProperties.getProperty("keyPassword")
+            storeFile = uploadProperties.getProperty("storeFile")?.let { rootProject.file(it) }
+            storePassword = uploadProperties.getProperty("storePassword")
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Never silently publish a debug-signed release. Gradle's signing
+            // validation rejects missing or invalid upload credentials.
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

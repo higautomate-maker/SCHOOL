@@ -23,6 +23,20 @@ test("production Compose isolates runtime, worker and operator credentials", () 
   assert.doesNotMatch(workerSection, /\.env\.production\.operator/);
 });
 
+test("production Compose provides an isolated authenticated Redis and shared heartbeat", () => {
+  assert.match(compose, /redis:7\.4\.11-alpine3\.21/);
+  assert.match(compose, /--requirepass "\$\$HIG_REDIS_PASSWORD"/);
+  assert.match(compose, /production_school_redis:\/data/);
+  assert.doesNotMatch(
+    compose.slice(compose.indexOf("  redis:"), compose.indexOf("  app:")),
+    /ports:/,
+  );
+  assert.match(compose, /condition: service_healthy/);
+  assert.match(compose, /production_school_logs:\/logs\/hig-school-production:ro/);
+  assert.match(runtimeEnvironment, /HIG_REDIS_PASSWORD=/);
+  assert.match(runtimeEnvironment, /REDIS_URL=redis:\/\/:.+@redis:6379/);
+});
+
 test("production migration is explicit, greenfield-only and never seeds", () => {
   assert.match(migration, /GREENFIELD_POSTGRES_CUTOVER/);
   assert.match(migration, /assertGreenfieldTarget/);

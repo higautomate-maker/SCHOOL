@@ -2,8 +2,10 @@
 
 Date: 2026-08-09
 
-Status: **Production PostgreSQL provisioned and migrated; production Redis,
-Hostinger candidate activation and private readiness acceptance remain pending.**
+Status: **Production PostgreSQL provisioned and migrated through the historical
+Stage 13 baseline. An isolated authenticated Redis service is now defined in
+the production Compose stack; Hostinger candidate activation, current migration
+application and private readiness acceptance remain pending.**
 
 ## Provisioned production resources
 
@@ -61,7 +63,10 @@ Resource checklist:
    `hig_school_production_owner` and `hig_school_production_app` roles.
 3. [x] Grant the application role only required schema/table/sequence
    privileges and verify it is `NOSUPERUSER`, `NOBYPASSRLS` and owns no tables.
-4. [ ] Create a production Redis allocation with TLS and authentication.
+4. [x] Define a production-only Redis container with authentication, persistent
+   storage, health checks and no published host port. This is appropriate for
+   the initial single-VPS launch; move to a managed TLS Redis service before an
+   availability requirement exceeds the VPS failure boundary.
 5. [x] Reserve `school.higaai.com`; configure DNS only after the candidate is
    healthy. Stage 14 controls public traffic and launch.
 6. [ ] Store production secrets in protected environment files or the Hostinger
