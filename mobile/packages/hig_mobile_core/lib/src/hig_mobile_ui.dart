@@ -331,18 +331,12 @@ _HigFeatureVisual _featureVisual(String key) {
         Icons.devices_other_rounded, Color(0xff795548), 'Operations'),
   };
   return values[key] ??
-      const _HigFeatureVisual(Icons.grid_view_rounded, HigPalette.blue, 'More');
+      const _HigFeatureVisual(
+          Icons.grid_view_rounded, HigPalette.blue, 'Available');
 }
 
 const _dailyKeys = <String, List<String>>{
-  'parent': [
-    'homework',
-    'fees_payments',
-    'transport_tracking',
-    'attendance',
-    'child_overview',
-    'timetable'
-  ],
+  'parent': ['homework', 'fees_payments', 'transport_tracking', 'attendance'],
   'student': [
     'timetable',
     'homework',
@@ -371,21 +365,6 @@ const _dailyKeys = <String, List<String>>{
   ],
 };
 
-String _rolePriorityHint(String role) {
-  switch (role) {
-    case 'parent':
-      return 'Your child’s day at a glance';
-    case 'student':
-      return 'What you need for today';
-    case 'school':
-      return 'Only actions currently allowed for you';
-    case 'transporter':
-      return 'Your trip and safety controls';
-    default:
-      return 'Only actions currently allowed for you';
-  }
-}
-
 class HigRoleDashboardPage extends StatelessWidget {
   const HigRoleDashboardPage({
     super.key,
@@ -395,6 +374,7 @@ class HigRoleDashboardPage extends StatelessWidget {
     required this.onRefresh,
     required this.onOpen,
     required this.onAlerts,
+    this.photo,
   });
 
   final JsonMap home;
@@ -403,22 +383,52 @@ class HigRoleDashboardPage extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final Future<void> Function(JsonMap item) onOpen;
   final VoidCallback onAlerts;
+  final String? photo;
 
   @override
   Widget build(BuildContext context) {
     final role = home['principalType']?.toString() ?? '';
     final user = (home['user'] as Map?)?.cast<String, dynamic>() ?? {};
     final students = (home['students'] as List?) ?? const [];
-    final notifications =
+    final rawNotifications =
         ((home['notifications'] as Map?)?['notifications'] as List?) ??
             const [];
+    // Attendance writes can generate the same notification more than once
+    // during a sync.  Home should read like a bulletin board, not a log of
+    // duplicate events, so collapse identical title/message pairs here.
+    final notifications = <JsonMap>[];
+    final seenNotifications = <String>{};
+    for (final entry in rawNotifications) {
+      final item = (entry as Map).cast<String, dynamic>();
+      final signature =
+          '${item['title']?.toString() ?? ''}\u0000${item['message']?.toString() ?? ''}';
+      if (seenNotifications.add(signature)) notifications.add(item);
+    }
     final unread = (home['unreadNotices'] as num?)?.toInt() ??
         ((home['notifications'] as Map?)?['unreadCount'] as num?)?.toInt() ??
         0;
     final today = (home['today'] as Map?)?.cast<String, dynamic>();
     final birthdays = (home['birthdays'] as List?) ?? const [];
-    final daily =
-        _orderedMatches(modules, _dailyKeys[role] ?? const []).take(4).toList();
+    final homeTools = _orderedMatches(
+      modules,
+      [
+        ...(_dailyKeys[role] ?? const []),
+        'leave_requests',
+        'timetable',
+        'notices',
+        'examinations',
+        'results',
+      ],
+    ).where((item) {
+      final key = item['key']?.toString();
+      // Diary and Notices have dedicated bottom tabs.  Teachers also have a
+      // dedicated attendance register, while parents keep attendance on Home.
+      final teacherAttendance = role == 'school' && key == 'attendance';
+      return key != 'diary' &&
+          key != 'homework' &&
+          key != 'notices' &&
+          !teacherAttendance;
+    }).toList();
     final recent = _recentMatches(modules, recentKeys).take(4).toList();
     final roleLabel = role == 'school'
         ? 'Teacher & staff workspace'
@@ -431,6 +441,7 @@ class HigRoleDashboardPage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
           children: [
             _HigTopBar(
+              photo: photo,
               name: user['name']?.toString() ?? 'Hig School user',
               subtitle: roleLabel,
               onAlerts: onAlerts,
@@ -441,13 +452,14 @@ class HigRoleDashboardPage extends StatelessWidget {
               const _HigOfflineBanner(),
             ],
             const SizedBox(height: 18),
-            _HigWelcomeCard(
-              role: role,
-              name: user['name']?.toString() ?? 'there',
-              studentCount: students.length,
-              alertCount: notifications.length,
-              moduleCount: modules.length,
-            ),
+            if (role != 'school' && role != 'parent')
+              _HigWelcomeCard(
+                role: role,
+                name: user['name']?.toString() ?? 'there',
+                studentCount: students.length,
+                alertCount: notifications.length,
+                moduleCount: modules.length,
+              ),
             if (today != null && role != 'school' && role != 'parent') ...[
               const SizedBox(height: 22),
               _HigTodaySummary(summary: today),
@@ -456,19 +468,19 @@ class HigRoleDashboardPage extends StatelessWidget {
               const SizedBox(height: 22),
               _HigBirthdaysCard(birthdays: birthdays),
             ],
-            if (daily.isNotEmpty) ...[
+            if (homeTools.isNotEmpty) ...[
               const SizedBox(height: 24),
-              _HigSectionTitle(
-                title: role == 'school' ? 'Today’s work' : 'Daily priorities',
-                subtitle: _rolePriorityHint(role),
+              const _HigSectionTitle(
+                title: 'Home actions',
+                subtitle: 'Everything currently available to you',
               ),
               const SizedBox(height: 12),
-              _HigFeatureGrid(items: daily, onOpen: onOpen),
+              _HigFeatureGrid(items: homeTools, onOpen: onOpen, primary: true),
             ] else ...[
               const SizedBox(height: 24),
-              _HigSectionTitle(
-                title: role == 'school' ? 'Today’s work' : 'Daily priorities',
-                subtitle: _rolePriorityHint(role),
+              const _HigSectionTitle(
+                title: 'Home actions',
+                subtitle: 'Everything currently available to you',
               ),
               const SizedBox(height: 12),
               const _HigEmptyCard(
@@ -478,11 +490,15 @@ class HigRoleDashboardPage extends StatelessWidget {
                     'Please check back later or contact your school office.',
               ),
             ],
-            if (students.isNotEmpty && role != 'school') ...[
+            if (students.isNotEmpty &&
+                role != 'school' &&
+                role != 'parent') ...[
               const SizedBox(height: 22),
-              const _HigSectionTitle(
-                  title: 'Linked students',
-                  subtitle: 'Your authorized student profiles'),
+              _HigSectionTitle(
+                  title: role == 'parent' ? 'Your children' : 'Student details',
+                  subtitle: role == 'parent'
+                      ? 'Class and school details'
+                      : 'Your school profile'),
               const SizedBox(height: 10),
               for (var index = 0; index < students.length; index++) ...[
                 _HigStudentPill(
@@ -491,7 +507,7 @@ class HigRoleDashboardPage extends StatelessWidget {
                 if (index < students.length - 1) const SizedBox(height: 10),
               ],
             ],
-            if (recent.isNotEmpty) ...[
+            if (recent.isNotEmpty && role != 'school' && role != 'parent') ...[
               const SizedBox(height: 24),
               const _HigSectionTitle(
                   title: 'Recently used',
@@ -510,28 +526,6 @@ class HigRoleDashboardPage extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: 24),
-            _HigSectionTitle(
-              title: 'School updates',
-              subtitle: notifications.isEmpty
-                  ? 'You are all caught up'
-                  : '${notifications.length} recent ${notifications.length == 1 ? 'update' : 'updates'}',
-            ),
-            const SizedBox(height: 10),
-            if (notifications.isEmpty)
-              const _HigEmptyCard(
-                icon: Icons.notifications_none_rounded,
-                title: 'No new school updates',
-                message: 'Announcements and task alerts will appear here.',
-              )
-            else
-              ...notifications.take(3).map((entry) {
-                final item = (entry as Map).cast<String, dynamic>();
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _HigUpdateCard(item: item),
-                );
-              }),
           ],
         ),
       ),
@@ -556,80 +550,6 @@ class HigRoleDashboardPage extends StatelessWidget {
       List<JsonMap> modules, List<String> keys) {
     final byKey = {for (final item in modules) item['key']?.toString(): item};
     return keys.map((key) => byKey[key]).whereType<JsonMap>().toList();
-  }
-}
-
-class HigRoleWorkspacePage extends StatefulWidget {
-  const HigRoleWorkspacePage({
-    super.key,
-    required this.principalType,
-    required this.modules,
-    required this.onOpen,
-  });
-  final String principalType;
-  final List<JsonMap> modules;
-  final Future<void> Function(JsonMap item) onOpen;
-
-  @override
-  State<HigRoleWorkspacePage> createState() => _HigRoleWorkspacePageState();
-}
-
-class _HigRoleWorkspacePageState extends State<HigRoleWorkspacePage> {
-  String query = '';
-
-  @override
-  Widget build(BuildContext context) {
-    final filtered = widget.modules.where((item) {
-      final value = '${item['label'] ?? ''} ${item['key'] ?? ''}'.toLowerCase();
-      return value.contains(query.trim().toLowerCase());
-    }).toList();
-    final groups = <String, List<JsonMap>>{};
-    for (final item in filtered) {
-      final category = _featureVisual(item['key']?.toString() ?? '').category;
-      groups.putIfAbsent(category, () => []).add(item);
-    }
-    final title = widget.principalType == 'parent'
-        ? 'More family tools'
-        : widget.principalType == 'student'
-            ? 'More learning tools'
-            : 'More school tools';
-    return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
-        children: [
-          Text(title,
-              style:
-                  const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
-          const SizedBox(height: 4),
-          Text(
-            '${widget.modules.length} authorized ${widget.modules.length == 1 ? 'feature' : 'features'}',
-            style: const TextStyle(color: HigPalette.muted),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            onChanged: (value) => setState(() => query = value),
-            decoration: const InputDecoration(
-              hintText: 'Search your workspace',
-              prefixIcon: Icon(Icons.search_rounded),
-            ),
-          ),
-          const SizedBox(height: 20),
-          if (groups.isEmpty)
-            const _HigEmptyCard(
-              icon: Icons.search_off_rounded,
-              title: 'No matching feature',
-              message: 'Try a different word or clear the search.',
-            )
-          else
-            for (final group in groups.entries) ...[
-              _HigSectionTitle(title: group.key),
-              const SizedBox(height: 10),
-              _HigFeatureGrid(items: group.value, onOpen: widget.onOpen),
-              const SizedBox(height: 24),
-            ],
-        ],
-      ),
-    );
   }
 }
 
@@ -675,7 +595,7 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
           children: [
-            const Text('Alerts',
+            const Text('Notices',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
             const SizedBox(height: 4),
             const Text('School announcements and task updates',
@@ -684,7 +604,7 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
             if (error != null)
               _HigEmptyCard(
                   icon: Icons.cloud_off_rounded,
-                  title: 'Alerts unavailable',
+                  title: 'Notices unavailable',
                   message: error!)
             else if (data == null)
               const Center(
@@ -695,7 +615,7 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
               const _HigEmptyCard(
                   icon: Icons.notifications_none_rounded,
                   title: 'You’re all caught up',
-                  message: 'New school alerts will appear here.')
+                  message: 'New school notices will appear here.')
             else
               for (final entry in entries) ...[
                 _HigNotificationCard(
@@ -721,7 +641,9 @@ class HigProfileView extends StatefulWidget {
       {super.key,
       required this.home,
       required this.onLogout,
+      this.onPhotoChanged,
       required this.api});
+  final ValueChanged<String?>? onPhotoChanged;
   final JsonMap home;
   final Future<void> Function() onLogout;
   final HigMobileApi api;
@@ -741,7 +663,10 @@ class _HigProfileViewState extends State<HigProfileView> {
   Future<void> _loadPhoto() async {
     try {
       final value = await widget.api.profilePhoto();
-      if (mounted) setState(() => photo = value['photo'] as String?);
+      if (mounted) {
+        setState(() => photo = value['photo'] as String?);
+        widget.onPhotoChanged?.call(photo);
+      }
     } catch (_) {/* Keep the initials placeholder available. */}
   }
 
@@ -765,7 +690,10 @@ class _HigProfileViewState extends State<HigProfileView> {
             'data:image/${png ? 'png' : 'jpeg'};base64,${base64Encode(bytes)}';
       }
       await widget.api.changeProfilePhoto(next);
-      if (mounted) setState(() => photo = next);
+      if (mounted) {
+        setState(() => photo = next);
+        widget.onPhotoChanged?.call(next);
+      }
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -1044,14 +972,16 @@ class _HigTopBar extends StatelessWidget {
       {required this.name,
       required this.subtitle,
       required this.onAlerts,
+      this.photo,
       this.unreadCount = 0});
+  final String? photo;
   final String name;
   final String subtitle;
   final VoidCallback onAlerts;
   final int unreadCount;
   @override
   Widget build(BuildContext context) => Row(children: [
-        _HigAvatar(name: name),
+        _homeAvatar(),
         const SizedBox(width: 12),
         Expanded(
             child:
@@ -1088,6 +1018,23 @@ class _HigTopBar extends StatelessWidget {
     if (hour < 12) return 'Good morning';
     if (hour < 17) return 'Good afternoon';
     return 'Good evening';
+  }
+
+  Widget _homeAvatar() {
+    final value = photo;
+    if (value != null) {
+      try {
+        final bytes = base64Decode(value.split(',').last);
+        return ClipOval(
+            child: Image.memory(bytes,
+                width: 50,
+                height: 50,
+                fit: BoxFit.cover,
+                semanticLabel: 'Your profile photo',
+                errorBuilder: (_, error, stack) => _HigAvatar(name: name)));
+      } catch (_) {/* Fall back to initials for invalid cached images. */}
+    }
+    return _HigAvatar(name: name);
   }
 }
 
@@ -1205,7 +1152,9 @@ class _HigSectionTitle extends StatelessWidget {
 }
 
 class _HigFeatureGrid extends StatelessWidget {
-  const _HigFeatureGrid({required this.items, required this.onOpen});
+  const _HigFeatureGrid(
+      {required this.items, required this.onOpen, this.primary = false});
+  final bool primary;
   final List<JsonMap> items;
   final Future<void> Function(JsonMap item) onOpen;
   @override
@@ -1215,10 +1164,13 @@ class _HigFeatureGrid extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           itemCount: items.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: constraints.maxWidth < 340 ? 2 : 3,
+            crossAxisCount: primary || constraints.maxWidth < 340 ? 2 : 3,
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
             childAspectRatio: .93,
+            mainAxisExtent: primary
+                ? 140 * MediaQuery.textScalerOf(context).scale(1).clamp(1, 2)
+                : null,
           ),
           itemBuilder: (_, index) => _HigFeatureTile(
             item: items[index],
@@ -1344,27 +1296,6 @@ class _HigRecentCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _HigUpdateCard extends StatelessWidget {
-  const _HigUpdateCard({required this.item});
-  final JsonMap item;
-  @override
-  Widget build(BuildContext context) => Card(
-          child: ListTile(
-        minVerticalPadding: 14,
-        leading: CircleAvatar(
-            backgroundColor: const Color(0xffffeceb),
-            child: Icon(
-                item['read'] == true
-                    ? Icons.notifications_none_rounded
-                    : Icons.notifications_active_rounded,
-                color: const Color(0xffc34c47))),
-        title: Text(item['title']?.toString() ?? 'School update',
-            style: const TextStyle(fontWeight: FontWeight.w800)),
-        subtitle: Text(item['message']?.toString() ?? '',
-            maxLines: 2, overflow: TextOverflow.ellipsis),
-      ));
 }
 
 class _HigNotificationCard extends StatelessWidget {

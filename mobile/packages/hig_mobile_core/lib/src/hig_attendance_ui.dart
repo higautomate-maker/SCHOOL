@@ -1,6 +1,8 @@
 part of '../hig_mobile_core.dart';
 
 const _attendanceStatuses = ['present', 'absent', 'late', 'excused'];
+// Navigation preference only; never cache attendance marks or authorization.
+final _attendanceClassChoices = Expando<Map<String, String>>();
 
 String _mobileIsoDate(DateTime value) =>
     '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
@@ -30,10 +32,12 @@ class HigAttendancePage extends StatefulWidget {
     super.key,
     required this.api,
     required this.students,
+    this.historyBuilder,
   });
 
   final HigMobileApi api;
   final List<JsonMap> students;
+  final WidgetBuilder? historyBuilder;
 
   @override
   State<HigAttendancePage> createState() => _HigAttendancePageState();
@@ -53,6 +57,8 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
   bool loading = true;
   bool registerReady = false;
   bool saving = false;
+  int processedWrites = 0;
+  int totalWrites = 0;
   bool dirty = false;
   String? error;
 
@@ -68,14 +74,28 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
 
   void _selectAvailable() {
     final available = classes;
+    final remembered = _attendanceClassChoices[widget.api]?[_choiceScope];
+    if (selectedClass == null && available.contains(remembered)) {
+      selectedClass = remembered;
+    }
     if (!available.contains(selectedClass)) {
-      selectedClass = available.isEmpty ? null : available.first;
+      selectedClass = available.isEmpty
+          ? null
+          : available.firstWhere(
+              (label) => widget.students
+                  .any((student) => _studentClass(student) == label),
+              orElse: () => available.first,
+            );
     }
     if (!subjects.any((item) => item['subjectId'] == selectedSubject)) {
       selectedSubject =
           subjects.isEmpty ? null : subjects.first['subjectId']?.toString();
     }
   }
+
+  String get _choiceScope => '${widget.api.session?.sessionId ?? 'local'}:'
+      '${lessonMode ? 'lesson' : 'daily'}:'
+      '${dailyContexts.map((item) => item['id']).join(',')}';
 
   Future<void> _changeRegister(bool value) async {
     if (value == lessonMode || !await _confirmDiscardChanges() || !mounted) {
@@ -296,6 +316,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
       _selectAvailable();
       _restoreStatuses();
     });
+    (_attendanceClassChoices[widget.api] ??= {})[_choiceScope] = value;
   }
 
   String _writeKey(String studentId) =>
@@ -365,6 +386,10 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
               !completedWrites.contains(_writeKey(student['id'].toString())),
         )
         .toList();
+    setState(() {
+      processedWrites = 0;
+      totalWrites = pending.length;
+    });
     var failed = 0;
     var queued = 0;
     for (var offset = 0; offset < pending.length; offset += 4) {
@@ -397,6 +422,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
           if (result.$2 == 'queued') queued += 1;
         }
       }
+      if (mounted) setState(() => processedWrites += results.length);
     }
 
     if (!mounted) return;
@@ -438,14 +464,31 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
         }
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('Take attendance')),
+        appBar: AppBar(title: const Text('Take attendance'), actions: [
+          if (widget.historyBuilder != null)
+            IconButton(
+              tooltip: 'Attendance history',
+              icon: const Icon(Icons.history),
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (!await _confirmDiscardChanges() || !context.mounted) {
+                        return;
+                      }
+                      setState(_restoreStatuses);
+                      await Navigator.push(context,
+                          MaterialPageRoute(builder: widget.historyBuilder!));
+                      if (mounted) await _load();
+                    },
+            ),
+        ]),
         body: loading
             ? const Center(child: CircularProgressIndicator())
             : RefreshIndicator(
                 onRefresh: _refresh,
                 child: ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                   children: [
                     SegmentedButton<bool>(
                       segments: const [
@@ -464,17 +507,11 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
                           : (value) => _changeRegister(value.first),
                     ),
                     const SizedBox(height: 12),
-                    Text(
-                      'Choose the class and date, mark everyone present, then change only the exceptions.',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: HigPalette.muted,
-                          ),
-                    ),
-                    const SizedBox(height: 16),
                     if (classes.isNotEmpty)
                       DropdownButtonFormField<String>(
                         key: ValueKey('class-$lessonMode-$selectedClass'),
                         initialValue: selectedClass,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Class and section',
                           prefixIcon: Icon(Icons.groups_rounded),
@@ -483,7 +520,9 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
                             .map(
                               (value) => DropdownMenuItem(
                                 value: value,
-                                child: Text(value),
+                                child: Text(
+                                    '$value · ${widget.students.where((student) => _studentClass(student) == value).length} students',
+                                    overflow: TextOverflow.ellipsis),
                               ),
                             )
                             .toList(),
@@ -555,18 +594,23 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
                         ),
                       ),
                     const SizedBox(height: 12),
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.calendar_month_rounded),
-                        title: const Text('Attendance date'),
-                        subtitle: Text(
-                          _formatMobileDate(_mobileIsoDate(selectedDate)),
-                        ),
-                        trailing: const Icon(Icons.chevron_right_rounded),
-                        onTap: saving ? null : _chooseDate,
-                      ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.calendar_month_rounded),
+                      label: Text(
+                          'Attendance date · ${_formatMobileDate(_mobileIsoDate(selectedDate))}'),
+                      onPressed: saving ? null : _chooseDate,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
+                    const Text(
+                        'Mark all present, then change absences or late arrivals.'),
+                    const SizedBox(height: 8),
+                    if (classes.isNotEmpty && students.isEmpty)
+                      const _HigEmptyCard(
+                        icon: Icons.groups_outlined,
+                        title: 'No students in this class',
+                        message:
+                            'Choose another class, or ask the school office to check student enrolments.',
+                      ),
                     Row(
                       children: [
                         Expanded(
@@ -631,7 +675,9 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
                 : const Icon(Icons.cloud_done_rounded),
             label: Text(
               saving
-                  ? 'Saving attendance…'
+                  ? lessonMode
+                      ? 'Saving lesson attendance…'
+                      : 'Saving $processedWrites of $totalWrites…'
                   : allMarked
                       ? 'Save ${students.length} students'
                       : 'Mark every student to save',
