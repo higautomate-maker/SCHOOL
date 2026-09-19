@@ -1,6 +1,31 @@
 name: production-school
 
 services:
+  redis:
+    image: redis:7.4.11-alpine3.21
+    env_file:
+      - ../.env.production
+    command:
+      - sh
+      - -ec
+      - exec redis-server --appendonly yes --save 60 1000 --protected-mode yes --requirepass "$$HIG_REDIS_PASSWORD"
+    volumes:
+      - production_school_redis:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - redis-cli -a "$$HIG_REDIS_PASSWORD" ping | grep -qx PONG
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 6
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
   app:
     build:
       context: ..
@@ -13,6 +38,9 @@ services:
       - "127.0.0.1:${PRODUCTION_HOST_PORT:-3200}:3000"
     volumes:
       - production_school_logs:/logs/hig-school-production
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     labels:
       traefik.enable: "true"
@@ -46,8 +74,14 @@ services:
     image: hig-school-production-worker:${PRODUCTION_IMAGE_TAG:?Set PRODUCTION_IMAGE_TAG}
     env_file:
       - ../.env.production
+    environment:
+      HIG_QUEUE_WORKER_ENABLED: "true"
+      HIG_QUEUE_HEARTBEAT_PATH: /logs/hig-school-production/notification-worker-heartbeat.json
     volumes:
       - production_school_logs:/logs/hig-school-production
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test:
@@ -74,12 +108,17 @@ services:
     env_file:
       - ../.env.production
       - ../.env.production.operator
+    environment:
+      HIG_QUEUE_HEARTBEAT_PATH: /logs/hig-school-production/notification-worker-heartbeat.json
     volumes:
       - production_school_backups:/backups/hig-school-production
+      - production_school_logs:/logs/hig-school-production:ro
     profiles:
       - operator
 
 volumes:
+  production_school_redis:
+    name: production_school_redis
   production_school_logs:
     name: production_school_logs
   production_school_backups:

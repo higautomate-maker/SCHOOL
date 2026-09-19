@@ -4,10 +4,10 @@ import type { DemoRole } from "../server/demo-store.ts";
 const roles:DemoRole[]=["company","school_admin","staff","student","parent","driver"];
 const accounts=roles.map((role)=>({
   email:`${role}@demo.invalid`,
-  password:randomBytes(24).toString("base64url"),
+  password:Buffer.from(randomBytes(24)).toString("base64url"),
   role,
   name:`Demo ${role}`,
-  token:randomBytes(32).toString("base64url"),
+  token:Buffer.from(randomBytes(32)).toString("base64url"),
   destination:role==="company"?"/company":role==="school_admin"?"/school/dashboard":role==="driver"?"/mobile-preview/driver":role==="staff"?"/mobile-preview/staff":"/mobile-preview/student",
 }));
 

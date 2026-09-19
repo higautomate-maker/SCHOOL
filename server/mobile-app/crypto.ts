@@ -21,7 +21,7 @@ export function encryptMobilePushToken(token: string): string {
     cipher.final(),
   ]);
   const tag = cipher.getAuthTag();
-  return ["v1", iv.toString("base64url"), tag.toString("base64url"), encrypted.toString("base64url")].join(".");
+  return ["v1", Buffer.from(iv).toString("base64url"), Buffer.from(tag).toString("base64url"), encrypted.toString("base64url")].join(".");
 }
 
 export function decryptMobilePushToken(value: string): string {

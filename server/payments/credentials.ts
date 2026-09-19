@@ -82,8 +82,8 @@ export function encryptPaymentGatewayCredentials(
 
   return [
     VERSION,
-    iv.toString("base64url"),
-    tag.toString("base64url"),
+    Buffer.from(iv).toString("base64url"),
+    Buffer.from(tag).toString("base64url"),
     encrypted.toString("base64url"),
   ].join(".");
 }

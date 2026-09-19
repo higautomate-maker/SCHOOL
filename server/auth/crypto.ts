@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
-export function randomToken(): string { return randomBytes(32).toString("base64url"); }
+export function randomToken(): string { return Buffer.from(randomBytes(32)).toString("base64url"); }
 export function sha256(value: string): string { return createHash("sha256").update(value, "utf8").digest("hex"); }
 export function privacyHash(value: string, secret = privacySecret()): string {
   return createHash("sha256").update(`${secret}:${value}`, "utf8").digest("hex");
