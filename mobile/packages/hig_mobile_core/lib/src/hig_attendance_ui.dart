@@ -403,7 +403,7 @@ class _HigAttendancePageState extends State<HigAttendancePage> {
               'studentId': studentId,
               'attendanceDate': _mobileIsoDate(selectedDate),
               'status': statuses[studentId],
-              'note': 'Marked from Hig Staff & Admin mobile app',
+              'note': 'Marked from HIGA Teacher mobile app',
               'academicSessionId': teachingContext['academicSessionId'],
               'classId': teachingContext['classId'],
               'sectionId': teachingContext['sectionId'],
