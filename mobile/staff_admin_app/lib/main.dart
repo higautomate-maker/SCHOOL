@@ -11,7 +11,7 @@ void main() {
   runApp(
     const HigMobileApp(
       config: HigMobileAppConfig(
-        title: 'Hig Staff & Admin',
+        title: 'HIGA Teacher',
         appId: 'com.higautomation.higschool.staffadmin',
         allowedPrincipalTypes: ['school'],
         apiBaseUrl: apiBaseUrl,

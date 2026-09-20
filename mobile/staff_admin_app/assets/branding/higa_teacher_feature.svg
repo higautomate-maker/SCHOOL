@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17365D"/>
+      <stop offset="0.6" stop-color="#215A86"/>
+      <stop offset="1" stop-color="#286EA8"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#7FE2DB"/>
+      <stop offset="1" stop-color="#25A7C7"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#071727" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="500" fill="url(#bg)"/>
+  <circle cx="937" cy="72" r="176" fill="#35BCD1" opacity="0.14"/>
+  <circle cx="880" cy="444" r="236" fill="#0A223D" opacity="0.24"/>
+  <path d="M0 410C144 338 266 339 401 393C538 448 669 449 1024 326V500H0V410Z" fill="#0F2949" opacity="0.5"/>
+
+  <g transform="translate(70 82)" filter="url(#shadow)">
+    <rect width="236" height="236" rx="70" fill="#FFFFFF"/>
+    <path d="M62 58C62 44.745 72.745 34 86 34H94C107.255 34 118 44.745 118 58V102H142V58C142 44.745 152.745 34 166 34H174C187.255 34 198 44.745 198 58V178C198 191.255 187.255 202 174 202H166C152.745 202 142 191.255 142 178V130H118V178C118 191.255 107.255 202 94 202H86C72.745 202 62 191.255 62 178V58Z" fill="#17365D"/>
+    <path d="M80 216H176" stroke="#25A7C7" stroke-width="10" stroke-linecap="round"/>
+  </g>
+
+  <g transform="translate(358 112)">
+    <text x="0" y="72" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="700" letter-spacing="-1">HIGA Teacher</text>
+    <text x="2" y="128" fill="#CDEAF4" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="500">Every school day, clearly organised.</text>
+    <g transform="translate(2 170)">
+      <rect width="174" height="52" rx="26" fill="#FFFFFF" opacity="0.12"/>
+      <circle cx="27" cy="26" r="9" fill="url(#glow)"/>
+      <text x="48" y="34" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">Attendance</text>
+    </g>
+    <g transform="translate(190 170)">
+      <rect width="162" height="52" rx="26" fill="#FFFFFF" opacity="0.12"/>
+      <circle cx="27" cy="26" r="9" fill="#F5B96B"/>
+      <text x="48" y="34" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">Homework</text>
+    </g>
+    <g transform="translate(366 170)">
+      <rect width="140" height="52" rx="26" fill="#FFFFFF" opacity="0.12"/>
+      <circle cx="27" cy="26" r="9" fill="#A99CF8"/>
+      <text x="48" y="34" fill="#FFFFFF" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="600">Classes</text>
+    </g>
+  </g>
+</svg>

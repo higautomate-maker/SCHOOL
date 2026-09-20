@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const core = readFileSync(
@@ -20,6 +20,27 @@ const transportFixture = readFileSync(
   "utf8",
 );
 const experience = readFileSync("docs/MOBILE-ROLE-EXPERIENCE.md", "utf8");
+
+test("Teacher store identity uses HIGA branding instead of Flutter defaults", () => {
+  const manifest = readFileSync(
+    "mobile/staff_admin_app/android/app/src/main/AndroidManifest.xml",
+    "utf8",
+  );
+  const app = readFileSync("mobile/staff_admin_app/lib/main.dart", "utf8");
+  const icon = readFileSync(
+    "mobile/staff_admin_app/assets/branding/higa_teacher_icon.svg",
+    "utf8",
+  );
+  assert.match(manifest, /android:label="HIGA Teacher"/);
+  assert.match(app, /title: 'HIGA Teacher'/);
+  assert.match(icon, /#17365D/);
+  assert.match(icon, /#25A7C7/);
+  assert.ok(
+    existsSync(
+      "mobile/staff_admin_app/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+    ),
+  );
+});
 
 test("mobile shell provides role-focused home actions and discoverable navigation", () => {
   assert.match(core, /HigRoleDashboardPage/);
