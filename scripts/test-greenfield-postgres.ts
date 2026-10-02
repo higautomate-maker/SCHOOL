@@ -403,6 +403,7 @@ try {
       priority: "normal",
     },
     actor,
+    "greenfield-workspace-create",
   );
   const welcomeRecord = workspace.records.find(
     (record) => record.title === "Greenfield welcome notice",
@@ -536,7 +537,7 @@ try {
     workspace: "1",
     audits: "11",
     outbox: "3",
-    replays: "5",
+    replays: "6",
     invoicePaise: "100001",
     paidPaise: "40001",
     paymentPaise: "40001",

@@ -14,6 +14,7 @@ import {
   moduleKeys,
   workspaceActionSchema,
 } from "../../../../../../server/workspace/validation";
+import { validIdempotencyKey } from "../../../../../../server/http/idempotency.ts";
 
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ schoolId: string }> };
@@ -52,6 +53,13 @@ export async function POST(request: Request, context: Context) {
   } catch (error) {
     return authErrorResponse(error);
   }
+  const idempotencyKey = request.headers.get("idempotency-key");
+  if (!validIdempotencyKey(idempotencyKey)) {
+    return Response.json(
+      { error: "A valid Idempotency-Key header is required" },
+      { status: 400 },
+    );
+  }
   const parsed = workspaceActionSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json(
@@ -66,7 +74,7 @@ export async function POST(request: Request, context: Context) {
     if (!moduleKey) return Response.json({ error: "Workspace record not found" }, { status: 404 });
     assertSchoolModuleAccess(actor, moduleKey, "manage");
     return Response.json({
-      workspace: await applyWorkspaceAction(schoolId, parsed.data, actor),
+      workspace: await applyWorkspaceAction(schoolId, parsed.data, actor, idempotencyKey),
     });
   } catch (error) {
     try { return authErrorResponse(error); } catch {}

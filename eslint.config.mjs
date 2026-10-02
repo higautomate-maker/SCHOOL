@@ -20,6 +20,7 @@ const eslintConfig = defineConfig([
     "hig-school-hostinger-node-fixed*/**",
     "out/**",
     "build/**",
+    "mobile/**/build/**",
     "next-env.d.ts",
   ]),
 ]);

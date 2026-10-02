@@ -178,6 +178,9 @@ try {
         IF NEW.operation = 'school.create' AND NEW.key = 'stage4-school-rollback' THEN
           RAISE EXCEPTION 'intentional school onboarding rollback';
         END IF;
+        IF NEW.operation = 'workspace.action' AND NEW.key = 'stage4-workspace-rollback' THEN
+          RAISE EXCEPTION 'intentional workspace action rollback';
+        END IF;
         RETURN NEW;
       END
       $$;

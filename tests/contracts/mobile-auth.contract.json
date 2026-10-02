@@ -173,7 +173,7 @@
       "authentication": "access_bearer",
       "rateLimited": false,
       "createsCookies": false,
-      "idempotency": "client_queue_or_server_action",
+      "idempotency": "required_key",
       "batch": 2
     },
     {
