@@ -60,12 +60,12 @@
     "stage13:test": "node --experimental-strip-types --test tests/stage13-*.test.ts"
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "1.56.0",
+    "@cloudflare/vite-plugin": "1.62.5",
     "@node-rs/argon2": "1.8.0",
     "@tailwindcss/postcss": "4.2.1",
     "@vitejs/plugin-react": "6.0.2",
     "drizzle-orm": "0.45.2",
-    "next": "16.3.5",
+    "next": "16.3.8",
     "pg": "8.16.3",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -76,7 +76,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260918.1",
+    "@cloudflare/workers-types": "5.20261002.1",
     "@types/node": "22.19.19",
     "@types/pg": "8.20.0",
     "@types/react": "19.2.14",
@@ -84,10 +84,10 @@
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.3.5",
+    "eslint-config-next": "16.3.8",
     "react-server-dom-webpack": "19.2.8",
     "typescript": "5.9.3",
-    "wrangler": "4.135.0"
+    "wrangler": "4.147.0"
   },
   "type": "module",
   "imports": {
@@ -102,8 +102,8 @@
     "@eslint/eslintrc": "3.3.7",
     "react-server-dom-webpack": "$react-server-dom-webpack",
     "postcss": "8.5.23",
-    "workerd": "1.20260918.1",
-    "undici": "7.29.0",
+    "workerd": "1.20261001.1",
+    "undici": "7.29.1",
     "@esbuild-kit/core-utils": {
       "esbuild": "0.25.12"
     }
