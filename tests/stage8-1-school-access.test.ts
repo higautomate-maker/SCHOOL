@@ -129,6 +129,8 @@ test("workspace API resolves module access for reads, creates and status updates
   assert.match(route, /getWorkspaceRecordModuleKey/);
   assert.match(route, /assertSchoolModuleAccess\(actor, moduleKey, "manage"\)/);
   assert.match(route, /filterWorkspaceForActor/);
+  assert.match(route, /validIdempotencyKey\(idempotencyKey\)/);
+  assert.match(route, /applyWorkspaceAction\(schoolId, parsed\.data, actor, idempotencyKey\)/);
 });
 
 test("operations API separates Attendance from Fees & Finance", () => {

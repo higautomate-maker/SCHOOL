@@ -86,6 +86,14 @@ test("financial operations use exact paise, row locking, replay, and outbox writ
   assert.match(operations, /pg_advisory_xact_lock/);
 });
 
+test("workspace actions serialize retries and persist the committed response", () => {
+  const workspace = read("server/workspace/postgres-repository.ts");
+  assert.match(workspace, /pg_advisory_xact_lock/);
+  assert.match(workspace, /readWorkspaceReplay/);
+  assert.match(workspace, /INSERT INTO idempotency_records/);
+  assert.match(workspace, /requestHash !== requestHash/);
+});
+
 test("platform school creation uses only its dedicated transaction context", () => {
   const schools = read("server/schools/postgres-repository.ts");
   const runtime = read("server/runtime/postgres.ts");

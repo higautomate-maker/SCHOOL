@@ -38,13 +38,14 @@ export async function getWorkspaceRecordModuleKey(
   return record?.moduleKey ?? null;
 }
 
-export async function applyWorkspaceAction(tenantId:string,action:WorkspaceAction,actor:ChatGPTUser):Promise<WorkspaceState>{
-  if(repositoryBackend()==="postgres"){return (await import("./postgres-repository.ts")).applyPostgresWorkspaceAction(tenantId,action,actor);}
+export async function applyWorkspaceAction(tenantId:string,action:WorkspaceAction,actor:ChatGPTUser,idempotencyKey:string):Promise<WorkspaceState>{
+  if(repositoryBackend()==="postgres"){return (await import("./postgres-repository.ts")).applyPostgresWorkspaceAction(tenantId,action,actor,idempotencyKey);}
+  const replay=await database.prepare("SELECT response_json AS responseJson FROM idempotency_records WHERE key=? AND actor_email=? AND operation='workspace.action' AND expires_at>?").bind(idempotencyKey,actor.email.toLowerCase(),new Date().toISOString()).first<{responseJson:string}>();if(replay)return JSON.parse(replay.responseJson) as WorkspaceState;
   await requireSchool(tenantId);const now=new Date().toISOString(),actorId=await stableUserId(actor.email);await ensureUser(actorId,actor,now);let moduleKey="Dashboard",resourceId="";
   if(action.action==="create_record") {const session=await activeSession(tenantId);resourceId=crypto.randomUUID();moduleKey=action.moduleKey;await database.prepare(`INSERT INTO module_records (id,tenant_id,academic_session_id,module_key,workflow,title,description,record_date,due_date,amount_paise,assignee,priority,status,metadata_json,created_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'open','{}',?,?,?)`).bind(resourceId,tenantId,session?.id??null,action.moduleKey,action.workflow,action.title,action.description,action.recordDate,action.dueDate||null,action.amountPaise,action.assignee,action.priority,actorId,now,now).run();}
   else {const record=await database.prepare("SELECT id,module_key AS moduleKey FROM module_records WHERE id=? AND tenant_id=?").bind(action.recordId,tenantId).first<{id:string;moduleKey:string}>();if(!record)throw new Error("Workspace record not found");resourceId=record.id;moduleKey=record.moduleKey;await database.prepare("UPDATE module_records SET status=?,updated_at=? WHERE id=? AND tenant_id=?").bind(action.status,now,action.recordId,tenantId).run();}
   await database.prepare("INSERT INTO audit_events (id,tenant_id,actor_id,action,resource_type,resource_id,reason,metadata_json,occurred_at) VALUES (?,?,?,?,?,?,'Module workflow operation',?,?)").bind(crypto.randomUUID(),tenantId,actorId,`workspace.${action.action}`,"module_record",resourceId,JSON.stringify(action),now).run();
-  return getWorkspace(tenantId,moduleKey);
+  const workspace=await getWorkspace(tenantId,moduleKey);await database.prepare("INSERT INTO idempotency_records (key,actor_email,operation,response_json,created_at,expires_at) VALUES (?,?, 'workspace.action',?,?,?)").bind(idempotencyKey,actor.email.toLowerCase(),JSON.stringify(workspace),now,new Date(Date.now()+24*60*60_000).toISOString()).run();return workspace;
 }
 
 async function activeSession(tenantId:string){return database.prepare("SELECT id FROM academic_sessions WHERE tenant_id=? AND status='active' ORDER BY starts_on DESC LIMIT 1").bind(tenantId).first<{id:string}>();}

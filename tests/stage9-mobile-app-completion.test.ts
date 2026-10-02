@@ -75,6 +75,14 @@ test("every operational mobile route resolves the authenticated bearer principal
   }
 });
 
+test("queued mobile content writes require the client retry key", () => {
+  const route = readFileSync("app/api/v1/mobile/content/route.ts", "utf8");
+  const service = readFileSync("server/mobile-app/service.ts", "utf8");
+  assert.match(route, /request\.headers\.get\("idempotency-key"\)/);
+  assert.match(service, /validIdempotencyKey\(idempotencyKey\)/);
+  assert.match(service, /applyWorkspaceAction[\s\S]*idempotencyKey/);
+});
+
 test("push registrations are encrypted and transport events are tenant protected", () => {
   for (const migration of [postgresMigration, sqliteMigration]) {
     assert.match(migration, /mobile_device_registrations/);

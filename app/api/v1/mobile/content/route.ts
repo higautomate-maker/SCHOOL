@@ -22,7 +22,11 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const principal = await authenticatedMobilePrincipal(request);
     if (!principal) return mobileJson({ error: "Authentication required" }, 401);
-    return mobileJson({ content: await performMobileContentAction(principal, await request.json().catch(() => null)) });
+    return mobileJson({ content: await performMobileContentAction(
+      principal,
+      await request.json().catch(() => null),
+      request.headers.get("idempotency-key"),
+    ) });
   } catch (error) {
     return mobileAppErrorResponse(error, "Content update failed");
   }

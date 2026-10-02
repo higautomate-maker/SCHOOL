@@ -403,6 +403,7 @@ try {
       priority: "normal",
     },
     actor,
+    "greenfield-workspace-create",
   );
   const welcomeRecord = workspace.records.find(
     (record) => record.title === "Greenfield welcome notice",

@@ -408,22 +408,102 @@ try {
   );
   assert.deepEqual(attendanceIsolation, { readCount: 0, writeCount: 0 });
 
+  const workspaceAction = {
+    action: "create_record" as const,
+    moduleKey: "Student Information" as const,
+    workflow: "Admission follow-up",
+    title: "Verify transfer certificate",
+    description: "Stage 3 integration record",
+    recordDate: "2026-07-29",
+    dueDate: "2026-07-31",
+    amountPaise: null,
+    assignee: "Admissions Officer",
+    priority: "high" as const,
+  };
   const workspace = await applyPostgresWorkspaceAction(
     tenantId,
-    {
-      action: "create_record",
-      moduleKey: "Student Information",
-      workflow: "Admission follow-up",
-      title: "Verify transfer certificate",
-      description: "Stage 3 integration record",
-      recordDate: "2026-07-29",
-      dueDate: "2026-07-31",
-      amountPaise: null,
-      assignee: "Admissions Officer",
-      priority: "high",
-    },
+    workspaceAction,
     actor,
+    "stage4-workspace-create",
   );
+  assert.deepEqual(
+    await applyPostgresWorkspaceAction(
+      tenantId,
+      workspaceAction,
+      actor,
+      "stage4-workspace-create",
+    ),
+    workspace,
+  );
+  await assert.rejects(
+    () => applyPostgresWorkspaceAction(
+      tenantId,
+      { ...workspaceAction, title: "Conflicting replay" },
+      actor,
+      "stage4-workspace-create",
+    ),
+    /Idempotency key was already used/,
+  );
+  const workspaceReplayCounts = await withTenantDatabase(
+    tenantId,
+    async (_database, client) => {
+      const result = await client.query<{
+        records: string;
+        audits: string;
+        replays: string;
+      }>(
+        `SELECT
+           (SELECT count(*)::text FROM module_records
+             WHERE tenant_id = $1::uuid AND title = $2::text) AS records,
+           (SELECT count(*)::text FROM audit_events
+             WHERE tenant_id = $1::uuid
+               AND action = 'workspace.create_record'
+               AND metadata->>'title' = $2::text) AS audits,
+           (SELECT count(*)::text FROM idempotency_records
+             WHERE tenant_id = $1::uuid AND key = $3::text) AS replays`,
+        [tenantId, workspaceAction.title, "stage4-workspace-create"],
+      );
+      return result.rows[0];
+    },
+  );
+  assert.deepEqual(workspaceReplayCounts, {
+    records: "1",
+    audits: "1",
+    replays: "1",
+  });
+
+  await assert.rejects(
+    () => applyPostgresWorkspaceAction(
+      tenantId,
+      { ...workspaceAction, title: "Workspace rollback" },
+      actor,
+      "stage4-workspace-rollback",
+    ),
+    /intentional workspace action rollback/,
+  );
+  const workspaceRollbackCounts = await withTenantDatabase(
+    tenantId,
+    async (_database, client) => {
+      const result = await client.query<{ records: string; audits: string; replays: string }>(
+        `SELECT
+           (SELECT count(*)::text FROM module_records
+             WHERE tenant_id = $1::uuid AND title = 'Workspace rollback') AS records,
+           (SELECT count(*)::text FROM audit_events
+             WHERE tenant_id = $1::uuid
+               AND action = 'workspace.create_record'
+               AND metadata->>'title' = 'Workspace rollback') AS audits,
+           (SELECT count(*)::text FROM idempotency_records
+             WHERE tenant_id = $1::uuid AND key = 'stage4-workspace-rollback') AS replays`,
+        [tenantId],
+      );
+      return result.rows[0];
+    },
+  );
+  assert.deepEqual(workspaceRollbackCounts, {
+    records: "0",
+    audits: "0",
+    replays: "0",
+  });
   const workspaceRecord = workspace.records[0];
   assert.ok(workspaceRecord);
   const completedWorkspace = await applyPostgresWorkspaceAction(
@@ -434,6 +514,7 @@ try {
       status: "completed",
     },
     actor,
+    "stage4-workspace-complete",
   );
   assert.equal(completedWorkspace.records[0]?.status, "completed");
   assert.equal(

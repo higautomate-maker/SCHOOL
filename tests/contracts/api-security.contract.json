@@ -140,7 +140,7 @@
       "tenantRequired": true,
       "entitlementRequired": true,
       "resourceScope": "tenant",
-      "idempotency": "planned"
+      "idempotency": "implemented"
     },
     {
       "id": "school.operations.view",

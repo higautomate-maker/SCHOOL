@@ -8,6 +8,7 @@ import {
   calendarDateString,
   ensurePostgresActor,
   requirePostgresSchool,
+  sha256Hex,
   timestampString,
 } from "../runtime/postgres-repository.ts";
 import { withTenantDatabase } from "../runtime/postgres.ts";
@@ -64,8 +65,23 @@ export function applyPostgresWorkspaceAction(
   tenantId: string,
   action: WorkspaceAction,
   actor: ChatGPTUser,
+  idempotencyKey: string,
 ): Promise<WorkspaceState> {
   return withTenantDatabase(tenantId, async (_database, client) => {
+    await client.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
+      [`${tenantId}:workspace.action:${idempotencyKey}`],
+    );
+    const requestHash = await sha256Hex(JSON.stringify(action));
+    const replay = await readWorkspaceReplay(
+      client,
+      tenantId,
+      idempotencyKey,
+      actor.email,
+      requestHash,
+    );
+    if (replay) return replay;
+
     await requirePostgresSchool(client, tenantId);
     const actorId = await ensurePostgresActor(client, actor);
     let moduleKey = "Dashboard";
@@ -139,8 +155,51 @@ export function applyPostgresWorkspaceAction(
         JSON.stringify(action),
       ],
     );
-    return readWorkspace(client, tenantId, moduleKey);
+    const workspace = await readWorkspace(client, tenantId, moduleKey);
+    await client.query(
+      `INSERT INTO idempotency_records (
+         tenant_id, key, actor_email, operation, request_hash,
+         response, created_at, expires_at
+       ) VALUES (
+         $1::uuid, $2::text, $3::text, 'workspace.action', $4::text,
+         $5::jsonb, now(), now() + interval '24 hours'
+       )`,
+      [
+        tenantId,
+        idempotencyKey,
+        actor.email.toLowerCase(),
+        requestHash,
+        JSON.stringify(workspace),
+      ],
+    );
+    return workspace;
   });
+}
+
+async function readWorkspaceReplay(
+  client: PoolClient,
+  tenantId: string,
+  key: string,
+  actorEmail: string,
+  requestHash: string,
+): Promise<WorkspaceState | null> {
+  const result = await client.query<{ requestHash: string; response: unknown }>(
+    `SELECT request_hash AS "requestHash", response
+     FROM idempotency_records
+     WHERE tenant_id = $1::uuid
+       AND key = $2::text
+       AND actor_email = $3::text
+       AND operation = 'workspace.action'
+       AND expires_at > now()
+     LIMIT 1`,
+    [tenantId, key, actorEmail.toLowerCase()],
+  );
+  const replay = result.rows[0];
+  if (!replay) return null;
+  if (replay.requestHash !== requestHash) {
+    throw new Error("Idempotency key was already used for a different workspace action");
+  }
+  return replay.response as WorkspaceState;
 }
 
 async function readWorkspace(

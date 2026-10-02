@@ -281,7 +281,11 @@ export async function mobileContentSnapshot(
 export async function performMobileContentAction(
   principal: MobileAuthenticatedPrincipal,
   value: unknown,
+  idempotencyKey: string | null,
 ): Promise<{ moduleKey: string; records: ModuleRecord[]; metrics: WorkspaceState["metrics"] }> {
+  if (!idempotencyKey || !validIdempotencyKey(idempotencyKey)) {
+    throw new Error("A valid Idempotency-Key header is required");
+  }
   const action = mobileContentActionSchema.parse(value);
   const access = await effectiveAccessForPrincipal(principal);
   if (action.action === "parent_request") {
@@ -309,7 +313,7 @@ export async function performMobileContentAction(
       assignee: "School Administration",
       priority: action.requestType === "leave_request" ? "high" : "normal",
     } as WorkspaceAction;
-    const workspace = await applyWorkspaceAction(principal.tenantId, workspaceAction, mobileActor(principal));
+    const workspace = await applyWorkspaceAction(principal.tenantId, workspaceAction, mobileActor(principal), idempotencyKey);
     return { moduleKey, records: workspace.records, metrics: workspace.metrics };
   }
 
@@ -326,7 +330,7 @@ export async function performMobileContentAction(
   const workspaceAction: WorkspaceAction = action.action === "create_record"
     ? { ...action, moduleKey: workspaceModuleKey(moduleKey) }
     : action;
-  const workspace = await applyWorkspaceAction(principal.tenantId, workspaceAction, mobileActor(principal));
+  const workspace = await applyWorkspaceAction(principal.tenantId, workspaceAction, mobileActor(principal), idempotencyKey);
   return {
     moduleKey,
     records: workspace.records,

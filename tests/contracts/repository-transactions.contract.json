@@ -46,7 +46,7 @@
     {
       "id": "workspace.action",
       "repository": "server/workspace/repository.ts",
-      "atomicWrites": ["workspace_record", "audit_event", "outbox_event"],
+      "atomicWrites": ["workspace_record", "audit_event", "idempotency_record"],
       "idempotencyRequired": true,
       "rowLockRequired": false
     }
