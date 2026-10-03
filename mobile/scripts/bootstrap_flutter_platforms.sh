@@ -72,7 +72,7 @@ plist['CFBundleDisplayName'] = display_name
 plist['CFBundleName'] = display_name
 plist['NSPhotoLibraryUsageDescription'] = 'Choose a photo for your school profile.'
 if location_mode == 'foreground':
-    plist['NSLocationWhenInUseUsageDescription'] = 'Hig Driver uses location while an active trip is open.'
+    plist['NSLocationWhenInUseUsageDescription'] = 'HIGA School Transport uses location while an active trip is open.'
 plist.pop('NSLocationAlwaysAndWhenInUseUsageDescription', None)
 plist.pop('UIBackgroundModes', None)
 with plist_path.open('wb') as handle:
@@ -89,7 +89,7 @@ PY
 
 create_app "student_parent_app" "com.higautomation.higschool.studentparent" "none" "Hig Student & Parent"
 create_app "staff_admin_app" "com.higautomation.higschool.staffadmin" "none" "Hig Staff & Admin"
-create_app "driver_gps_app" "com.higautomation.higschool.driver" "foreground" "Hig Driver"
+create_app "driver_gps_app" "com.higautomation.higschool.driver" "foreground" "HIGA School Transport"
 
 (cd "$ROOT/mobile/packages/hig_mobile_core" && flutter pub get)
 

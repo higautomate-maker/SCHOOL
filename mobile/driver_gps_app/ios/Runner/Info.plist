@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Hig Driver</string>
+	<string>HIGA School Transport</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose a photo for your school profile.</string>
 	<key>CFBundleExecutable</key>
@@ -17,7 +17,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Hig Driver</string>
+	<string>HIGA School Transport</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -69,9 +69,9 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Hig Driver uses location while an active trip is open.</string>
+	<string>HIGA School Transport uses location while an active trip is open.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Hig Driver shares the vehicle location with the school while an assigned school trip is active, including when the app is in the background.</string>
+	<string>HIGA School Transport shares the vehicle location with the school while an assigned school trip is active, including when the app is in the background.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

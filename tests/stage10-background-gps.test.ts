@@ -35,7 +35,7 @@ test("Stage 10 Android Driver declares only active-trip foreground-service locat
 test("Driver uses battery-conscious Android foreground-service GPS", () => {
   assert.match(driver, /AndroidSettings\(/);
   assert.match(driver, /foregroundNotificationConfig:/);
-  assert.match(driver, /Hig Driver · Trip tracking active/);
+  assert.match(driver, /HIGA School Transport · Tracking active/);
   assert.match(driver, /setOngoing: true/);
   assert.match(driver, /enableWifiLock: false/);
   assert.match(driver, /enableWakeLock: false/);

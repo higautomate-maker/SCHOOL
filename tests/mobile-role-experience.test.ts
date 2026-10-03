@@ -139,15 +139,21 @@ test("staging classroom fixture seeds mobile diary records and teacher scope", (
 });
 
 test("transporter experience keeps trip and emergency controls prominent", () => {
-  assert.match(driver, /Hig School Transport/);
+  assert.match(driver, /HIGA School Transport/);
   assert.match(driver, /START TRIP/);
   assert.match(driver, /PAUSE/);
   assert.match(driver, /SOS/);
   assert.match(driver, /Assigned students/);
   assert.match(driver, /label: 'Route'/);
+  assert.match(driver, /TODAY'S TRIP PENDING/);
+  assert.match(driver, /WAITING FOR TRIP/);
+  assert.match(driver, /tripId == null/);
+  assert.match(driver, /trip\?\['direction'\][\s\S]*== 'drop'/);
   assert.match(driver, /higMobileTheme/);
   assert.match(transportFixture, /DELETE FROM mobile_transport_events/);
   assert.match(transportFixture, /status = 'scheduled'/);
+  assert.match(transportFixture, /'pickup'/);
+  assert.match(transportFixture, /'drop'/);
 });
 
 test("final acceptance explicitly covers all mobile roles and real daily tasks", () => {

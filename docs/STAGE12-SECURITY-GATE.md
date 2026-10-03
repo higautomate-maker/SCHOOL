@@ -45,6 +45,35 @@ This exception covers availability risk only. It does not permit untrusted
 server-side image parsing and does not waive any critical, confidentiality or
 integrity vulnerability.
 
+## Temporary dependency exception: `braces@3.0.3`
+
+On 2026-10-03, `npm audit --omit=dev` began reporting
+`GHSA-vfj7-8cjw-p6xm`, a stack-exhaustion denial-of-service advisory affecting
+all published `braces` versions through `3.0.3`. The production dependency path
+is pinned to `vinext@0.0.50 -> vite-plugin-commonjs@0.10.4 ->
+vite-plugin-dynamic-import@1.6.0 -> fast-glob@3.3.3 -> micromatch@4.0.8 ->
+braces@3.0.3`. No patched `braces` release is available. npm's suggested
+`vinext@0.0.15` downgrade is not accepted because it would replace the deployed
+framework with an older incompatible release without removing the underlying
+unpatched package.
+
+Compensating controls:
+
+- The affected glob expansion runs in the trusted application build toolchain;
+  browser and mobile requests do not pass glob patterns to this dependency.
+- Production images are built from reviewed repository paths and a locked
+  dependency graph, not user-supplied patterns or filenames.
+- The audit policy pins the advisory URL, severity, direct/transitive shape,
+  complete dependency path and every installed version. Any advisory, path,
+  severity or version drift fails CI.
+- Recheck for a patched `braces`, `micromatch`, plugin or `vinext` release before
+  every production build, and remove this exception as soon as a compatible
+  patched path exists.
+
+This exception covers availability risk in the trusted build process only. It
+does not authorize runtime glob processing of untrusted input and does not waive
+critical, confidentiality or integrity vulnerabilities.
+
 ## Formal gates still required
 
 - Independent authorization and penetration testing of browser, mobile and
