@@ -8,6 +8,7 @@ import {
 } from "./retention.ts";
 import { wakeNotificationWorker } from "../notifications/redis-wake.ts";
 import { ensureDailyTransportTrips } from "../transport/daily-trips.ts";
+import { configureTransportTimeZone } from "../transport/time-zone.ts";
 import type { MobileAuthenticatedPrincipal } from "../mobile-auth/types.ts";
 import type {
   RegisterMobileDeviceInput,
@@ -28,6 +29,7 @@ async function transaction<Result>(
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN");
+    await configureTransportTimeZone(client);
     await client.query("SELECT set_config('app.mobile_auth_service', 'true', true)");
     await client.query("SELECT set_config('app.tenant_id', $1::text, true)", [tenantId]);
     const result = await operation(client);
