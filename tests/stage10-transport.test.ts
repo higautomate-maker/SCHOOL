@@ -2,6 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { transportActionSchema } from "../server/transport/validation.ts";
+import {
+  DEFAULT_TRANSPORT_TIME_ZONE,
+  transportTimeZone,
+} from "../server/transport/time-zone.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
@@ -144,6 +148,25 @@ test("daily transport materialises independent pickup and return journeys", () =
     /candidate\.status IN \('active', 'paused', 'scheduled', 'completed'\)/,
   );
   assert.match(driverRepository, /WHEN \$3::text = 'drop' THEN -stop\.sequence_number/);
+});
+
+test("daily transport resolves current_date in the configured school time zone", () => {
+  const driverRepository = read("server/transport/postgres-repository.ts");
+  const mobileRepository = read("server/mobile-app/postgres-repository.ts");
+  const timeZoneModule = read("server/transport/time-zone.ts");
+
+  assert.equal(transportTimeZone({}), DEFAULT_TRANSPORT_TIME_ZONE);
+  assert.equal(
+    transportTimeZone({ HIG_TRANSPORT_TIME_ZONE: "Asia/Kolkata" }),
+    "Asia/Kolkata",
+  );
+  assert.throws(
+    () => transportTimeZone({ HIG_TRANSPORT_TIME_ZONE: "Not/A_Time_Zone" }),
+    /valid IANA time zone/,
+  );
+  assert.match(timeZoneModule, /set_config\('TimeZone', \$1::text, true\)/);
+  assert.match(driverRepository, /await configureTransportTimeZone\(client\)/);
+  assert.match(mobileRepository, /await configureTransportTimeZone\(client\)/);
 });
 
 test("School Transport UI uses the authenticated production endpoint", () => {

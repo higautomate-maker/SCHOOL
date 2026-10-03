@@ -9,6 +9,7 @@ import type {
   TransportStudent,
 } from "./types.ts";
 import { ensureDailyTransportTrips } from "./daily-trips.ts";
+import { configureTransportTimeZone } from "./time-zone.ts";
 
 async function transaction<Result>(
   tenantId: string,
@@ -17,6 +18,7 @@ async function transaction<Result>(
   const client = await getPostgresPool().connect();
   try {
     await client.query("BEGIN");
+    await configureTransportTimeZone(client);
     await client.query(
       "SELECT set_config('app.tenant_id', $1::text, true)",
       [tenantId],
