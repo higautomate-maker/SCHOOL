@@ -119,16 +119,22 @@ export async function loadDriverTransportSnapshot(
           FROM transport_trips candidate
           WHERE candidate.tenant_id = assignment.tenant_id
             AND candidate.driver_assignment_id = assignment.id
-            AND candidate.status IN ('scheduled', 'active', 'paused')
+            AND candidate.status IN ('scheduled', 'active', 'paused', 'completed')
             AND candidate.service_date BETWEEN current_date AND current_date + 1
           ORDER BY
             CASE candidate.status
               WHEN 'active' THEN 1
               WHEN 'paused' THEN 2
-              ELSE 3
+              WHEN 'scheduled' THEN 3
+              ELSE 4
             END,
             candidate.service_date,
-            CASE candidate.direction WHEN 'pickup' THEN 1 ELSE 2 END,
+            CASE
+              WHEN candidate.status = 'completed' THEN
+                CASE candidate.direction WHEN 'drop' THEN 1 ELSE 2 END
+              ELSE
+                CASE candidate.direction WHEN 'pickup' THEN 1 ELSE 2 END
+            END,
             candidate.scheduled_start_at NULLS LAST,
             candidate.id
           LIMIT 1
