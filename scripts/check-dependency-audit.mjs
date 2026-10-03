@@ -11,6 +11,25 @@ const approvedException = {
     "https://github.com/advisories/GHSA-w3rx-r6r6-pgpr",
   ]),
   vinextVia: new Set(["@vercel/og", "image-size"]),
+  bracesAvailabilityRisk: {
+    advisoryUrl: "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+    packages: {
+      braces: ["3.0.3"],
+      micromatch: ["4.0.8"],
+      "fast-glob": ["3.3.1", "3.3.3"],
+      "vite-plugin-dynamic-import": ["1.6.0"],
+      "vite-plugin-commonjs": ["0.10.4"],
+      vinext: ["0.0.50"],
+    },
+    via: {
+      braces: null,
+      micromatch: ["braces"],
+      "fast-glob": ["micromatch"],
+      "vite-plugin-dynamic-import": ["fast-glob"],
+      "vite-plugin-commonjs": ["vite-plugin-dynamic-import"],
+      vinext: ["vite-plugin-commonjs"],
+    },
+  },
 };
 
 const args = process.argv.slice(2);
@@ -51,9 +70,7 @@ if (!decision.passed) {
 }
 
 if (decision.approvedExceptions.length > 0) {
-  console.log(
-    "Dependency audit passed with the documented image-size availability-risk exception.",
-  );
+  console.log("Dependency audit passed with documented availability-risk exceptions.");
 } else {
   console.log("Dependency audit passed with no high or critical findings.");
 }
@@ -74,6 +91,10 @@ function evaluate(report, packageLock) {
       approvedExceptions.push(name);
       continue;
     }
+    if (approvedBracesChainFinding(name, finding, packageLock, report)) {
+      approvedExceptions.push(name);
+      continue;
+    }
     failures.push(`${name}: unapproved ${finding.severity} dependency finding`);
   }
 
@@ -84,6 +105,34 @@ function evaluate(report, packageLock) {
     approvedExceptions,
     failures,
   };
+}
+
+function approvedBracesChainFinding(name, finding, packageLock, report) {
+  const exception = approvedException.bracesAvailabilityRisk;
+  if (!(name in exception.packages)) return false;
+  if (finding.severity !== "high") return false;
+  if (!sameValues(lockedVersions(packageLock, name), exception.packages[name])) {
+    return false;
+  }
+
+  if (name === "braces") {
+    if (finding.isDirect !== false) return false;
+    const advisories = (finding.via ?? []).filter(
+      (item) => item && typeof item === "object",
+    );
+    return advisories.length === 1
+      && advisories[0].url === exception.advisoryUrl
+      && advisories[0].severity === "high"
+      && !(finding.via ?? []).some((item) => typeof item === "string");
+  }
+
+  if (name === "vinext" && finding.isDirect !== true) return false;
+  if (name !== "vinext" && finding.isDirect !== false) return false;
+  const expectedVia = exception.via[name];
+  if (!sameValues(finding.via ?? [], expectedVia)) return false;
+  return expectedVia.every(
+    (dependency) => report.vulnerabilities?.[dependency]?.severity === "high",
+  );
 }
 
 function approvedImageSizeFinding(finding, packageLock) {
@@ -120,6 +169,21 @@ function approvedVinextFinding(finding, packageLock, report) {
 
 function lockedVersion(packageLock, name) {
   return packageLock.packages?.[`node_modules/${name}`]?.version;
+}
+
+function lockedVersions(packageLock, name) {
+  return Object.entries(packageLock.packages ?? {})
+    .filter(([path]) => path === `node_modules/${name}` || path.endsWith(`/node_modules/${name}`))
+    .map(([, value]) => value.version)
+    .filter(Boolean)
+    .sort();
+}
+
+function sameValues(actual, expected) {
+  if (!Array.isArray(actual) || !Array.isArray(expected)) return false;
+  const left = [...actual].sort();
+  const right = [...expected].sort();
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function valueAfter(flag) {

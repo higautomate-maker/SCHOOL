@@ -32,6 +32,45 @@ const approvedLock = {
   },
 };
 
+const bracesChainAudit = {
+  metadata: { vulnerabilities: { high: 6 } },
+  vulnerabilities: {
+    braces: {
+      severity: "high",
+      isDirect: false,
+      via: [{
+        url: "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+        severity: "high",
+      }],
+    },
+    micromatch: { severity: "high", isDirect: false, via: ["braces"] },
+    "fast-glob": { severity: "high", isDirect: false, via: ["micromatch"] },
+    "vite-plugin-dynamic-import": {
+      severity: "high",
+      isDirect: false,
+      via: ["fast-glob"],
+    },
+    "vite-plugin-commonjs": {
+      severity: "high",
+      isDirect: false,
+      via: ["vite-plugin-dynamic-import"],
+    },
+    vinext: { severity: "high", isDirect: true, via: ["vite-plugin-commonjs"] },
+  },
+};
+
+const bracesChainLock = {
+  packages: {
+    "node_modules/braces": { version: "3.0.3" },
+    "node_modules/micromatch": { version: "4.0.8" },
+    "node_modules/fast-glob": { version: "3.3.1" },
+    "node_modules/vite-plugin-dynamic-import/node_modules/fast-glob": { version: "3.3.3" },
+    "node_modules/vite-plugin-dynamic-import": { version: "1.6.0" },
+    "node_modules/vite-plugin-commonjs": { version: "0.10.4" },
+    "node_modules/vinext": { version: "0.0.50" },
+  },
+};
+
 test("dependency audit policy accepts only the documented upstream exception", () => {
   const result = runPolicy(approvedAudit, approvedLock);
   assert.equal(result.status, 0, result.stderr);
@@ -89,6 +128,43 @@ test("dependency audit policy rejects severity escalation", () => {
   const result = runPolicy(audit, approvedLock);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /image-size/);
+});
+
+test("dependency audit policy accepts the pinned braces build-time chain", () => {
+  const result = runPolicy(bracesChainAudit, bracesChainLock);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.report.approvedExceptions.sort(), [
+    "braces",
+    "fast-glob",
+    "micromatch",
+    "vinext",
+    "vite-plugin-commonjs",
+    "vite-plugin-dynamic-import",
+  ]);
+});
+
+test("dependency audit policy rejects braces advisory drift", () => {
+  const audit = structuredClone(bracesChainAudit);
+  audit.vulnerabilities.braces.via[0].url = "https://github.com/advisories/GHSA-new";
+  const result = runPolicy(audit, bracesChainLock);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /braces/);
+});
+
+test("dependency audit policy rejects braces-chain version drift", () => {
+  const lock = structuredClone(bracesChainLock);
+  lock.packages["node_modules/braces"].version = "3.0.4";
+  const result = runPolicy(bracesChainAudit, lock);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /braces/);
+});
+
+test("dependency audit policy rejects an unexpected braces-chain path", () => {
+  const audit = structuredClone(bracesChainAudit);
+  audit.vulnerabilities.vinext.via.push("unexpected-package");
+  const result = runPolicy(audit, bracesChainLock);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /vinext/);
 });
 
 function runPolicy(audit: object, lock: object) {
