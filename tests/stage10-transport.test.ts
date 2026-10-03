@@ -133,7 +133,15 @@ test("daily transport materialises independent pickup and return journeys", () =
   assert.match(mobileRepository, /await ensureDailyTransportTrips\(/);
   assert.match(
     driverRepository,
-    /CASE candidate\.direction WHEN 'pickup' THEN 1 ELSE 2 END/,
+    /candidate\.status IN \('scheduled', 'active', 'paused', 'completed'\)/,
+  );
+  assert.match(
+    driverRepository,
+    /WHEN candidate\.status = 'completed'[\s\S]*CASE candidate\.direction WHEN 'drop' THEN 1 ELSE 2 END/,
+  );
+  assert.match(
+    mobileRepository,
+    /candidate\.status IN \('active', 'paused', 'scheduled', 'completed'\)/,
   );
   assert.match(driverRepository, /WHEN \$3::text = 'drop' THEN -stop\.sequence_number/);
 });
