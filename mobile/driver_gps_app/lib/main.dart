@@ -21,7 +21,7 @@ class DriverApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'Hig School Transport',
+        title: 'HIGA School Transport',
         theme: higMobileTheme(const Color(0xff1565c0)),
         home: const DriverRoot(),
       );
@@ -87,7 +87,7 @@ class _DriverRootState extends State<DriverRoot> {
   Widget build(BuildContext context) {
     if (loading) {
       return const HigStartupView(
-        title: 'Hig School Transport',
+        title: 'HIGA School Transport',
         icon: Icons.directions_bus_rounded,
         message: 'Preparing your route and trip controls',
       );
@@ -200,7 +200,7 @@ class _DriverLoginState extends State<DriverLogin> {
               ),
               const SizedBox(height: 20),
               const Text(
-                'Hig School Transport',
+                'HIGA School Transport',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900),
               ),
@@ -471,12 +471,15 @@ class _DriverDashboardState extends State<DriverDashboard>
   }
 
   DriverTripState stateFromSnapshot() {
+    if (tripId == null) return DriverTripState.ready;
     final tripStatus = trip?['status']?.toString();
     if (tripStatus == 'active') return DriverTripState.active;
     if (tripStatus == 'paused') return DriverTripState.paused;
     if (tripStatus == 'completed') return DriverTripState.completed;
 
-    final events = listValue(widget.transport, 'events');
+    final events = listValue(widget.transport, 'events')
+        .where((item) => item['tripId']?.toString() == tripId)
+        .toList();
     if (events.isEmpty) return DriverTripState.ready;
     final latest = events.first['eventType']?.toString();
     if (latest == 'trip_completed') return DriverTripState.completed;
@@ -523,7 +526,7 @@ class _DriverDashboardState extends State<DriverDashboard>
 
   Future<bool> ensurePermission() async {
     if (!appVisible) {
-      updateMessage('Open Hig Driver to start GPS tracking');
+      updateMessage('Open HIGA School Transport to start GPS tracking');
       return false;
     }
     if (!await Geolocator.isLocationServiceEnabled()) {
@@ -560,7 +563,7 @@ class _DriverDashboardState extends State<DriverDashboard>
         distanceFilter: 25,
         intervalDuration: const Duration(seconds: 15),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationTitle: 'Hig Driver · Trip tracking active',
+          notificationTitle: 'HIGA School Transport · Tracking active',
           notificationText:
               'Location is being shared with your school for the active trip.',
           notificationChannelName: 'Active school trip location',
@@ -601,7 +604,7 @@ class _DriverDashboardState extends State<DriverDashboard>
       return;
     }
     if (!appVisible) {
-      updateMessage('Open Hig Driver to start or resume the trip');
+      updateMessage('Open HIGA School Transport to start or resume the trip');
       return;
     }
     if (!await ensurePermission()) return;
@@ -1112,7 +1115,8 @@ class _DriverDashboardState extends State<DriverDashboard>
       case DriverTripState.completed:
         return 'TRIP COMPLETED';
       case DriverTripState.ready:
-        return assignment == null ? 'ASSIGNMENT PENDING' : 'READY TO START';
+        if (assignment == null) return 'ASSIGNMENT PENDING';
+        return tripId == null ? "TODAY'S TRIP PENDING" : 'READY TO START';
     }
   }
 
@@ -1128,7 +1132,9 @@ class _DriverDashboardState extends State<DriverDashboard>
       case DriverTripState.completed:
         return 'The current trip has been closed';
       case DriverTripState.ready:
-        return 'Tap start when you are ready to begin';
+        return tripId == null
+            ? 'Refresh to load today’s pickup or return trip'
+            : 'Tap start when you are ready to begin';
     }
   }
 
@@ -1158,7 +1164,7 @@ class _DriverDashboardState extends State<DriverDashboard>
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Hig Driver',
+          'HIGA School Transport',
           style: TextStyle(fontWeight: FontWeight.w800),
         ),
         backgroundColor: Colors.white,
@@ -1248,11 +1254,12 @@ class _DriverDashboardState extends State<DriverDashboard>
                       : const Color(0xff1565c0),
                   minimumSize: const Size.fromHeight(54),
                 ),
-                onPressed: tripState == DriverTripState.completed
-                    ? null
-                    : tracking
-                        ? pause
-                        : start,
+                onPressed:
+                    tripId == null || tripState == DriverTripState.completed
+                        ? null
+                        : tracking
+                            ? pause
+                            : start,
                 icon: Icon(
                   tracking
                       ? Icons.pause_rounded
@@ -1263,9 +1270,11 @@ class _DriverDashboardState extends State<DriverDashboard>
                 label: Text(
                   tracking
                       ? 'PAUSE'
-                      : tripState == DriverTripState.paused
-                          ? 'RESUME TRIP'
-                          : 'START TRIP',
+                      : tripId == null
+                          ? 'WAITING FOR TRIP'
+                          : tripState == DriverTripState.paused
+                              ? 'RESUME TRIP'
+                              : 'START TRIP',
                 ),
               ),
             ),
@@ -1302,13 +1311,19 @@ class _DriverDashboardState extends State<DriverDashboard>
 
   Widget homeContent() {
     final nextStop = stops.isEmpty ? null : stops.first;
+    final tripDirection = trip?['direction']?.toString();
+    final stopTime = nextStop == null
+        ? null
+        : tripDirection == 'drop'
+            ? nextStop['dropTime']?.toString()
+            : nextStop['pickupTime']?.toString();
     return Column(
       children: [
         _InfoTile(
           icon: Icons.pin_drop_outlined,
           title: 'Next stop',
           value: nextStop?['name']?.toString() ?? 'No stops configured',
-          trailing: nextStop?['pickupTime']?.toString(),
+          trailing: stopTime,
         ),
         const SizedBox(height: 10),
         _InfoTile(
@@ -1381,7 +1396,9 @@ class _DriverDashboardState extends State<DriverDashboard>
                   '${(stop['studentCount'] as num?)?.toInt() == 1 ? 'student' : 'students'}',
                 ),
                 trailing: Text(
-                  stop['pickupTime']?.toString() ?? '',
+                  trip?['direction']?.toString() == 'drop'
+                      ? stop['dropTime']?.toString() ?? ''
+                      : stop['pickupTime']?.toString() ?? '',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
@@ -1567,8 +1584,10 @@ class _AssignmentCard extends StatelessWidget {
               _AssignmentRow(
                 icon: Icons.schedule_outlined,
                 label: 'Trip',
-                value:
-                    trip?['scheduledStartAt']?.toString() ?? 'Schedule pending',
+                value: trip == null
+                    ? 'Today’s trip pending'
+                    : '${trip?['direction'] == 'drop' ? 'Return' : 'Pickup'} · '
+                        '${trip?['serviceDate'] ?? 'Today'}',
               ),
             ],
           ),

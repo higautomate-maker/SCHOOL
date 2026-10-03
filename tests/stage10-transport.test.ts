@@ -117,6 +117,27 @@ test("admin repository exposes real GPS and safety events with tenant predicates
   assert.match(repository, /Driver assignment does not match the scheduled route/);
 });
 
+test("daily transport materialises independent pickup and return journeys", () => {
+  const dailyTrips = read("server/transport/daily-trips.ts");
+  const driverRepository = read("server/transport/postgres-repository.ts");
+  const mobileRepository = read("server/mobile-app/postgres-repository.ts");
+
+  assert.match(dailyTrips, /ensureDailyTransportTrips/);
+  assert.match(dailyTrips, /ARRAY\['pickup', 'drop'\]/);
+  assert.match(dailyTrips, /current_date/);
+  assert.match(
+    dailyTrips,
+    /ON CONFLICT \(tenant_id, route_id, service_date, direction\) DO NOTHING/,
+  );
+  assert.match(driverRepository, /await ensureDailyTransportTrips\(/);
+  assert.match(mobileRepository, /await ensureDailyTransportTrips\(/);
+  assert.match(
+    driverRepository,
+    /CASE candidate\.direction WHEN 'pickup' THEN 1 ELSE 2 END/,
+  );
+  assert.match(driverRepository, /WHEN \$3::text = 'drop' THEN -stop\.sequence_number/);
+});
+
 test("School Transport UI uses the authenticated production endpoint", () => {
   const page = read("app/school/page.tsx");
   const workspace = read("app/school/transport-production.tsx");

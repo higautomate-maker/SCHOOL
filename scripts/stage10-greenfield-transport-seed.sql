@@ -178,7 +178,10 @@ ON CONFLICT (tenant_id, id) DO UPDATE SET
 -- safely repeated without touching any other school or trip.
 DELETE FROM mobile_transport_events
 WHERE tenant_id = '1c602856-3fec-486f-b18d-a791f124b206'::uuid
-  AND trip_id = '47000000-0000-4000-8000-000000000001'::uuid;
+  AND trip_id IN (
+    '47000000-0000-4000-8000-000000000001'::uuid,
+    '47000000-0000-4000-8000-000000000002'::uuid
+  );
 
 INSERT INTO transport_trips (
   id, tenant_id, driver_assignment_id, route_id,
@@ -198,6 +201,30 @@ ON CONFLICT (tenant_id, route_id, service_date, direction) DO UPDATE SET
   driver_assignment_id = EXCLUDED.driver_assignment_id,
   scheduled_start_at = EXCLUDED.scheduled_start_at,
   status = 'scheduled',
+  started_at = NULL,
+  completed_at = NULL,
+  updated_at = now();
+
+INSERT INTO transport_trips (
+  id, tenant_id, driver_assignment_id, route_id,
+  service_date, direction, scheduled_start_at, status
+)
+VALUES (
+  '47000000-0000-4000-8000-000000000002'::uuid,
+  '1c602856-3fec-486f-b18d-a791f124b206'::uuid,
+  '45000000-0000-4000-8000-000000000001'::uuid,
+  '43000000-0000-4000-8000-000000000001'::uuid,
+  current_date,
+  'drop',
+  current_date + time '14:30',
+  'scheduled'
+)
+ON CONFLICT (tenant_id, route_id, service_date, direction) DO UPDATE SET
+  driver_assignment_id = EXCLUDED.driver_assignment_id,
+  scheduled_start_at = EXCLUDED.scheduled_start_at,
+  status = 'scheduled',
+  started_at = NULL,
+  completed_at = NULL,
   updated_at = now();
 
 -- Driver access is resolved from transport_driver_assignments.

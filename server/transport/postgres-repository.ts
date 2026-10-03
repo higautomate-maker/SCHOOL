@@ -8,6 +8,7 @@ import type {
   TransportStop,
   TransportStudent,
 } from "./types.ts";
+import { ensureDailyTransportTrips } from "./daily-trips.ts";
 
 async function transaction<Result>(
   tenantId: string,
@@ -66,6 +67,11 @@ export async function loadDriverTransportSnapshot(
 ): Promise<DriverTransportSnapshot | null> {
   try {
     return await transaction(principal.tenantId, async (client) => {
+      await ensureDailyTransportTrips(
+        client,
+        principal.tenantId,
+        principal.userId,
+      );
       const assignmentResult = await client.query<AssignmentRow>(`
         SELECT
           assignment.id AS "assignmentId",
@@ -122,7 +128,9 @@ export async function loadDriverTransportSnapshot(
               ELSE 3
             END,
             candidate.service_date,
-            candidate.scheduled_start_at NULLS LAST
+            CASE candidate.direction WHEN 'pickup' THEN 1 ELSE 2 END,
+            candidate.scheduled_start_at NULLS LAST,
+            candidate.id
           LIMIT 1
         ) trip ON true
         WHERE driver.tenant_id = $1::uuid
@@ -159,8 +167,11 @@ export async function loadDriverTransportSnapshot(
           AND stop.route_id = $2::uuid
           AND stop.status = 'active'
         GROUP BY stop.id
-        ORDER BY stop.sequence_number
-      `, [principal.tenantId, row.routeId]);
+        ORDER BY CASE
+          WHEN $3::text = 'drop' THEN -stop.sequence_number
+          ELSE stop.sequence_number
+        END
+      `, [principal.tenantId, row.routeId, row.tripDirection ?? "pickup"]);
 
       const studentsResult = await client.query<TransportStudent>(`
         SELECT

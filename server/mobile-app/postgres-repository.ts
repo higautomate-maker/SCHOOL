@@ -7,6 +7,7 @@ import {
   mobileTransportLocationRetentionDays,
 } from "./retention.ts";
 import { wakeNotificationWorker } from "../notifications/redis-wake.ts";
+import { ensureDailyTransportTrips } from "../transport/daily-trips.ts";
 import type { MobileAuthenticatedPrincipal } from "../mobile-auth/types.ts";
 import type {
   RegisterMobileDeviceInput,
@@ -387,6 +388,7 @@ export async function loadParentTransportTracking(
   }
 
   return transaction(principal.tenantId, async (client) => {
+    await ensureDailyTransportTrips(client, principal.tenantId);
     const result = await client.query<ParentTransportRow>(`
       SELECT
         student.id AS "studentId",
@@ -469,7 +471,9 @@ export async function loadParentTransportTracking(
             ELSE 3
           END,
           candidate.service_date,
-          candidate.scheduled_start_at NULLS LAST
+          CASE candidate.direction WHEN 'pickup' THEN 1 ELSE 2 END,
+          candidate.scheduled_start_at NULLS LAST,
+          candidate.id
         LIMIT 1
       ) trip ON true
       LEFT JOIN LATERAL (
