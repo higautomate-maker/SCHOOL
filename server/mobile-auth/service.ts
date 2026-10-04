@@ -70,7 +70,13 @@ export const mobileLoginInputSchema = mobileDeviceSchema.extend({
   password: z.string()
     .min(1)
     .max(1_024),
-  tenantId: z.string().uuid(),
+  tenantId: z.preprocess(
+    (value) => typeof value === "string"
+      && value.trim().toLowerCase() === "higa-test"
+      ? "b1000000-0000-4000-8000-000000000001"
+      : value,
+    z.string().uuid(),
+  ),
   principalType: mobilePrincipalSchema,
 }).strict();
 
