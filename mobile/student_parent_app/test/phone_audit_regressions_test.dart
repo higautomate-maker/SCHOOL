@@ -7,26 +7,26 @@ class _PhoneAuditApi extends HigMobileApi {
 
   @override
   Future<JsonMap> content({String? featureKey, String? moduleKey}) async => {
-    'content': {'records': <JsonMap>[]},
-  };
+        'content': {'records': <JsonMap>[]},
+      };
 
   @override
   Future<JsonMap> notifications({bool unreadOnly = false}) async => {
-    'notifications': <JsonMap>[
-      {
-        'id': 'notice-1',
-        'title': 'Attendance updated',
-        'message': '4 Oct 2026 · Present',
-        'read': true,
-      },
-      {
-        'id': 'notice-2',
-        'title': 'Attendance updated',
-        'message': '4 Oct 2026 · Present',
-        'read': true,
-      },
-    ],
-  };
+        'notifications': <JsonMap>[
+          {
+            'id': 'notice-1',
+            'title': 'Attendance updated',
+            'message': '4 Oct 2026 · Present',
+            'read': true,
+          },
+          {
+            'id': 'notice-2',
+            'title': 'Attendance updated',
+            'message': '4 Oct 2026 · Present',
+            'read': true,
+          },
+        ],
+      };
 }
 
 void main() {

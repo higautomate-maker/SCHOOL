@@ -2261,7 +2261,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                                           ? '${records.length} attendance ${records.length == 1 ? 'entry' : 'entries'} · History'
                                           : isChildOverview
                                               ? '${widget.availableStudents.length} linked ${widget.availableStudents.length == 1 ? 'child' : 'children'} · School profile'
-                                          : '${records.length} authorized ${records.length == 1 ? 'record' : 'records'} · ${widget.item['canManage'] == true ? 'Manage access' : 'View access'}',
+                                              : '${records.length} authorized ${records.length == 1 ? 'record' : 'records'} · ${widget.item['canManage'] == true ? 'Manage access' : 'View access'}',
                                       style: const TextStyle(
                                         color: Colors.white70,
                                       ),

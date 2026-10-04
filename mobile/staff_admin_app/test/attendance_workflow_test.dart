@@ -195,11 +195,22 @@ void main() {
     expect(find.text('Grade 8 · A · 2 students'), findsOneWidget);
     final today = DateTime.now();
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     expect(
-      find.text('Attendance date · ${today.day} ${months[today.month - 1]} ${today.year}'),
+      find.text(
+          'Attendance date · ${today.day} ${months[today.month - 1]} ${today.year}'),
       findsOneWidget,
     );
     expect(find.text('0 of 2 marked'), findsOneWidget);

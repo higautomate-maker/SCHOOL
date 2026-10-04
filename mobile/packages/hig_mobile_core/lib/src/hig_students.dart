@@ -45,7 +45,8 @@ class _HigStudentDirectoryPageState extends State<HigStudentDirectoryPage> {
           error =
               'Student access is not available for this account. Contact your school office.';
         }
-        if (!students.any((student) => _studentClass(student) == selectedClass)) {
+        if (!students
+            .any((student) => _studentClass(student) == selectedClass)) {
           selectedClass = null;
         }
         loading = false;
