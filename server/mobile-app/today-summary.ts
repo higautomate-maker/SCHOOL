@@ -93,7 +93,7 @@ export function buildTodaySummary(
     push(items, admin, inputs.securityAlertsOpen, "security_alerts", "Security alerts", "Open items in the audit/security feed");
   } else if (role === "school" || role === "teacher") {
     push(items, modules.has("attendance"), inputs.attendanceToMark, "attendance_to_mark", "Attendance to mark", "Classes still to be marked today");
-    push(items, modules.has("academics") || modules.has("lesson_planner"), inputs.homeworkDueToday, "homework_due", "Homework due today", "Homework items due today");
+    push(items, modules.has("study_center"), inputs.homeworkDueToday, "homework_due", "Homework posted today", "Homework shared with your assigned classes");
     push(items, modules.has("ptm_meetings"), inputs.ptmToday, "ptm_today", "PTMs today", "Parent meetings scheduled today");
     push(items, modules.has("fees_finance"), inputs.feesOutstandingCount, "fees_outstanding", "Fees outstanding", "Invoices with a balance");
     push(items, true, inputs.tasksOverdue, "tasks_overdue", "Tasks overdue", "Workspace items past their due date");

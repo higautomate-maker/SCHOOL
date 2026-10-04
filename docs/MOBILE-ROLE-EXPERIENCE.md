@@ -19,16 +19,17 @@ The home screen is not a catalogue. It answers three questions first:
 2. What is important today?
 3. What can I do next with one tap?
 
-The complete authorized catalogue remains under **More**, grouped into
-role-specific categories with search. Recently opened
-items are stored on-device for convenience; they never grant access. Every
-destination still comes from the server-issued effective-access response.
+The authorized actions are exposed on Home and the role-specific bottom tabs;
+there is no duplicate More catalogue. Recently opened items are stored
+on-device for convenience; they never grant access. Every destination still
+comes from the server-issued effective-access response.
 
 ## Shared interaction rules
 
-- Four stable destinations: Home, More, Alerts and Profile.
-- Home contains no more than four primary role-specific actions. Secondary
-  modules stay discoverable under More without competing with daily work.
+- Four stable destinations: Home, Diary, Notices and Profile for parents;
+  Home, Attendance, Homework and Profile for teacher/staff users.
+- Home gives priority to authorized daily actions and actionable counts,
+  avoiding duplicate children/notices panels.
 - The server remains authoritative for all visible modules and actions.
 - No disabled or unlicensed feature is teased in the interface.
 - Daily actions use plain verbs: Mark attendance, View timetable, Track bus,
@@ -49,6 +50,19 @@ authorized actions: child overview, attendance, homework, timetable, fees and
 transport tracking. A parent can switch mental context by selecting a child,
 then open the relevant module. Requests for leave, PTM or school contact remain
 explicit, auditable actions.
+
+Current Android improvements: Today counts come from authorized records;
+leave requests choose a linked child and explicit first/last days; the school
+calendar groups authorized events, examinations and PTMs by date; Notices has
+a searchable Sent requests view; fee history distinguishes confirmed ledger
+payments from pending checkout. Home shows a linked child's active bus status
+and only displays an ETA for a fresh online location. Older published clients
+can still send their original undated leave request format during rollout.
+
+Remaining work is explicit: the Sent requests view is not a two-way chat,
+attachments need an approved school file-storage policy, and an official
+downloadable fee receipt needs school invoice/receipt numbering and tax policy.
+No UI may label a pending Razorpay checkout as a paid receipt.
 
 ## Student daily flow
 

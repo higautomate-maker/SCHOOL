@@ -408,6 +408,11 @@ class HigRoleDashboardPage extends StatelessWidget {
         ((home['notifications'] as Map?)?['unreadCount'] as num?)?.toInt() ??
         0;
     final today = (home['today'] as Map?)?.cast<String, dynamic>();
+    final transportOverview = ((home['transportOverview'] as List?) ?? const [])
+        .map((entry) => (entry as Map).cast<String, dynamic>())
+        .toList();
+    final transportTarget =
+        modules.where((item) => item['key'] == 'transport_tracking');
     final birthdays = (home['birthdays'] as List?) ?? const [];
     final homeTools = _orderedMatches(
       modules,
@@ -460,9 +465,19 @@ class HigRoleDashboardPage extends StatelessWidget {
                 alertCount: notifications.length,
                 moduleCount: modules.length,
               ),
-            if (today != null && role != 'school' && role != 'parent') ...[
+            if (today != null) ...[
               const SizedBox(height: 22),
-              _HigTodaySummary(summary: today),
+              _HigTodaySummary(
+                  summary: today, modules: modules, onOpen: onOpen),
+            ],
+            if (role == 'parent' &&
+                transportOverview.isNotEmpty &&
+                transportTarget.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              _HigTransportHomeCard(
+                children: transportOverview,
+                onOpen: () => onOpen(transportTarget.first),
+              ),
             ],
             if (birthdays.isNotEmpty) ...[
               const SizedBox(height: 22),
@@ -560,8 +575,15 @@ class HigRoleDashboardPage extends StatelessWidget {
 }
 
 class HigNotificationsView extends StatefulWidget {
-  const HigNotificationsView({super.key, required this.api});
+  const HigNotificationsView({
+    super.key,
+    required this.api,
+    this.availableStudents = const [],
+    this.canContactSchool = false,
+  });
   final HigMobileApi api;
+  final List<JsonMap> availableStudents;
+  final bool canContactSchool;
 
   @override
   State<HigNotificationsView> createState() => _HigNotificationsViewState();
@@ -569,7 +591,11 @@ class HigNotificationsView extends StatefulWidget {
 
 class _HigNotificationsViewState extends State<HigNotificationsView> {
   JsonMap? data;
+  List<JsonMap> sent = const [];
+  String? sentError;
   String? error;
+  int tab = 0;
+  String search = '';
 
   @override
   void initState() {
@@ -580,9 +606,26 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
   Future<void> load() async {
     try {
       final next = await widget.api.notifications();
+      List<JsonMap> nextSent = const [];
+      String? nextSentError;
+      if (widget.canContactSchool) {
+        try {
+          final response =
+              await widget.api.content(featureKey: 'contact_school');
+          nextSent =
+              (((response['content'] as Map?)?['records'] as List?) ?? const [])
+                  .map((entry) => (entry as Map).cast<String, dynamic>())
+                  .where((entry) => entry['workflow'] == 'contact school')
+                  .toList();
+        } catch (_) {
+          nextSentError = 'Messages could not be loaded. Pull to refresh.';
+        }
+      }
       if (mounted) {
         setState(() {
           data = next;
+          sent = nextSent;
+          sentError = nextSentError;
           error = null;
         });
       }
@@ -602,6 +645,14 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
           '${item['title']?.toString() ?? ''}\u0000${item['message']?.toString() ?? ''}';
       if (seenEntries.add(signature)) entries.add(item);
     }
+    final filteredNotices = entries.where((entry) {
+      final text = '${entry['title']} ${entry['message']}'.toLowerCase();
+      return text.contains(search.toLowerCase());
+    }).toList();
+    final filteredSent = sent.where((entry) {
+      final text = '${entry['title']} ${entry['description']}'.toLowerCase();
+      return text.contains(search.toLowerCase());
+    }).toList();
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: load,
@@ -612,26 +663,91 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
             const Text('Notices',
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900)),
             const SizedBox(height: 4),
-            const Text('School announcements and task updates',
+            const Text('School announcements and messages',
                 style: TextStyle(color: HigPalette.muted)),
             const SizedBox(height: 18),
-            if (error != null)
+            if (widget.canContactSchool) ...[
+              Row(children: [
+                ChoiceChip(
+                    label: const Text('From school'),
+                    selected: tab == 0,
+                    onSelected: (_) => setState(() => tab = 0)),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                    label: const Text('Sent requests'),
+                    selected: tab == 1,
+                    onSelected: (_) => setState(() => tab = 1)),
+              ]),
+              const SizedBox(height: 12),
+              TextField(
+                decoration: const InputDecoration(
+                  hintText: 'Search messages',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) => setState(() => search = value),
+              ),
+              const SizedBox(height: 12),
+              if (tab == 1)
+                FilledButton.icon(
+                  onPressed: widget.availableStudents.isEmpty
+                      ? null
+                      : () async {
+                          await Navigator.of(context)
+                              .push(MaterialPageRoute<void>(
+                            builder: (_) => ModuleDetailPage(
+                              api: widget.api,
+                              principalType: 'parent',
+                              item: const {
+                                'key': 'contact_school',
+                                'label': 'Messages to school'
+                              },
+                              availableStudents: widget.availableStudents,
+                              initialCompose: true,
+                            ),
+                          ));
+                          await load();
+                        },
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Write to school'),
+                ),
+              if (tab == 1) const SizedBox(height: 12),
+            ],
+            if (tab == 1 && sentError != null)
+              Text(sentError!)
+            else if (tab == 1 && filteredSent.isEmpty)
+              const _HigEmptyCard(
+                icon: Icons.mark_email_read_outlined,
+                title: 'No sent requests',
+                message:
+                    'Messages you send to school will appear here with their status.',
+              )
+            else if (tab == 1)
+              for (final entry in filteredSent)
+                Card(
+                    child: ListTile(
+                  title: Text(entry['title']?.toString() ?? 'School request'),
+                  subtitle: Text(entry['description']?.toString() ?? ''),
+                  trailing: _HigRoleBadge(
+                      label: _title(entry['status']?.toString() ?? 'open')),
+                ))
+            else if (error != null)
               _HigEmptyCard(
                   icon: Icons.cloud_off_rounded,
                   title: 'Notices unavailable',
-                  message: error!)
+                  message: 'Could not load notices. Pull to refresh.')
             else if (data == null)
               const Center(
                   child: Padding(
                       padding: EdgeInsets.all(40),
                       child: CircularProgressIndicator()))
-            else if (entries.isEmpty)
+            else if (filteredNotices.isEmpty)
               const _HigEmptyCard(
                   icon: Icons.notifications_none_rounded,
                   title: 'You’re all caught up',
                   message: 'New school notices will appear here.')
             else
-              for (final entry in entries) ...[
+              for (final entry in filteredNotices) ...[
                 _HigNotificationCard(
                   item: entry,
                   onTap: () async {
@@ -900,30 +1016,85 @@ class _HigBirthdaysCard extends StatelessWidget {
   }
 }
 
-class _HigTodaySummary extends StatelessWidget {
-  const _HigTodaySummary({required this.summary});
-  final Map<String, dynamic> summary;
+class _HigTransportHomeCard extends StatelessWidget {
+  const _HigTransportHomeCard({required this.children, required this.onOpen});
+  final List<JsonMap> children;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    final items = (summary['items'] as List?) ?? const [];
+    return Card(
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.directions_bus_rounded,
+                    color: HigPalette.blue),
+                const SizedBox(width: 8),
+                const Expanded(
+                    child: Text('School bus',
+                        style: TextStyle(
+                            fontSize: 17, fontWeight: FontWeight.w800))),
+                Text('Track bus',
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w700)),
+                const Icon(Icons.chevron_right),
+              ]),
+              const SizedBox(height: 8),
+              for (final child in children.take(2))
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(_status(child),
+                      style: const TextStyle(color: HigPalette.muted)),
+                ),
+              if (children.length > 2)
+                Text('${children.length - 2} more linked children',
+                    style: const TextStyle(color: HigPalette.muted)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _status(JsonMap child) {
+    final name = child['studentName']?.toString() ?? 'Your child';
+    if (child['tripActive'] != true) return '$name · No active trip';
+    if (child['freshness'] != 'online')
+      return '$name · Location delayed — ETA unavailable';
+    final eta = child['etaMinutes'];
+    if (eta is num) return '$name · Bus approximately ${eta.toInt()} min away';
+    return '$name · Bus is on route';
+  }
+}
+
+class _HigTodaySummary extends StatelessWidget {
+  const _HigTodaySummary({
+    required this.summary,
+    required this.modules,
+    required this.onOpen,
+  });
+  final Map<String, dynamic> summary;
+  final List<JsonMap> modules;
+  final Future<void> Function(JsonMap item) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = ((summary['items'] as List?) ?? const [])
+        .where((entry) => ((entry as Map)['count'] as num?)?.toInt() != 0)
+        .take(4)
+        .toList();
+    if (items.isEmpty) return const SizedBox.shrink();
     final title = _HigSectionTitle(
       title: 'Today',
-      subtitle: items.isEmpty
-          ? 'You are all caught up'
-          : 'Your priorities at a glance',
+      subtitle: 'What needs your attention',
     );
-    if (items.isEmpty) {
-      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        title,
-        const SizedBox(height: 10),
-        const _HigEmptyCard(
-          icon: Icons.check_circle_outline_rounded,
-          title: 'Nothing needs attention',
-          message: 'New tasks and alerts for today will appear here.',
-        ),
-      ]);
-    }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       title,
       const SizedBox(height: 12),
@@ -932,7 +1103,27 @@ class _HigTodaySummary extends StatelessWidget {
         runSpacing: 10,
         children: [
           for (final entry in items)
-            _HigTodayTile(item: (entry as Map).cast<String, dynamic>()),
+            Builder(builder: (context) {
+              final item = (entry as Map).cast<String, dynamic>();
+              const destinations = <String, String>{
+                'attendance_today': 'attendance',
+                'attendance_to_mark': 'attendance',
+                'homework_pending': 'homework',
+                'homework_due': 'diary',
+                'fees_due': 'fees_payments',
+                'fees_outstanding': 'fees_finance',
+                'exams_week': 'examinations',
+                'unread_notices': 'notices',
+              };
+              final key = destinations[item['key']];
+              final matches = modules.where((module) => module['key'] == key);
+              final target = matches.isEmpty ? null : matches.first;
+              return InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: target == null ? null : () => onOpen(target),
+                child: _HigTodayTile(item: item, actionable: target != null),
+              );
+            }),
         ],
       ),
     ]);
@@ -940,8 +1131,9 @@ class _HigTodaySummary extends StatelessWidget {
 }
 
 class _HigTodayTile extends StatelessWidget {
-  const _HigTodayTile({required this.item});
+  const _HigTodayTile({required this.item, required this.actionable});
   final Map<String, dynamic> item;
+  final bool actionable;
 
   @override
   Widget build(BuildContext context) {
@@ -965,11 +1157,15 @@ class _HigTodayTile extends StatelessWidget {
               style: TextStyle(
                   fontSize: 26, fontWeight: FontWeight.w900, color: accent)),
           const SizedBox(height: 4),
-          Text(label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style:
-                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+          Row(children: [
+            Expanded(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w800))),
+            if (actionable) const Icon(Icons.chevron_right, size: 17),
+          ]),
           const SizedBox(height: 3),
           Text(hint,
               maxLines: 2,
