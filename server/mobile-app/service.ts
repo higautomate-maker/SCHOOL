@@ -34,6 +34,8 @@ import { moduleKeys, type WorkspaceAction } from "../workspace/validation.ts";
 import { encryptMobilePushToken } from "./crypto.ts";
 import { buildTodaySummary, type TodayInputs, type TodayRole, type TodaySummary } from "./today-summary.ts";
 import { upcomingBirthdays } from "./birthdays.ts";
+import { diaryForDate } from "./diary.ts";
+import { repositoryBackend } from "../runtime/repository-backend.ts";
 import {
   listMobileTransportEvents,
   recordMobileTransportEvent,
@@ -110,6 +112,18 @@ export async function mobileHomeSnapshot(
   const students = await allowedStudents(principal, access, assignments);
   const notifications = await mobileNotifications(principal, assignments, 5, false);
   const today = await mobileTodaySummary(principal);
+  const transportOverview = principal.principalType === "parent"
+    && access.features.some((feature) => feature.key === "transport_tracking")
+    ? (await loadParentTransportTracking(principal, students.map((student) => student.id))).children.map((child) => ({
+      studentId: child.student.id,
+      studentName: child.student.fullName,
+      direction: child.trip?.direction ?? null,
+      journeyStatus: child.journey?.status ?? null,
+      tripActive: child.trip?.status === "active",
+      freshness: child.live?.freshness ?? "offline",
+      etaMinutes: child.live?.freshness === "online" ? child.live.etaMinutes : null,
+    }))
+    : [];
   // Birthdays are derived ONLY from already-authorized records (a student's own
   // record; a parent's linked children). First name + weekday only, no year.
   const birthdays =
@@ -134,6 +148,7 @@ export async function mobileHomeSnapshot(
     notifications,
     unreadNotices: notifications.unreadCount,
     today,
+    transportOverview,
     birthdays,
     transportEvents,
     offlinePolicy: {
@@ -160,6 +175,9 @@ export async function mobileTodaySummary(
   if (principal.principalType === "school") {
     role = "school";
     const operations = await mobileOperationsSnapshot(principal);
+    if (repositoryBackend() === "postgres" && moduleKeys.has("study_center")) {
+      inputs.homeworkDueToday = (await diaryForDate(principal, new Date().toISOString().slice(0, 10))).length;
+    }
     if (moduleKeys.has("fees_finance")) {
       inputs.feesOutstandingCount = operations.invoices.filter(
         (invoice) => invoice.amountPaise - invoice.paidPaise > 0,
@@ -174,6 +192,23 @@ export async function mobileTodaySummary(
     if (featureKeys.has("fees_payments") || featureKeys.has("fees_summary")) {
       inputs.feesDue = operations.invoices.filter(
         (invoice) => invoice.amountPaise - invoice.paidPaise > 0,
+      ).length;
+    }
+    if (repositoryBackend() === "postgres" && featureKeys.has("homework")) {
+      const diary = await diaryForDate(principal, new Date().toISOString().slice(0, 10));
+      inputs.homeworkPending = diary.filter((entry) => entry.completed !== true).length;
+    }
+    if (featureKeys.has("examinations") || featureKeys.has("results")) {
+      const assignments = await activeAssignmentsForPrincipal(principal);
+      const students = await allowedStudents(principal, access, assignments);
+      const exams = filterPersonaRecords(
+        (await getWorkspace(principal.tenantId, "Offline Examinations")).records,
+        students, assignments, "Offline Examinations",
+      );
+      const today = new Date().toISOString().slice(0, 10);
+      const nextWeek = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+      inputs.examsThisWeek = exams.filter((record) =>
+        record.recordDate >= today && record.recordDate <= nextWeek && record.status !== "cancelled"
       ).length;
     }
   } else {
@@ -301,20 +336,23 @@ export async function performMobileContentAction(
         : "contact_school";
     requireFeature(access, featureKey);
     const moduleKey = featureWorkspaceModule[featureKey];
+    const today = new Date().toISOString().slice(0, 10);
     const workspaceAction: WorkspaceAction = {
       action: "create_record",
       moduleKey: workspaceModuleKey(moduleKey),
       workflow: action.requestType.replaceAll("_", " "),
       title: action.title,
-      description: `[Mobile request for student ${action.studentId}] ${action.description}`,
-      recordDate: new Date().toISOString().slice(0, 10),
-      dueDate: "",
+      description: action.description,
+      recordDate: action.requestType === "leave_request" ? (action.startDate ?? today) : today,
+      dueDate: action.requestType === "leave_request" ? (action.endDate ?? today) : "",
       amountPaise: null,
-      assignee: "School Administration",
+      assignee: action.studentId,
       priority: action.requestType === "leave_request" ? "high" : "normal",
     } as WorkspaceAction;
     const workspace = await applyWorkspaceAction(principal.tenantId, workspaceAction, mobileActor(principal), idempotencyKey);
-    return { moduleKey, records: workspace.records, metrics: workspace.metrics };
+    const students = await allowedStudents(principal, access, assignments);
+    const records = filterPersonaRecords(workspace.records, students, assignments, moduleKey);
+    return { moduleKey, records, metrics: summarizeWorkspace(records) };
   }
 
   if (principal.principalType !== "school") throw new Error("School identity required");

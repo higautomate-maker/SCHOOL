@@ -24,6 +24,7 @@ part 'src/hig_attendance_ui.dart';
 part 'src/hig_connected_services.dart';
 part 'src/hig_diary.dart';
 part 'src/hig_students.dart';
+part 'src/hig_school_calendar.dart';
 
 const _uuid = Uuid();
 
@@ -1084,6 +1085,10 @@ class _HomeViewState extends State<HomeView> {
 
   Future<void> _openModule(JsonMap item) async {
     final key = item['key']?.toString() ?? '';
+    if (key == 'notices' && principalType != 'school') {
+      setState(() => index = 2);
+      return;
+    }
     final next = await HigRecentFeatureStore.record(principalType, key);
     if (mounted) setState(() => recentKeys = next);
     if (!mounted) return;
@@ -1097,31 +1102,40 @@ class _HomeViewState extends State<HomeView> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => principalType == 'parent' && key == 'transport_tracking'
-            ? ParentTransportTrackingPage(api: widget.api)
-            : principalType == 'school' && key == 'student_information'
-                ? HigStudentDirectoryPage(api: widget.api)
-                : key == 'homework' || key == 'diary'
-                    ? HigDiaryPage(api: widget.api, role: principalType)
-                    : principalType == 'school' &&
-                            key == 'attendance' &&
-                            item['canManage'] == true
-                        ? HigAttendancePage(
-                            api: widget.api,
-                            students: availableStudents,
-                            historyBuilder: (_) => ModuleDetailPage(
-                              api: widget.api,
-                              principalType: principalType,
-                              item: item,
-                              availableStudents: availableStudents,
-                            ),
-                          )
-                        : ModuleDetailPage(
-                            api: widget.api,
-                            principalType: principalType,
-                            item: item,
-                            availableStudents: availableStudents,
-                          ),
+        builder: (_) => (principalType == 'parent' ||
+                    principalType == 'student') &&
+                key == 'school_events'
+            ? HigSchoolCalendarPage(
+                api: widget.api,
+                features: ((roleHome['access'] as Map?)?['features'] as List?)
+                        ?.map((entry) => (entry as Map).cast<String, dynamic>())
+                        .toList() ??
+                    const [])
+            : principalType == 'parent' && key == 'transport_tracking'
+                ? ParentTransportTrackingPage(api: widget.api)
+                : principalType == 'school' && key == 'student_information'
+                    ? HigStudentDirectoryPage(api: widget.api)
+                    : key == 'homework' || key == 'diary'
+                        ? HigDiaryPage(api: widget.api, role: principalType)
+                        : principalType == 'school' &&
+                                key == 'attendance' &&
+                                item['canManage'] == true
+                            ? HigAttendancePage(
+                                api: widget.api,
+                                students: availableStudents,
+                                historyBuilder: (_) => ModuleDetailPage(
+                                  api: widget.api,
+                                  principalType: principalType,
+                                  item: item,
+                                  availableStudents: availableStudents,
+                                ),
+                              )
+                            : ModuleDetailPage(
+                                api: widget.api,
+                                principalType: principalType,
+                                item: item,
+                                availableStudents: availableStudents,
+                              ),
       ),
     );
   }
@@ -1203,7 +1217,12 @@ class _HomeViewState extends State<HomeView> {
         : [
             homePage,
             HigDiaryPage(api: widget.api, role: principalType),
-            HigNotificationsView(api: widget.api),
+            HigNotificationsView(
+              api: widget.api,
+              availableStudents: availableStudents,
+              canContactSchool:
+                  modules.any((item) => item['key'] == 'contact_school'),
+            ),
             profilePage,
           ];
     return Scaffold(
@@ -1723,11 +1742,13 @@ class ModuleDetailPage extends StatefulWidget {
     required this.principalType,
     required this.item,
     this.availableStudents = const [],
+    this.initialCompose = false,
   });
   final HigMobileApi api;
   final String principalType;
   final JsonMap item;
   final List<JsonMap> availableStudents;
+  final bool initialCompose;
 
   @override
   State<ModuleDetailPage> createState() => _ModuleDetailPageState();
@@ -1757,6 +1778,11 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
   void initState() {
     super.initState();
     load();
+    if (widget.initialCompose) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) parentRequest();
+      });
+    }
   }
 
   Future<void> load() async {
@@ -1774,9 +1800,9 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
   }
 
   Future<void> parentRequest() async {
-    final title = TextEditingController();
-    final description = TextEditingController();
-    final studentId = TextEditingController();
+    final isLeave = key == 'leave_requests';
+    String requestTitle = isLeave ? 'Leave request' : '';
+    String requestDescription = '';
     String? selectedStudentId = widget.availableStudents.length == 1
         ? widget.availableStudents.first['id']?.toString()
         : null;
@@ -1785,84 +1811,182 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
         : key == 'ptm_meetings'
             ? 'ptm_request'
             : 'contact_school';
+    DateTime startDate = DateTime.now();
+    DateTime endDate = startDate;
+    bool sending = false;
+    String? formError;
+    final form = GlobalKey<FormState>();
     await showDialog<void>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Send school request'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.availableStudents.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  initialValue: selectedStudentId,
-                  decoration: const InputDecoration(
-                    labelText: 'Student',
-                    prefixIcon: Icon(Icons.school_outlined),
-                  ),
-                  items: widget.availableStudents
-                      .map(
-                        (student) => DropdownMenuItem(
-                          value: student['id']?.toString(),
-                          child: Text(
-                            student['fullName']?.toString() ?? 'Student',
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, update) => AlertDialog(
+                title: Text(isLeave ? 'Request leave' : 'Contact your school'),
+                content: SingleChildScrollView(
+                  child: Form(
+                      key: form,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          DropdownButtonFormField<String>(
+                            initialValue: selectedStudentId,
+                            decoration: const InputDecoration(
+                              labelText: 'Student',
+                              prefixIcon: Icon(Icons.school_outlined),
+                            ),
+                            items: widget.availableStudents
+                                .map(
+                                  (student) => DropdownMenuItem(
+                                    value: student['id']?.toString(),
+                                    child: Text(
+                                      student['fullName']?.toString() ??
+                                          'Student',
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: sending
+                                ? null
+                                : (value) => selectedStudentId = value,
+                            validator: (value) => value == null
+                                ? 'Select a linked student'
+                                : null,
                           ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) => selectedStudentId = value,
-                )
-              else
-                TextField(
-                  controller: studentId,
-                  decoration: const InputDecoration(
-                    labelText: 'Linked student ID',
-                  ),
+                          const SizedBox(height: 10),
+                          if (isLeave) ...[
+                            ListTile(
+                              title: const Text('First day'),
+                              subtitle: Text(
+                                  _formatMobileDate(_mobileIsoDate(startDate))),
+                              trailing:
+                                  const Icon(Icons.calendar_today_outlined),
+                              onTap: sending
+                                  ? null
+                                  : () async {
+                                      final date = await showDatePicker(
+                                        context: dialogContext,
+                                        initialDate: startDate,
+                                        firstDate: DateTime.now().subtract(
+                                            const Duration(days: 365)),
+                                        lastDate: DateTime.now()
+                                            .add(const Duration(days: 365)),
+                                      );
+                                      if (date != null)
+                                        update(() {
+                                          startDate = date;
+                                          if (endDate.isBefore(startDate))
+                                            endDate = date;
+                                        });
+                                    },
+                            ),
+                            ListTile(
+                              title: const Text('Last day'),
+                              subtitle: Text(
+                                  _formatMobileDate(_mobileIsoDate(endDate))),
+                              trailing:
+                                  const Icon(Icons.calendar_today_outlined),
+                              onTap: sending
+                                  ? null
+                                  : () async {
+                                      final date = await showDatePicker(
+                                        context: dialogContext,
+                                        initialDate: endDate.isBefore(startDate)
+                                            ? startDate
+                                            : endDate,
+                                        firstDate: startDate,
+                                        lastDate: startDate
+                                            .add(const Duration(days: 90)),
+                                      );
+                                      if (date != null)
+                                        update(() => endDate = date);
+                                    },
+                            ),
+                          ],
+                          if (!isLeave)
+                            TextFormField(
+                              initialValue: requestTitle,
+                              onChanged: (value) => requestTitle = value,
+                              enabled: !sending,
+                              decoration:
+                                  const InputDecoration(labelText: 'Subject'),
+                              validator: (value) =>
+                                  (value?.trim().length ?? 0) < 2
+                                      ? 'Enter a subject'
+                                      : null,
+                            ),
+                          TextFormField(
+                            onChanged: (value) => requestDescription = value,
+                            enabled: !sending,
+                            maxLines: 3,
+                            maxLength: 1200,
+                            decoration: InputDecoration(
+                                labelText:
+                                    isLeave ? 'Reason for leave' : 'Message'),
+                            validator: (value) =>
+                                (value?.trim().length ?? 0) < 2
+                                    ? 'Enter a reason'
+                                    : null,
+                          ),
+                          if (formError != null)
+                            Text(formError!,
+                                style: TextStyle(
+                                    color: Theme.of(dialogContext)
+                                        .colorScheme
+                                        .error)),
+                        ],
+                      )),
                 ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: title,
-                decoration: const InputDecoration(labelText: 'Title'),
-              ),
-              TextField(
-                controller: description,
-                maxLines: 3,
-                decoration: const InputDecoration(labelText: 'Details'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final result = await widget.api.contentAction({
-                'action': 'parent_request',
-                'requestType': requestType,
-                'studentId': selectedStudentId ?? studentId.text.trim(),
-                'title': title.text.trim(),
-                'description': description.text.trim(),
-              });
-              if (dialogContext.mounted) Navigator.pop(dialogContext);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      result['queued'] == true
-                          ? 'Request queued for sync'
-                          : 'Request sent',
-                    ),
+                actions: [
+                  TextButton(
+                    onPressed:
+                        sending ? null : () => Navigator.pop(dialogContext),
+                    child: const Text('Cancel'),
                   ),
-                );
-              }
-            },
-            child: const Text('Send'),
-          ),
-        ],
-      ),
+                  FilledButton(
+                    onPressed: sending
+                        ? null
+                        : () async {
+                            if (!(form.currentState?.validate() ?? false))
+                              return;
+                            update(() {
+                              sending = true;
+                              formError = null;
+                            });
+                            try {
+                              final result = await widget.api.contentAction({
+                                'action': 'parent_request',
+                                'requestType': requestType,
+                                'studentId': selectedStudentId,
+                                'title': requestTitle.trim(),
+                                'description': requestDescription.trim(),
+                                if (isLeave)
+                                  'startDate': _mobileIsoDate(startDate),
+                                if (isLeave) 'endDate': _mobileIsoDate(endDate),
+                              });
+                              if (dialogContext.mounted)
+                                Navigator.pop(dialogContext);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context)
+                                    .showSnackBar(SnackBar(
+                                  content: Text(result['queued'] == true
+                                      ? 'Request saved offline. It will send when connected.'
+                                      : 'Request sent to your school.'),
+                                ));
+                                await load();
+                              }
+                            } catch (_) {
+                              if (dialogContext.mounted)
+                                update(() {
+                                  sending = false;
+                                  formError =
+                                      'Request could not be sent. Please retry.';
+                                });
+                            }
+                          },
+                    child: Text(sending ? 'Sending…' : 'Send request'),
+                  ),
+                ],
+              )),
     );
   }
 
@@ -2176,6 +2300,9 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
     final title = widget.item['label']?.toString() ?? key;
     final isChildOverview =
         widget.principalType == 'parent' && key == 'child_overview';
+    final isParentRequest = widget.principalType == 'parent' &&
+        const {'leave_requests', 'contact_school', 'ptm_meetings'}
+            .contains(key);
     final operations = (data?['operations'] as Map?)?.cast<String, dynamic>();
     final rawRecords = isOperations
         ? ((key == 'fees_finance' ||
@@ -2259,9 +2386,11 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                                       widget.principalType == 'parent' &&
                                               key == 'attendance'
                                           ? '${records.length} attendance ${records.length == 1 ? 'entry' : 'entries'} · History'
-                                          : isChildOverview
-                                              ? '${widget.availableStudents.length} linked ${widget.availableStudents.length == 1 ? 'child' : 'children'} · School profile'
-                                              : '${records.length} authorized ${records.length == 1 ? 'record' : 'records'} · ${widget.item['canManage'] == true ? 'Manage access' : 'View access'}',
+                                          : isParentRequest
+                                              ? '${records.length} ${records.length == 1 ? 'request' : 'requests'} · Track school responses'
+                                              : isChildOverview
+                                                  ? '${widget.availableStudents.length} linked ${widget.availableStudents.length == 1 ? 'child' : 'children'} · School profile'
+                                                  : '${records.length} authorized ${records.length == 1 ? 'record' : 'records'} · ${widget.item['canManage'] == true ? 'Manage access' : 'View access'}',
                                       style: const TextStyle(
                                         color: Colors.white70,
                                       ),
@@ -2291,10 +2420,14 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                             icon: visual.icon,
                             title: isChildOverview
                                 ? 'No linked children yet'
-                                : 'Nothing here yet',
+                                : isParentRequest
+                                    ? 'No requests yet'
+                                    : 'Nothing here yet',
                             message: isChildOverview
                                 ? 'Ask your school office to link your child to this parent account.'
-                                : 'Authorized $title updates will appear here when the school publishes them.',
+                                : isParentRequest
+                                    ? 'Send a request to your school and its status will appear here.'
+                                    : 'Authorized $title updates will appear here when the school publishes them.',
                           )
                         else
                           for (final entry in records) ...[
@@ -2350,8 +2483,27 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                                               if (classLabel.isNotEmpty)
                                                 classLabel,
                                             ].join(' • ')
-                                          : record['description']?.toString() ??
-                                              status,
+                                          : isParentRequest
+                                              ? [
+                                                  if ((record['recordDate']
+                                                              ?.toString() ??
+                                                          '')
+                                                      .isNotEmpty)
+                                                    _formatMobileDate(
+                                                        record['recordDate']
+                                                            .toString()),
+                                                  if ((record['dueDate']
+                                                              ?.toString() ??
+                                                          '')
+                                                      .isNotEmpty)
+                                                    'to ${_formatMobileDate(record['dueDate'].toString())}',
+                                                  record['description']
+                                                          ?.toString() ??
+                                                      '',
+                                                ].join(' · ')
+                                              : record['description']
+                                                      ?.toString() ??
+                                                  status,
                                       maxLines: 3,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -2366,6 +2518,17 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                             ),
                             const SizedBox(height: 10),
                           ],
+                        if (widget.principalType == 'parent' &&
+                            key == 'fees_payments') ...[
+                          const SizedBox(height: 16),
+                          HigPaymentHistory(
+                            payments:
+                                ((operations?['payments'] as List?) ?? const [])
+                                    .map((entry) =>
+                                        (entry as Map).cast<String, dynamic>())
+                                    .toList(),
+                          ),
+                        ],
                       ],
                     );
                   },

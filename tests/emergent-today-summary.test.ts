@@ -38,9 +38,9 @@ test("school: only enabled modules produce tiles (fail-closed)", () => {
   assert.ok(!present.has("ptm_today"), "PTM tile leaked without module");
 });
 
-test("teacher: academics gates homework tile; no fees module = no fees tile", () => {
+test("teacher: study center gates homework tile; no fees module = no fees tile", () => {
   const s = buildTodaySummary("teacher", {
-    moduleKeys: keys(["attendance", "academics"]),
+    moduleKeys: keys(["attendance", "study_center"]),
     attendanceToMark: 2,
     homeworkDueToday: 5,
     feesOutstandingCount: 9, // fees_finance not enabled -> omitted

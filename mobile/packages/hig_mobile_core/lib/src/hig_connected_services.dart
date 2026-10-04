@@ -120,6 +120,70 @@ class _HigVehicleMapState extends State<_HigVehicleMap> {
 
 String _feeMoney(num paise) => '₹${(paise / 100).toStringAsFixed(2)}';
 
+class HigPaymentHistory extends StatelessWidget {
+  const HigPaymentHistory({super.key, required this.payments});
+  final List<JsonMap> payments;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const Text('Payment history',
+          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 4),
+      const Text('Payments confirmed in the school ledger',
+          style: TextStyle(color: HigPalette.muted)),
+      const SizedBox(height: 10),
+      if (payments.isEmpty)
+        const Card(
+            child: Padding(
+          padding: EdgeInsets.all(18),
+          child: Text(
+              'No confirmed payments yet. Pending checkout payments are not receipts.'),
+        ))
+      else
+        for (final payment in payments)
+          Card(
+              child: ListTile(
+            leading: const Icon(Icons.receipt_long_outlined),
+            title: Text(_feeMoney((payment['amountPaise'] as num?) ?? 0)),
+            subtitle: Text([
+              payment['studentName']?.toString() ?? '',
+              if ((payment['paidOn']?.toString() ?? '').isNotEmpty)
+                _formatMobileDate(payment['paidOn'].toString()),
+              payment['method']?.toString() ?? '',
+            ].where((part) => part.isNotEmpty).join(' · ')),
+            trailing:
+                const Icon(Icons.check_circle_outline, color: HigPalette.teal),
+            onTap: () => showModalBottomSheet<void>(
+              context: context,
+              builder: (context) => SafeArea(
+                  child: Padding(
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Confirmed payment',
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 12),
+                      Text('Amount: ' +
+                          _feeMoney((payment['amountPaise'] as num?) ?? 0)),
+                      Text('Date: ' + (payment['paidOn']?.toString() ?? '—')),
+                      Text('Method: ' + (payment['method']?.toString() ?? '—')),
+                      Text('Reference: ' +
+                          (payment['reference']?.toString() ?? '—')),
+                      const SizedBox(height: 8),
+                      const Text(
+                          'For an official fee receipt, contact your school office.'),
+                    ]),
+              )),
+            ),
+          )),
+    ]);
+  }
+}
+
 class _HigInvoiceCard extends StatefulWidget {
   const _HigInvoiceCard(
       {required this.api,

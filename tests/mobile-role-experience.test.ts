@@ -79,7 +79,8 @@ test("role workspace remains server-authoritative and permission-aware", () => {
 test("teacher and parent actions use task language and guided selection", () => {
   assert.match(core, /Mark attendance/);
   assert.match(core, /Create fee invoice/);
-  assert.match(core, /Send school request/);
+  assert.match(core, /Request leave/);
+  assert.match(core, /Contact your school/);
   assert.match(core, /DropdownButtonFormField<String>/);
   assert.match(core, /availableStudents/);
 });

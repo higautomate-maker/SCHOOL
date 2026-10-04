@@ -90,5 +90,18 @@ export const mobileContentActionSchema = z.discriminatedUnion("action", [
     studentId: z.string().uuid(),
     title: z.string().trim().min(2).max(140),
     description: z.string().trim().min(2).max(1200),
+    startDate: z.iso.date().optional(),
+    endDate: z.iso.date().optional(),
+  }).superRefine((value, context) => {
+    if (value.requestType !== "leave_request") return;
+    // Older published Android builds did not send leave dates. Keep those
+    // requests valid until their users receive the updated app.
+    if (!value.startDate && !value.endDate) return;
+    if (!value.startDate || !value.endDate || value.endDate < value.startDate) {
+      context.addIssue({ code: "custom", path: ["endDate"], message: "Select a valid leave date range" });
+      return;
+    }
+    const days = Math.round((Date.parse(value.endDate) - Date.parse(value.startDate)) / 86_400_000);
+    if (days > 90) context.addIssue({ code: "custom", path: ["endDate"], message: "Leave cannot exceed 91 days" });
   }),
 ]);
