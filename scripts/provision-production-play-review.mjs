@@ -28,6 +28,8 @@ const ids = Object.freeze({
   administrator: "b3000000-0000-4000-8000-000000000001",
   parent: "b3000000-0000-4000-8000-000000000002",
   driverUser: "b3000000-0000-4000-8000-000000000003",
+  teacher: "b3000000-0000-4000-8000-000000000004",
+  teacherRole: "b3100000-0000-4000-8000-000000000001",
   parentIdentity: "b4000000-0000-4000-8000-000000000001",
   driverIdentity: "b4000000-0000-4000-8000-000000000002",
   campus: "b5000000-0000-4000-8000-000000000001",
@@ -46,15 +48,20 @@ const ids = Object.freeze({
   studentTransport: "b8500000-0000-4000-8000-000000000001",
   feeInvoice: "b9000000-0000-4000-8000-000000000001",
   diary: "ba000000-0000-4000-8000-000000000001",
+  classTeacherAssignment: "ba100000-0000-4000-8000-000000000001",
+  subjectTeacherAssignment: "ba100000-0000-4000-8000-000000000002",
 });
 
-const parentEmail = "play.parent.review@higschool.test";
-const driverEmail = "play.driver.review@higschool.test";
-const password = () => `${randomBytes(18).toString("base64url")}!9Aa`;
-const parentPassword = password();
-const driverPassword = password();
-const parentHash = await hashPassword(parentPassword);
-const driverHash = await hashPassword(driverPassword);
+const teacherEmail = "teacher@test.higaai.com";
+const parentEmail = "parent@test.higaai.com";
+const driverEmail = "driver@test.higaai.com";
+const sharedPassword = process.env.HIG_PLAY_REVIEW_SHARED_PASSWORD
+  ?? `${randomBytes(18).toString("base64url")}!9Aa`;
+assert.match(sharedPassword, /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,128}$/,
+  "HIG_PLAY_REVIEW_SHARED_PASSWORD must be 12-128 characters and include upper, lower, number and symbol");
+const teacherHash = await hashPassword(sharedPassword);
+const parentHash = await hashPassword(sharedPassword);
+const driverHash = await hashPassword(sharedPassword);
 
 const reservation = await open(outputPath, "wx", 0o600);
 await reservation.close();
@@ -85,16 +92,20 @@ try {
   await q(`INSERT INTO users (id,email,full_name,status) VALUES
     ($1::uuid,'play.admin.review@higschool.test','HIGA Play Review Administrator','active'),
     ($2::uuid,$4::text,'Aarav Review Parent','active'),
-    ($3::uuid,$5::text,'HIGA Review Driver','active')
-    ON CONFLICT (id) DO UPDATE SET status='active', updated_at=now()`,
-    [ids.administrator, ids.parent, ids.driverUser, parentEmail, driverEmail]);
+    ($3::uuid,$5::text,'HIGA Review Driver','active'),
+    ($6::uuid,$7::text,'HIGA Review Teacher','active')
+    ON CONFLICT (id) DO UPDATE SET email=EXCLUDED.email,full_name=EXCLUDED.full_name,
+      status='active',updated_at=now()`,
+    [ids.administrator, ids.parent, ids.driverUser, parentEmail, driverEmail,
+      ids.teacher, teacherEmail]);
 
   await q(`INSERT INTO auth_credentials (user_id,password_hash,must_change_password,disabled_at)
-    VALUES ($1::uuid,$3::text,false,NULL),($2::uuid,$4::text,false,NULL)
+    VALUES ($1::uuid,$4::text,false,NULL),($2::uuid,$5::text,false,NULL),
+           ($3::uuid,$6::text,false,NULL)
     ON CONFLICT (user_id) DO UPDATE SET password_hash=EXCLUDED.password_hash,
       credential_version=auth_credentials.credential_version+1,
       must_change_password=false,disabled_at=NULL,password_changed_at=now(),updated_at=now()`,
-    [ids.parent, ids.driverUser, parentHash, driverHash]);
+    [ids.parent, ids.driverUser, ids.teacher, parentHash, driverHash, teacherHash]);
 
   await q(`INSERT INTO plans (id,name,monthly_price_paise,annual_price_paise,active)
     VALUES ($1::uuid,'Play Review',0,0,true)
@@ -102,6 +113,26 @@ try {
   await q(`INSERT INTO tenants (id,name,slug,status,country_code)
     VALUES ($1::uuid,'HIGA Play Review School','higa-play-review-school','active','IN')
     ON CONFLICT (id) DO UPDATE SET status='active',updated_at=now()`, [ids.tenant]);
+  await q(`INSERT INTO roles (id,tenant_id,name,key,system,description,created_by)
+    VALUES ($1::uuid,$2::uuid,'Teacher','teacher',true,
+      'Synthetic Google Play reviewer teacher role',$3::uuid)
+    ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name,key=EXCLUDED.key,
+      description=EXCLUDED.description,updated_at=now()`,
+    [ids.teacherRole, ids.tenant, ids.administrator]);
+  const teacherPermissions = ["academics.view","academics.manage","students.view",
+    "attendance.view","attendance.manage","exams.view","lesson_planner.view",
+    "lesson_planner.manage","assessment.view","assessment.manage","study_center.view",
+    "study_center.manage","communication.view","ptm_meetings.view","operations.view",
+    "workspace.view"];
+  for (const permission of teacherPermissions) {
+    await q(`INSERT INTO role_permissions (tenant_id,role_id,permission)
+      VALUES ($1::uuid,$2::uuid,$3::text) ON CONFLICT DO NOTHING`,
+      [ids.tenant, ids.teacherRole, permission]);
+  }
+  await q(`INSERT INTO memberships (tenant_id,user_id,role_key,status)
+    VALUES ($1::uuid,$2::uuid,'teacher','active')
+    ON CONFLICT (tenant_id,user_id,role_key) DO UPDATE SET status='active',updated_at=now()`,
+    [ids.tenant, ids.teacher]);
   await q(`INSERT INTO campuses (id,tenant_id,name,code,city)
     VALUES ($1::uuid,$2::uuid,'Review Campus','MAIN','New Delhi')
     ON CONFLICT (id) DO UPDATE SET updated_at=now()`, [ids.campus, ids.tenant]);
@@ -115,7 +146,8 @@ try {
     [ids.subscription, ids.tenant, ids.plan]);
 
   const modules = ["student_information","attendance","academics","examinations",
-    "fees_finance","communication","front_office","transport"];
+    "fees_finance","communication","front_office","transport","lesson_planner",
+    "assessment","study_center","ptm_meetings"];
   for (const moduleKey of modules) {
     await q(`INSERT INTO module_policies
       (tenant_id,module_key,enabled,source,configuration,updated_by)
@@ -158,6 +190,14 @@ try {
     VALUES ($1::uuid,$2::uuid,'Mathematics','MATH','core',true)
     ON CONFLICT (tenant_id,code) DO UPDATE SET active=true,updated_at=now()`,
     [ids.subject, ids.tenant]);
+  await q(`INSERT INTO teacher_assignments
+    (id,tenant_id,academic_session_id,user_id,class_id,section_id,kind,subject_id,active,updated_by)
+    VALUES
+      ($1::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,$7::uuid,'class_teacher',NULL,true,$5::uuid),
+      ($2::uuid,$3::uuid,$4::uuid,$5::uuid,$6::uuid,$7::uuid,'subject_teacher',$8::uuid,true,$5::uuid)
+    ON CONFLICT (id) DO UPDATE SET active=true,updated_by=EXCLUDED.updated_by,updated_at=now()`,
+    [ids.classTeacherAssignment, ids.subjectTeacherAssignment, ids.tenant, ids.session,
+      ids.teacher, ids.schoolClass, ids.section, ids.subject]);
   await q(`INSERT INTO students
     (id,tenant_id,campus_id,academic_session_id,admission_number,roll_number,
      first_name,last_name,gender,date_of_birth,admission_date,class_name,section_name,
@@ -274,24 +314,30 @@ try {
   const text = [
     "HIGA Google Play production reviewer accounts",
     "Synthetic records only. Do not use for normal school operations.",
-    `tenant_id=${ids.tenant}`,
+    "school_id=HIGA-TEST",
+    `tenant_uuid=${ids.tenant}`,
+    "",
+    "[teacher]",
+    `email=${teacherEmail}`,
+    `password=${sharedPassword}`,
+    "principal_type=school",
     "",
     "[parent]",
     `email=${parentEmail}`,
-    `password=${parentPassword}`,
+    `password=${sharedPassword}`,
     "principal_type=parent",
     "",
     "[transporter]",
     `email=${driverEmail}`,
-    `password=${driverPassword}`,
+    `password=${sharedPassword}`,
     "principal_type=transporter",
     "",
   ].join("\n");
   await writeFile(outputPath, text, { flag: "w", mode: 0o600 });
   await chmod(outputPath, 0o600);
   console.log("PRODUCTION_PLAY_REVIEW_FIXTURE=PROVISIONED");
-  console.log(`TENANT_ID=${ids.tenant}`);
-  console.log("PERSONAS=parent,transporter");
+  console.log("SCHOOL_ID=HIGA-TEST");
+  console.log("PERSONAS=teacher,parent,transporter");
   console.log("Credentials were written to the protected output file and were not printed.");
 } catch (error) {
   if (connected) await client.query("ROLLBACK").catch(() => undefined);

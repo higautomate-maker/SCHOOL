@@ -485,6 +485,26 @@ test("mobile service schemas are strict and preserve approved principals", () =>
   );
 
   assert.equal(
+    parseMobileLoginInput({
+      email: "teacher@test.higaai.com",
+      password: "HigaTest@2026",
+      tenantId: " HIGA-TEST ",
+      principalType: "school",
+    }).tenantId,
+    "b1000000-0000-4000-8000-000000000001",
+  );
+
+  assert.equal(
+    mobileLoginInputSchema.safeParse({
+      email: "teacher@test.higaai.com",
+      password: "HigaTest@2026",
+      tenantId: "another-school-code",
+      principalType: "school",
+    }).success,
+    false,
+  );
+
+  assert.equal(
     mobileLoginInputSchema.safeParse({
       email: "parent@example.invalid",
       password: "password",
