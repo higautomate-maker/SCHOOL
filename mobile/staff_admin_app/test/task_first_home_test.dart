@@ -41,4 +41,28 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('teacher home collapses duplicate module keys', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: HigRoleDashboardPage(
+          home: const {
+            'principalType': 'school',
+            'user': {'name': 'Teacher Tester'},
+            'students': [],
+          },
+          modules: const [
+            {'key': 'examinations', 'label': 'Examinations'},
+            {'key': 'examinations', 'label': 'Examinations'},
+          ],
+          recentKeys: const [],
+          onRefresh: () async {},
+          onOpen: (_) async {},
+          onAlerts: () {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Examinations'), findsOneWidget);
+  });
 }

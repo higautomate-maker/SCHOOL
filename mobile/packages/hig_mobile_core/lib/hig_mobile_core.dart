@@ -2174,6 +2174,8 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
   @override
   Widget build(BuildContext context) {
     final title = widget.item['label']?.toString() ?? key;
+    final isChildOverview =
+        widget.principalType == 'parent' && key == 'child_overview';
     final operations = (data?['operations'] as Map?)?.cast<String, dynamic>();
     final rawRecords = isOperations
         ? ((key == 'fees_finance' ||
@@ -2257,6 +2259,8 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                                       widget.principalType == 'parent' &&
                                               key == 'attendance'
                                           ? '${records.length} attendance ${records.length == 1 ? 'entry' : 'entries'} · History'
+                                          : isChildOverview
+                                              ? '${widget.availableStudents.length} linked ${widget.availableStudents.length == 1 ? 'child' : 'children'} · School profile'
                                           : '${records.length} authorized ${records.length == 1 ? 'record' : 'records'} · ${widget.item['canManage'] == true ? 'Manage access' : 'View access'}',
                                       style: const TextStyle(
                                         color: Colors.white70,
@@ -2272,12 +2276,25 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                         if (widget.principalType == 'parent' &&
                             key == 'attendance')
                           ParentAttendanceCalendarPage(records: records)
+                        else if (isChildOverview &&
+                            widget.availableStudents.isNotEmpty)
+                          for (var index = 0;
+                              index < widget.availableStudents.length;
+                              index++) ...[
+                            _HigStudentPill(
+                                student: widget.availableStudents[index]),
+                            if (index < widget.availableStudents.length - 1)
+                              const SizedBox(height: 10),
+                          ]
                         else if (records.isEmpty)
                           _HigEmptyCard(
                             icon: visual.icon,
-                            title: 'Nothing here yet',
-                            message:
-                                'Authorized $title updates will appear here when the school publishes them.',
+                            title: isChildOverview
+                                ? 'No linked children yet'
+                                : 'Nothing here yet',
+                            message: isChildOverview
+                                ? 'Ask your school office to link your child to this parent account.'
+                                : 'Authorized $title updates will appear here when the school publishes them.',
                           )
                         else
                           for (final entry in records) ...[

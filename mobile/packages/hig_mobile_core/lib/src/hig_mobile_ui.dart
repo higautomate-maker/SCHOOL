@@ -534,14 +534,20 @@ class HigRoleDashboardPage extends StatelessWidget {
 
   static List<JsonMap> _orderedMatches(
       List<JsonMap> modules, List<String> keys) {
-    final byKey = {for (final item in modules) item['key']?.toString(): item};
+    final byKey = <String, JsonMap>{};
+    for (final item in modules) {
+      final key = item['key']?.toString().trim() ?? '';
+      if (key.isNotEmpty) byKey.putIfAbsent(key, () => item);
+    }
     final result = <JsonMap>[];
+    final addedKeys = <String>{};
     for (final key in keys) {
       final item = byKey[key];
-      if (item != null) result.add(item);
+      if (item != null && addedKeys.add(key)) result.add(item);
     }
     for (final item in modules) {
-      if (!result.contains(item)) result.add(item);
+      final key = item['key']?.toString().trim() ?? '';
+      if (key.isEmpty || addedKeys.add(key)) result.add(item);
     }
     return result;
   }
@@ -587,7 +593,15 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
 
   @override
   Widget build(BuildContext context) {
-    final entries = (data?['notifications'] as List?) ?? const [];
+    final rawEntries = (data?['notifications'] as List?) ?? const [];
+    final entries = <JsonMap>[];
+    final seenEntries = <String>{};
+    for (final entry in rawEntries) {
+      final item = (entry as Map).cast<String, dynamic>();
+      final signature =
+          '${item['title']?.toString() ?? ''}\u0000${item['message']?.toString() ?? ''}';
+      if (seenEntries.add(signature)) entries.add(item);
+    }
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: load,
@@ -619,7 +633,7 @@ class _HigNotificationsViewState extends State<HigNotificationsView> {
             else
               for (final entry in entries) ...[
                 _HigNotificationCard(
-                  item: (entry as Map).cast<String, dynamic>(),
+                  item: entry,
                   onTap: () async {
                     if (entry['read'] == true) return;
                     await widget.api
