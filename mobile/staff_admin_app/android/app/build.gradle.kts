@@ -32,6 +32,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["higAppLabel"] = "HIGA Teacher"
     }
 
     signingConfigs {
@@ -44,6 +45,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Side-by-side phone audit. Never replaces or alters the Play app.
+            if (System.getenv("HIG_ANDROID_AUDIT_BUILD") == "true") {
+                applicationIdSuffix = ".audit"
+                versionNameSuffix = "-audit"
+                manifestPlaceholders["higAppLabel"] = "HIGA Teacher Test"
+            }
+        }
         release {
             // Never silently publish a debug-signed release. Gradle's signing
             // validation rejects missing or invalid upload credentials.
