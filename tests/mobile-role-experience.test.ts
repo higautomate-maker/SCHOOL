@@ -26,12 +26,17 @@ test("Teacher store identity uses HIGA branding instead of Flutter defaults", ()
     "mobile/staff_admin_app/android/app/src/main/AndroidManifest.xml",
     "utf8",
   );
+  const gradle = readFileSync(
+    "mobile/staff_admin_app/android/app/build.gradle.kts",
+    "utf8",
+  );
   const app = readFileSync("mobile/staff_admin_app/lib/main.dart", "utf8");
   const icon = readFileSync(
     "mobile/staff_admin_app/assets/branding/higa_teacher_icon.svg",
     "utf8",
   );
-  assert.match(manifest, /android:label="HIGA Teacher"/);
+  assert.match(manifest, /android:label="\$\{higAppLabel\}"/);
+  assert.match(gradle, /manifestPlaceholders\["higAppLabel"\] = "HIGA Teacher"/);
   assert.match(app, /title: 'HIGA Teacher'/);
   assert.match(icon, /#17365D/);
   assert.match(icon, /#25A7C7/);
