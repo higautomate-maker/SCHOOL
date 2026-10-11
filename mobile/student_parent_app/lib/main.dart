@@ -11,7 +11,7 @@ void main() {
   runApp(
     const HigMobileApp(
       config: HigMobileAppConfig(
-        title: 'Hig Student & Parent',
+        title: 'HIGA Parent & Student',
         appId: 'com.higautomation.higschool.studentparent',
         allowedPrincipalTypes: ['student', 'parent'],
         apiBaseUrl: apiBaseUrl,

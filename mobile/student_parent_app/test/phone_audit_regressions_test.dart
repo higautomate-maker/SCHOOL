@@ -70,4 +70,65 @@ void main() {
     expect(find.text('4 Oct 2026 · Present'), findsOneWidget);
     api.close();
   });
+
+  testWidgets('dashboard failure explains recovery and retries on tap', (
+    tester,
+  ) async {
+    final api = _PhoneAuditApi();
+    var retries = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeView(
+          config: const HigMobileAppConfig(
+            title: 'HIGA Parent & Student',
+            appId: 'parent-test',
+            allowedPrincipalTypes: ['parent'],
+            apiBaseUrl: 'https://example.invalid',
+          ),
+          api: api,
+          home: null,
+          loadError:
+              'Couldn’t connect to school. Check your internet connection and try again.',
+          onRefresh: () async => retries++,
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Your school dashboard isn’t ready'), findsOneWidget);
+    expect(
+        find.textContaining('Check your internet connection'), findsOneWidget);
+    await tester.tap(find.text('Try again'));
+    expect(retries, 1);
+    api.close();
+  });
+
+  testWidgets('dashboard retry shows progress and prevents repeat taps', (
+    tester,
+  ) async {
+    final api = _PhoneAuditApi();
+    var retries = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: HomeView(
+          config: const HigMobileAppConfig(
+            title: 'HIGA Parent & Student',
+            appId: 'parent-test',
+            allowedPrincipalTypes: ['parent'],
+            apiBaseUrl: 'https://example.invalid',
+          ),
+          api: api,
+          home: null,
+          isRefreshing: true,
+          onRefresh: () async => retries++,
+          onLogout: () async {},
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Connecting…'), findsOneWidget);
+    await tester.tap(find.text('Connecting…'), warnIfMissed: false);
+    expect(retries, 0);
+    api.close();
+  });
 }
