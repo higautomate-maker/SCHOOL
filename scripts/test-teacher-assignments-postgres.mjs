@@ -98,7 +98,7 @@ try {
   assert.equal((await diaryForDate(parentPrincipal,'2026-09-07')).length,0);
   assert.equal(await latestLinkedDiaryDate(parentPrincipal,'2026-09-05'),null);
   assert.equal(await latestLinkedDiaryDate(parentPrincipal,'2026-09-07'),'2026-09-06');
-  await assert.rejects(latestLinkedDiaryDate(teacherPrincipal,'2026-09-07'),/Linked student access required/);
+  assert.throws(() => latestLinkedDiaryDate(teacherPrincipal,'2026-09-07'),/Linked student access required/);
   await changeDiary(parentPrincipal,{action:'complete',diaryId:homework.id,studentId:lessonInput.entries[0].studentId,completed:true});
   assert.equal((await diaryForDate(parentPrincipal,'2026-09-06'))[0].completed,true);
   await assert.rejects(changeDiary(parentPrincipal,{...homework,id:'85000000-0000-4000-8000-000000000002'}),/denied/);
