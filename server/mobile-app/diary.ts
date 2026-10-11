@@ -37,6 +37,28 @@ export function diaryForDate(principal: MobileAuthenticatedPrincipal, date: stri
   });
 }
 
+export function latestLinkedDiaryDate(principal: MobileAuthenticatedPrincipal, onOrBefore: string) {
+  if (principal.principalType !== 'parent' && principal.principalType !== 'student') {
+    throw new Error('Linked student access required');
+  }
+  return withTenantDatabase(principal.tenantId, async (_db, client) => {
+    await client.query("SELECT set_config('app.mobile_auth_service','true',true)");
+    const result = await client.query(`SELECT MAX(d.record_date)::text AS date
+      FROM mobile_diary d
+      JOIN school_classes c ON c.tenant_id=d.tenant_id AND c.id=d.class_id
+      JOIN class_sections cs ON cs.tenant_id=d.tenant_id AND cs.id=d.section_id
+      JOIN students s ON s.tenant_id=d.tenant_id
+        AND s.academic_session_id=d.academic_session_id
+        AND s.class_name=c.name AND s.section_name=cs.name
+      JOIN mobile_identity_assignments a ON a.tenant_id=s.tenant_id
+        AND a.resource_id=s.id AND a.resource_type='student' AND a.status='active'
+      WHERE d.tenant_id=$1::uuid AND a.mobile_identity_id=$2::uuid
+        AND d.record_date <= $3::date`,
+      [principal.tenantId, principal.mobileIdentityId, onOrBefore]);
+    return result.rows[0]?.date ?? null;
+  });
+}
+
 export function changeDiary(principal: MobileAuthenticatedPrincipal, input: z.infer<typeof diaryAction>) {
   return withTenantDatabase(principal.tenantId, async (_db,client)=>{
     await client.query("SELECT set_config('app.mobile_auth_service','true',true)");

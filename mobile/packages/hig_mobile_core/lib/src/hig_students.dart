@@ -120,7 +120,7 @@ class _HigStudentDirectoryPageState extends State<HigStudentDirectoryPage> {
                           onChanged: (value) => setState(() =>
                               selectedClass = value == '' ? null : value)),
                       const SizedBox(height: 16),
-                      Text('${visible.length} students',
+                      Text('${visible.length} ${visible.length == 1 ? 'student' : 'students'}',
                           style: const TextStyle(fontWeight: FontWeight.bold)),
                       if (visible.isEmpty)
                         const Padding(

@@ -53,6 +53,7 @@ void main() {
     expect(find.text('2 students'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'GF-001');
     await tester.pumpAndSettle();
+    expect(find.text('1 student'), findsOneWidget);
     expect(find.text('Anaya Sharma'), findsOneWidget);
     expect(find.text('Diya Patel'), findsNothing);
     await tester.tap(find.text('Anaya Sharma'));

@@ -37,6 +37,8 @@ void main() {
             principalType: 'parent',
             item: {'key': 'fees_payments', 'label': 'Fees'})));
     await tester.pumpAndSettle();
+    expect(find.text('1 item from your school'), findsOneWidget);
+    expect(find.textContaining('authorized record'), findsNothing);
     expect(find.text('Pay securely'), findsOneWidget);
     expect(
         tester

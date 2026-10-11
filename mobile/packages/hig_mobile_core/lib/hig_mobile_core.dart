@@ -341,6 +341,9 @@ class HigMobileApi {
 
   Future<JsonMap> diary(String date) =>
       _cachedGet('/api/v1/mobile/diary?date=$date', 'diary:$date');
+  Future<JsonMap> latestDiaryDate(String onOrBefore) => _cachedGet(
+      '/api/v1/mobile/diary?latestOnOrBefore=$onOrBefore',
+      'diary-latest:$onOrBefore');
   Future<JsonMap> diaryUpdate(JsonMap body) =>
       write('/api/v1/mobile/diary', body, queueWhenOffline: false);
   Future<JsonMap> profilePhoto() =>
@@ -2390,7 +2393,7 @@ class _ModuleDetailPageState extends State<ModuleDetailPage> {
                                               ? '${records.length} ${records.length == 1 ? 'request' : 'requests'} · Track school responses'
                                               : isChildOverview
                                                   ? '${widget.availableStudents.length} linked ${widget.availableStudents.length == 1 ? 'child' : 'children'} · School profile'
-                                                  : '${records.length} authorized ${records.length == 1 ? 'record' : 'records'} · ${widget.item['canManage'] == true ? 'Manage access' : 'View access'}',
+                                                  : '${records.length} ${records.length == 1 ? 'item' : 'items'} from your school',
                                       style: const TextStyle(
                                         color: Colors.white70,
                                       ),

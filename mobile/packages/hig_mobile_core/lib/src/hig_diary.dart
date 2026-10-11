@@ -11,8 +11,9 @@ class HigDiaryPage extends StatefulWidget {
 class _HigDiaryPageState extends State<HigDiaryPage> {
   DateTime date = DateTime.now();
   List<JsonMap> records = [];
-  bool loading = true, busy = false;
+  bool loading = true, busy = false, findingLatest = false;
   bool offline = false;
+  bool noPublishedHomework = false;
   String? error;
   @override
   void initState() {
@@ -25,6 +26,7 @@ class _HigDiaryPageState extends State<HigDiaryPage> {
       loading = true;
       error = null;
       records = [];
+      noPublishedHomework = false;
     });
     try {
       final value = await widget.api.diary(_mobileIsoDate(date));
@@ -46,6 +48,34 @@ class _HigDiaryPageState extends State<HigDiaryPage> {
               : 'Diary could not be loaded. Please retry.';
         });
       }
+    }
+  }
+
+  Future<void> showLatestHomework() async {
+    setState(() {
+      findingLatest = true;
+      error = null;
+    });
+    try {
+      final result = await widget.api.latestDiaryDate(_mobileIsoDate(date));
+      if (!mounted) return;
+      if (result['offline'] == true) {
+        setState(() => error = 'Connect to find the latest homework.');
+        return;
+      }
+      final latest = result['date']?.toString();
+      if (latest == null) {
+        setState(() => noPublishedHomework = true);
+      } else {
+        setState(() => date = DateTime.parse(latest));
+        await load();
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => error = 'Could not find recent homework. Please retry.');
+      }
+    } finally {
+      if (mounted) setState(() => findingLatest = false);
     }
   }
 
@@ -304,9 +334,26 @@ class _HigDiaryPageState extends State<HigDiaryPage> {
                             if (records.isEmpty && error == null)
                               Padding(
                                   padding: EdgeInsets.all(32),
-                                  child: Text(widget.role == 'school'
-                                      ? 'No homework published for this date.'
-                                      : 'No homework assigned for this date. Choose another day to view its diary.')),
+                                  child: Column(children: [
+                                    Text(widget.role == 'school'
+                                        ? 'No homework published for this date. Tap Add homework to share an assignment.'
+                                        : noPublishedHomework
+                                            ? 'Your school has not published homework for your linked children yet.'
+                                            : 'No homework assigned for this date.'),
+                                    if (widget.role != 'school' &&
+                                        !offline &&
+                                        !noPublishedHomework) ...[
+                                      const SizedBox(height: 16),
+                                      OutlinedButton.icon(
+                                          onPressed: findingLatest || busy
+                                              ? null
+                                              : showLatestHomework,
+                                          icon: const Icon(Icons.history),
+                                          label: Text(findingLatest
+                                              ? 'Finding homework…'
+                                              : 'View latest homework')),
+                                    ],
+                                  ])),
                             for (final record in records)
                               Card(
                                   child: Padding(
