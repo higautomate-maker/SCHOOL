@@ -746,7 +746,7 @@ class _HigMobileRootState extends State<HigMobileRoot> {
     if (exception is SocketException ||
         exception is TimeoutException ||
         exception is http.ClientException) {
-      return 'Couldn’t connect to school. Check your internet connection and try again.';
+      return 'We couldn’t reach the school service. Please try again shortly.';
     }
     return 'Your dashboard is unavailable right now. Please try again shortly.';
   }

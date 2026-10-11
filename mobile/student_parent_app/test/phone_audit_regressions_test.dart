@@ -88,7 +88,7 @@ void main() {
           api: api,
           home: null,
           loadError:
-              'Couldn’t connect to school. Check your internet connection and try again.',
+              'We couldn’t reach the school service. Please try again shortly.',
           onRefresh: () async => retries++,
           onLogout: () async {},
         ),
@@ -97,7 +97,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Your school dashboard isn’t ready'), findsOneWidget);
     expect(
-        find.textContaining('Check your internet connection'), findsOneWidget);
+        find.textContaining('school service'), findsOneWidget);
     await tester.tap(find.text('Try again'));
     expect(retries, 1);
     api.close();
