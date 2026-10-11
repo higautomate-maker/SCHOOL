@@ -16,6 +16,8 @@ type NotificationRedisClient = ReturnType<typeof createNotificationRedisClient>;
 
 let producer: NotificationRedisClient | undefined;
 let consumer: NotificationRedisClient | undefined;
+let producerConnecting: Promise<NotificationRedisClient> | undefined;
+let consumerConnecting: Promise<NotificationRedisClient> | undefined;
 let producerUrl = "";
 let consumerUrl = "";
 
@@ -53,9 +55,16 @@ export async function waitForNotificationWake(
 }
 
 export async function closeNotificationRedisClients(): Promise<void> {
+  // A committed operation may start its wake-up without awaiting it. Let any
+  // connection attempt settle before closing the clients it created.
+  await Promise.allSettled([producerConnecting, consumerConnecting].filter(
+    (pending): pending is Promise<NotificationRedisClient> => pending !== undefined,
+  ));
   const clients = [producer, consumer];
   producer = undefined;
   consumer = undefined;
+  producerConnecting = undefined;
+  consumerConnecting = undefined;
   producerUrl = "";
   consumerUrl = "";
   for (const client of clients) {
@@ -71,14 +80,14 @@ async function connectedClient(
   const current = purpose === "producer" ? producer : consumer;
   const currentUrl = purpose === "producer" ? producerUrl : consumerUrl;
   if (current && currentUrl === redisUrl) {
-    if (!current.isOpen) await current.connect();
+    const pending = purpose === "producer" ? producerConnecting : consumerConnecting;
+    if (pending) return pending;
+    if (!current.isOpen) return connectClient(purpose, current, redisUrl);
     return current;
   }
 
   if (current?.isOpen) current.destroy();
   const client = createNotificationRedisClient(redisUrl);
-  await client.connect();
-
   if (purpose === "producer") {
     producer = client;
     producerUrl = redisUrl;
@@ -86,5 +95,37 @@ async function connectedClient(
     consumer = client;
     consumerUrl = redisUrl;
   }
-  return client;
+  return connectClient(purpose, client, redisUrl);
+}
+
+function connectClient(
+  purpose: "producer" | "consumer",
+  client: NotificationRedisClient,
+  redisUrl: string,
+): Promise<NotificationRedisClient> {
+  const pending = client.connect().then(() => client).catch((error: unknown) => {
+    client.destroy();
+    if (purpose === "producer" && producer === client) {
+      producer = undefined;
+      producerUrl = "";
+    } else if (purpose === "consumer" && consumer === client) {
+      consumer = undefined;
+      consumerUrl = "";
+    }
+    throw error;
+  }).finally(() => {
+    if (purpose === "producer" && producerConnecting === pending) {
+      producerConnecting = undefined;
+    } else if (purpose === "consumer" && consumerConnecting === pending) {
+      consumerConnecting = undefined;
+    }
+  });
+  if (purpose === "producer") {
+    producerConnecting = pending;
+    producerUrl = redisUrl;
+  } else {
+    consumerConnecting = pending;
+    consumerUrl = redisUrl;
+  }
+  return pending;
 }

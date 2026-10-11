@@ -10,6 +10,7 @@ import {
   applyPostgresOperation,
   getPostgresOperations,
 } from "../server/operations/postgres-repository.ts";
+import { closeNotificationRedisClients } from "../server/notifications/redis-wake.ts";
 
 const tenantId = process.env.HIG_LOAD_TENANT_ID
   ?? "30000000-0000-4000-8000-000000000001";
@@ -198,5 +199,9 @@ try {
   }));
   console.log("Bounded PostgreSQL load, pool, replay, and payment-concurrency checks passed.");
 } finally {
-  await pool.end();
+  try {
+    await pool.end();
+  } finally {
+    await closeNotificationRedisClients();
+  }
 }
