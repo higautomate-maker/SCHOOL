@@ -687,6 +687,7 @@ class _HigMobileRootState extends State<HigMobileRoot> {
   final OfflineSyncService offlineSync = OfflineSyncService();
   JsonMap? home;
   bool loading = true;
+  bool refreshing = false;
   String? error;
 
   @override
@@ -713,17 +714,41 @@ class _HigMobileRootState extends State<HigMobileRoot> {
       final restored = await api.restore();
       if (restored) await _load();
     } catch (exception) {
-      error = higFriendlyAuthMessage(exception);
+      error = api.session == null
+          ? higFriendlyAuthMessage(exception)
+          : _dashboardLoadMessage(exception);
     } finally {
       if (mounted) setState(() => loading = false);
     }
   }
 
   Future<void> _load() async {
-    final next = await api.home();
-    if (mounted) setState(() => home = next);
-    unawaited(PushRegistrationService().initializeAndRegister(api));
-    unawaited(api.flushQueue());
+    if (refreshing) return;
+    if (mounted) setState(() => refreshing = true);
+    try {
+      final next = await api.home();
+      if (mounted) {
+        setState(() {
+          home = next;
+          error = null;
+        });
+      }
+      unawaited(PushRegistrationService().initializeAndRegister(api));
+      unawaited(api.flushQueue());
+    } catch (exception) {
+      if (mounted) setState(() => error = _dashboardLoadMessage(exception));
+    } finally {
+      if (mounted) setState(() => refreshing = false);
+    }
+  }
+
+  String _dashboardLoadMessage(Object exception) {
+    if (exception is SocketException ||
+        exception is TimeoutException ||
+        exception is http.ClientException) {
+      return 'We couldn’t reach the school service. Please try again shortly.';
+    }
+    return 'Your dashboard is unavailable right now. Please try again shortly.';
   }
 
   @override
@@ -748,11 +773,18 @@ class _HigMobileRootState extends State<HigMobileRoot> {
       config: widget.config,
       api: api,
       home: home,
+      loadError: error,
+      isRefreshing: refreshing,
       onRefresh: _load,
       onLogout: () async {
         await PushRegistrationService.disposeFor(api);
         await api.logout();
-        if (mounted) setState(() => home = null);
+        if (mounted) {
+          setState(() {
+            home = null;
+            error = null;
+          });
+        }
       },
     );
   }
@@ -1053,10 +1085,14 @@ class HomeView extends StatefulWidget {
     required this.home,
     required this.onRefresh,
     required this.onLogout,
+    this.loadError,
+    this.isRefreshing = false,
   });
   final HigMobileAppConfig config;
   final HigMobileApi api;
   final JsonMap? home;
+  final String? loadError;
+  final bool isRefreshing;
   final Future<void> Function() onRefresh;
   final Future<void> Function() onLogout;
 
@@ -1149,10 +1185,46 @@ class _HomeViewState extends State<HomeView> {
     if (wrapper is! Map) {
       return Scaffold(
         appBar: AppBar(title: Text(widget.config.title)),
-        body: Center(
-          child: FilledButton(
-            onPressed: widget.onRefresh,
-            child: const Text('Load dashboard'),
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cloud_off_rounded, size: 48),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Your school dashboard isn’t ready',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.loadError ??
+                        'Connect to your school to load the latest information.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: widget.isRefreshing ? null : widget.onRefresh,
+                    icon: widget.isRefreshing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh_rounded),
+                    label:
+                        Text(widget.isRefreshing ? 'Connecting…' : 'Try again'),
+                  ),
+                  TextButton(
+                    onPressed: widget.isRefreshing ? null : widget.onLogout,
+                    child: const Text('Sign out'),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       );
