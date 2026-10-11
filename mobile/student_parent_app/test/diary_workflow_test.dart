@@ -37,7 +37,53 @@ class _DiaryApi extends HigMobileApi {
   }
 }
 
+class _RecentDiaryApi extends _DiaryApi {
+  final previous = DateTime.now()
+      .subtract(const Duration(days: 7))
+      .toIso8601String()
+      .substring(0, 10);
+
+  @override
+  Future<JsonMap> diary(String date) async {
+    dates.add(date);
+    if (date != previous) return {'records': <JsonMap>[]};
+    return {
+      'records': <JsonMap>[
+        {
+          'id': 'diary-1',
+          'studentId': 'child-1',
+          'subjectName': 'Mathematics',
+          'className': 'Grade 8',
+          'sectionName': 'A',
+          'title': 'Fractions',
+          'description': 'Exercises 1 to 5',
+          'dueDate': date,
+          'studentName': 'Aarav',
+          'completed': false,
+        },
+      ],
+    };
+  }
+
+  @override
+  Future<JsonMap> latestDiaryDate(String onOrBefore) async =>
+      {'date': previous};
+}
+
 void main() {
+  testWidgets('empty parent diary can jump to the latest linked homework',
+      (tester) async {
+    final api = _RecentDiaryApi();
+    await tester
+        .pumpWidget(MaterialApp(home: HigDiaryPage(api: api, role: 'parent')));
+    await tester.pumpAndSettle();
+    expect(find.text('View latest homework'), findsOneWidget);
+    await tester.tap(find.text('View latest homework'));
+    await tester.pumpAndSettle();
+    expect(api.dates.last, api.previous);
+    expect(find.text('Fractions'), findsOneWidget);
+    api.close();
+  });
   testWidgets(
       'parent can browse another date and acknowledge the linked child homework',
       (tester) async {

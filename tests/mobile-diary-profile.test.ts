@@ -39,4 +39,6 @@ test('new mobile endpoints reject anonymous access before reading or writing dat
     const response=await handler(new Request('https://example.invalid/api/v1/mobile/test',{method}));
     assert.equal(response.status,401,`${method} ${handler.name}`);
   }
+  const latest = await diaryGet(new Request('https://example.invalid/api/v1/mobile/diary?latestOnOrBefore=2026-10-11'));
+  assert.equal(latest.status, 401);
 });

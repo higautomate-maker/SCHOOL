@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { authenticatedMobilePrincipal,effectiveAccessForPrincipal } from '../../../../../server/mobile-auth/service.ts';
 import { mobileJson } from '../../../../../server/mobile-auth/http.ts';
 import { mobileAppErrorResponse } from '../../../../../server/mobile-app/http.ts';
-import { diaryAction,diaryForDate,changeDiary } from '../../../../../server/mobile-app/diary.ts';
+import { diaryAction,diaryForDate,latestLinkedDiaryDate,changeDiary } from '../../../../../server/mobile-app/diary.ts';
 import { repositoryBackend } from '../../../../../server/runtime/repository-backend.ts';
 export const dynamic='force-dynamic';
 async function access(request:Request,write=false) {
@@ -15,7 +15,14 @@ async function access(request:Request,write=false) {
  return p;
 }
 export async function GET(request:Request) {
- try { const p=await access(request); const date=z.iso.date().safeParse(new URL(request.url).searchParams.get('date'));
+ try { const p=await access(request); const params=new URL(request.url).searchParams;
+ const latest=params.get('latestOnOrBefore');
+ if(latest!==null) {
+   const date=z.iso.date().safeParse(latest);
+   if(!date.success)return mobileJson({error:'Invalid diary date'},400);
+   return mobileJson({date:await latestLinkedDiaryDate(p,date.data)});
+ }
+ const date=z.iso.date().safeParse(params.get('date'));
  if(!date.success)return mobileJson({error:'Invalid diary date'},400);
  return mobileJson({records:await diaryForDate(p,date.data)}); } catch(e){return mobileAppErrorResponse(e,'Diary unavailable');}
 }
