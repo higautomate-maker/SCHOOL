@@ -192,3 +192,17 @@ footer{color:var(--hig-muted)}
 .company-empty-state{display:flex;min-height:110px;align-items:center;justify-content:center;flex-direction:column;gap:7px;border-top:1px solid var(--hig-border);color:var(--hig-muted)}
 .company-empty-state b{color:var(--hig-text);font-size:12px}.company-empty-state span,.company-compact-empty{font-size:9px;color:var(--hig-muted)}
 .company-compact-empty{padding:18px 0;text-align:center}
+.company-ledger-page{padding:22px;min-height:330px}
+.company-billing-note{margin:10px 0 20px;padding:14px 16px;border:1px solid #dbe8dd;border-radius:10px;background:#f3f8f3;color:#315b42;font-size:12px;line-height:1.5}
+.company-subscription-list,.company-audit-list{display:grid;gap:0}
+.company-subscription-list article{display:grid;grid-template-columns:minmax(180px,2fr) repeat(3,minmax(90px,1fr)) auto;align-items:center;gap:14px;padding:17px 4px;border-top:1px solid var(--hig-border);font-size:12px}
+.company-subscription-list article div b,.company-subscription-list article div small,.company-audit-list article div b,.company-audit-list article div small{display:block}
+.company-subscription-list article small,.company-audit-list article small{margin-top:4px;color:var(--hig-muted);font-size:10px}
+.company-subscription-list article button,.company-load-more,.company-audit-error button{border:0;background:transparent;color:var(--hig-primary);font:inherit;font-weight:700;cursor:pointer}
+.company-audit-filter{display:flex;align-items:center;gap:9px;color:var(--hig-muted);font-size:11px}
+.company-audit-filter select{min-width:180px;padding:9px;border:1px solid var(--hig-border);border-radius:8px;background:#fff;color:var(--hig-text)}
+.company-audit-list article{display:grid;grid-template-columns:170px 1fr;gap:18px;padding:14px 4px;border-top:1px solid var(--hig-border);font-size:12px}
+.company-audit-list time,.company-audit-loading{color:var(--hig-muted);font-size:11px}
+.company-audit-error{margin:12px 0;padding:12px;border-radius:8px;background:#fff0ed;color:#8c3026;font-size:12px}
+.company-load-more{display:block;margin:16px auto 0;padding:10px}
+@media(max-width:760px){.company-subscription-list article{grid-template-columns:1fr 1fr}.company-audit-list article{grid-template-columns:1fr;gap:4px}.company-audit-filter{display:block}.company-audit-filter select{margin-top:6px;width:100%}}

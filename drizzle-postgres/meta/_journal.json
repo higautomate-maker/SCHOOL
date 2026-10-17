@@ -124,6 +124,10 @@
     {
       "idx": 17, "version": "7", "when": 1788652800002,
       "tag": "0017_mobile_diary_profiles", "breakpoints": true
+    },
+    {
+      "idx": 18, "version": "7", "when": 1792270800000,
+      "tag": "0018_company_audit_read", "breakpoints": true
     }
   ]
 }
