@@ -23,6 +23,13 @@
       "rowLockRequired": false
     },
     {
+      "id": "student.update",
+      "repository": "server/students/repository.ts",
+      "atomicWrites": ["student", "audit_event", "idempotency_record"],
+      "idempotencyRequired": true,
+      "rowLockRequired": false
+    },
+    {
       "id": "attendance.mark",
       "repository": "server/operations/repository.ts",
       "atomicWrites": ["attendance", "audit_event", "outbox_event"],

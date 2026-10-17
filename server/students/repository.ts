@@ -4,7 +4,7 @@ import {
   repositoryBackend,
   schedulePostgresShadowRead,
 } from "../runtime/repository-backend.ts";
-import type { CreateStudentInput } from "./validation";
+import type { CreateStudentInput, UpdateStudentInput } from "./validation";
 
 export type StudentRecord = CreateStudentInput & { id: string; fullName: string; status: "active" | "inactive" | "graduated"; createdAt: string };
 type StudentRow = Omit<StudentRecord, "fullName">;
@@ -63,6 +63,59 @@ export async function createStudent(tenantId: string, input: CreateStudentInput,
       .bind(crypto.randomUUID(), tenantId, actorId, id, JSON.stringify({ admissionNumber: input.admissionNumber, className: input.className, sectionName: input.sectionName }), nowIso),
     database.prepare(`INSERT INTO idempotency_records (key, actor_email, operation, response_json, created_at, expires_at) VALUES (?, ?, 'student.create', ?, ?, ?)`)
       .bind(key, actor.email.toLowerCase(), JSON.stringify(student), nowIso, new Date(now.getTime() + 86_400_000).toISOString()),
+  ]);
+  return student;
+}
+
+export async function updateStudent(
+  tenantId: string,
+  studentId: string,
+  input: UpdateStudentInput,
+  actor: ChatGPTUser,
+  key: string,
+): Promise<StudentRecord | null> {
+  if (repositoryBackend() === "postgres") {
+    return (await import("./postgres-repository.ts"))
+      .updatePostgresStudent(tenantId, studentId, input, actor, key);
+  }
+  await requireSchool(tenantId);
+  const replay = await database.prepare(
+    "SELECT response_json FROM idempotency_records WHERE key = ? AND actor_email = ? AND operation = 'student.update' AND expires_at > ?",
+  ).bind(key, actor.email.toLowerCase(), new Date().toISOString()).first<{ response_json: string }>();
+  if (replay) return JSON.parse(replay.response_json) as StudentRecord;
+  const existing = await database.prepare(
+    `SELECT id, admission_number AS admissionNumber, admission_date AS admissionDate,
+       created_at AS createdAt FROM students WHERE tenant_id = ? AND id = ?`,
+  ).bind(tenantId, studentId).first<Pick<StudentRecord, "id" | "admissionNumber" | "admissionDate" | "createdAt">>();
+  if (!existing) return null;
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const actorId = await stableUserId(actor.email);
+  const student: StudentRecord = {
+    ...existing, ...input,
+    fullName: `${input.firstName} ${input.lastName}`.trim(),
+  };
+  await ensureUser(actorId, actor, nowIso);
+  await database.batch([
+    database.prepare(
+      `UPDATE students SET roll_number = ?, first_name = ?, last_name = ?,
+       gender = ?, date_of_birth = ?, class_name = ?, section_name = ?,
+       guardian_name = ?, guardian_phone = ?, status = ?, updated_at = ?
+       WHERE tenant_id = ? AND id = ?`,
+    ).bind(input.rollNumber, input.firstName, input.lastName, input.gender,
+      input.dateOfBirth, input.className, input.sectionName, input.guardianName,
+      input.guardianPhone, input.status, nowIso, tenantId, studentId),
+    database.prepare(
+      `INSERT INTO audit_events (id, tenant_id, actor_id, action, resource_type,
+       resource_id, reason, metadata_json, occurred_at)
+       VALUES (?, ?, ?, 'student.update', 'student', ?, 'Student record updated', ?, ?)`,
+    ).bind(crypto.randomUUID(), tenantId, actorId, studentId,
+      JSON.stringify({ className: input.className, sectionName: input.sectionName, status: input.status }), nowIso),
+    database.prepare(
+      `INSERT INTO idempotency_records (key, actor_email, operation, response_json,
+       created_at, expires_at) VALUES (?, ?, 'student.update', ?, ?, ?)`,
+    ).bind(key, actor.email.toLowerCase(), JSON.stringify(student), nowIso,
+      new Date(now.getTime() + 86_400_000).toISOString()),
   ]);
   return student;
 }

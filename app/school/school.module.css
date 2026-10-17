@@ -280,3 +280,11 @@
 @media(min-width:821px){.sidebar{width:268px}.main{margin-left:268px}}
 @media(max-width:820px){.main{margin-left:0}.sidebar{width:278px}.page{padding:20px 16px 28px}.topbar{padding:0 12px}.sessionBanner{padding:12px 16px}}
 @media(max-width:560px){.topbar{height:64px}.page{padding:18px 12px 26px}.tenant{margin-top:12px}.logo{height:68px}.sessionBanner{font-size:11px}}
+.notificationMenu>button:not(.notificationFooter){display:flex;width:100%;justify-content:space-between;gap:12px;padding:12px 15px;border:0;border-bottom:1px solid #edf0f4;background:white;text-align:left;cursor:pointer}
+.notificationMenu>button:not(.notificationFooter):hover{background:#f4f8f5}
+.notificationMenu>p{padding:16px;color:var(--hig-muted);font-size:11px}
+.referenceFilters input{display:block;min-width:170px;height:38px;margin-top:6px;border:1px solid #ccd5de;border-radius:4px;background:#fff;padding:0 9px;color:#536173}
+.wideDataTable [role="cell"] button{border:1px solid #cad8cc;background:#f4f8f5;border-radius:5px;padding:6px 10px;color:var(--hig-primary);cursor:pointer}
+.smallModal form>footer{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid #e2e7ed}
+.smallModal form>footer button{height:38px;border:1px solid #d9e0e8;background:white;border-radius:5px;padding:0 14px;font-size:10px;font-weight:700}
+.smallModal form>footer button:last-child{background:var(--hig-primary);border-color:var(--hig-primary);color:white}
