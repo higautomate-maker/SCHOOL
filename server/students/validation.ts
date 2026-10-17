@@ -15,3 +15,17 @@ export const createStudentSchema = z.object({
 });
 
 export type CreateStudentInput = z.infer<typeof createStudentSchema>;
+
+export const updateStudentSchema = createStudentSchema.pick({
+  rollNumber: true,
+  firstName: true,
+  lastName: true,
+  gender: true,
+  dateOfBirth: true,
+  className: true,
+  sectionName: true,
+  guardianName: true,
+  guardianPhone: true,
+}).extend({ status: z.enum(["active", "inactive", "graduated"]) });
+
+export type UpdateStudentInput = z.infer<typeof updateStudentSchema>;

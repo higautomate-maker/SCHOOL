@@ -10,7 +10,7 @@ import {
   timestampString,
 } from "../runtime/postgres-repository.ts";
 import { withTenantDatabase } from "../runtime/postgres.ts";
-import type { CreateStudentInput } from "./validation.ts";
+import type { CreateStudentInput, UpdateStudentInput } from "./validation.ts";
 
 type StudentRow = Omit<
   StudentRecord,
@@ -188,6 +188,68 @@ export function createPostgresStudent(
   });
 }
 
+export function updatePostgresStudent(
+  tenantId: string,
+  studentId: string,
+  input: UpdateStudentInput,
+  actor: ChatGPTUser,
+  key: string,
+): Promise<StudentRecord | null> {
+  return withTenantDatabase(tenantId, async (_database, client) => {
+    const replay = await readReplay(client, tenantId, key, actor.email, "student.update");
+    if (replay) return replay;
+    await requirePostgresSchool(client, tenantId);
+    const actorId = await ensurePostgresActor(client, actor);
+    const result = await client.query<StudentRow>(
+      `UPDATE students SET
+         roll_number = $3, first_name = $4, last_name = $5,
+         gender = $6, date_of_birth = $7, class_name = $8,
+         section_name = $9, guardian_name = $10, guardian_phone = $11,
+         status = $12, updated_at = now()
+       WHERE tenant_id = $1 AND id = $2
+       RETURNING
+         id, admission_number AS "admissionNumber",
+         roll_number AS "rollNumber", first_name AS "firstName",
+         last_name AS "lastName", gender,
+         date_of_birth AS "dateOfBirth", admission_date AS "admissionDate",
+         class_name AS "className", section_name AS "sectionName",
+         guardian_name AS "guardianName", guardian_phone AS "guardianPhone",
+         status, created_at AS "createdAt"`,
+      [tenantId, studentId, input.rollNumber, input.firstName, input.lastName,
+        input.gender, input.dateOfBirth, input.className, input.sectionName,
+        input.guardianName, input.guardianPhone, input.status],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    const student = toStudentRecord(row);
+    await client.query(
+      `INSERT INTO audit_events (
+         id, tenant_id, actor_id, action, resource_type, resource_id,
+         reason, metadata, occurred_at
+       ) VALUES (
+         gen_random_uuid(), $1, $2, 'student.update', 'student', $3,
+         'Student record updated', $4::jsonb, now()
+       )`,
+      [tenantId, actorId, studentId, JSON.stringify({
+        className: input.className, sectionName: input.sectionName,
+        status: input.status,
+      })],
+    );
+    await client.query(
+      `INSERT INTO idempotency_records (
+         tenant_id, key, actor_email, operation, request_hash,
+         response, created_at, expires_at
+       ) VALUES (
+         $1, $2, $3, 'student.update', $4, $5::jsonb,
+         now(), now() + interval '24 hours'
+       )`,
+      [tenantId, key, actor.email.toLowerCase(), await sha256Hex(JSON.stringify(input)),
+        JSON.stringify(student)],
+    );
+    return student;
+  });
+}
+
 const studentSelect = `SELECT
   id,
   admission_number AS "admissionNumber",
@@ -220,6 +282,7 @@ async function readReplay(
   tenantId: string,
   key: string,
   actorEmail: string,
+  operation = "student.create",
 ): Promise<StudentRecord | null> {
   const result = await client.query<ReplayRow>(
     `SELECT response
@@ -227,10 +290,10 @@ async function readReplay(
      WHERE tenant_id = $1
        AND key = $2
        AND actor_email = $3
-       AND operation = 'student.create'
+       AND operation = $4
        AND expires_at > now()
      LIMIT 1`,
-    [tenantId, key, actorEmail.toLowerCase()],
+    [tenantId, key, actorEmail.toLowerCase(), operation],
   );
   const response = result.rows[0]?.response;
   return response

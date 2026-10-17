@@ -257,7 +257,7 @@ export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [notice, setNotice] = useState("Select a school to review its plan, module access and app policies.");
   const [submitting, setSubmitting] = useState(false);
-  const [actorName, setActorName] = useState("Ankit Yadav");
+  const [actorName, setActorName] = useState("Company administrator");
   const [selectedSchool, setSelectedSchool] = useState<SchoolDetail | null>(null);
   const [drawerLoading, setDrawerLoading] = useState(false);
   const [schoolActionPending, setSchoolActionPending] = useState(false);
@@ -493,11 +493,11 @@ export default function Home() {
 
         <div className="sidebar-bottom">
           <div className="signal-card">
-            <div className="signal-top"><span className="pulse-dot" /> All systems operational</div>
-            <div className="signal-meta"><span>Last check</span><b>just now</b></div>
+            <div className="signal-top"><span className="pulse-dot" /> Secure company workspace</div>
+            <div className="signal-meta"><span>School access</span><b>Role controlled</b></div>
           </div>
           <button className="profile-button" disabled title="Profile management requires secure identity integration.">
-            <span className="avatar">{actorName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span><b>{actorName}</b><small>Platform Super Admin</small></span><span className="more">LOCKED</span>
+            <span className="avatar">{actorName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span><b>{actorName}</b><small>Company account</small></span><span className="more">LOCKED</span>
           </button>
         </div>
       </aside>
@@ -505,7 +505,7 @@ export default function Home() {
       <section className="main-panel">
         <header className="topbar">
           <button className="menu-button" aria-label="Toggle navigation" onClick={() => setMenuOpen((value) => !value)}>☰</button>
-          <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search schools, students, invoices…" /><kbd>⌘ K</kbd></label>
+          <label className="search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search schools by name, city or plan…" aria-label="Search schools" /><kbd>⌘ K</kbd></label>
           <div className="top-actions">
             <Link className="workspace-link" href="/school">School workspace <span>→</span></Link>
             <LogoutButton className="workspace-link" />

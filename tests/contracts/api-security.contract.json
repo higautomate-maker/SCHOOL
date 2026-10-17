@@ -216,6 +216,18 @@
       "idempotency": "implemented"
     },
     {
+      "id": "school.students.update",
+      "file": "app/api/v1/schools/[schoolId]/students/[studentId]/route.ts",
+      "method": "PATCH",
+      "scope": "tenant",
+      "permission": "students.manage",
+      "module": "student_information",
+      "tenantRequired": true,
+      "entitlementRequired": true,
+      "resourceScope": "tenant",
+      "idempotency": "implemented"
+    },
+    {
       "id": "school.workspace.view",
       "file": "app/api/v1/schools/[schoolId]/workspace/route.ts",
       "method": "GET",
