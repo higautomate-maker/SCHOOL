@@ -10,6 +10,18 @@
   ],
   "operations": [
     {
+      "id": "platform.audit.list",
+      "file": "app/api/v1/company/audit/route.ts",
+      "method": "GET",
+      "scope": "platform",
+      "permission": "platform.schools.view",
+      "module": null,
+      "tenantRequired": false,
+      "entitlementRequired": false,
+      "resourceScope": "all_school_audit_events",
+      "idempotency": "not_applicable"
+    },
+    {
       "id": "platform.schools.list",
       "file": "app/api/v1/schools/route.ts",
       "method": "GET",

@@ -60,6 +60,15 @@ type CompanyAccessConfiguration = {
   modules: CompanyModulePolicy[];
   appFeatures: Record<AppAudience, CompanyAppFeaturePolicy[]>;
 };
+type CompanyAuditEvent = {
+  id: string;
+  tenantId: string | null;
+  schoolName: string | null;
+  actorName: string | null;
+  action: string;
+  resourceType: string;
+  occurredAt: string;
+};
 
 const accessTabLabels: Record<AccessAudienceTab, string> = {
   school: "School Web Modules",
@@ -68,10 +77,10 @@ const accessTabLabels: Record<AccessAudienceTab, string> = {
   transporter: "Transporter App",
 };
 
-type CompanySection = "Overview" | "Schools" | "Modules" | "Access control";
+type CompanySection = "Overview" | "Schools" | "Plans & billing" | "Modules" | "Access control" | "Audit log";
 
 type CompanyNavigationItem = {
-  label: CompanySection | "Plans & billing" | "Audit log";
+  label: CompanySection;
   icon: string;
   disabledReason?: string;
 };
@@ -79,18 +88,10 @@ type CompanyNavigationItem = {
 const navItems: readonly CompanyNavigationItem[] = [
   { label: "Overview", icon: "⌂" },
   { label: "Schools", icon: "▦" },
-  {
-    label: "Plans & billing",
-    icon: "₹",
-    disabledReason: "Platform-wide billing requires the billing ledger API. School plan changes remain available in School controls.",
-  },
+  { label: "Plans & billing", icon: "₹" },
   { label: "Modules", icon: "◫" },
   { label: "Access control", icon: "◇" },
-  {
-    label: "Audit log",
-    icon: "≡",
-    disabledReason: "Platform-wide audit search is not available yet. Tenant audit history remains available in School controls.",
-  },
+  { label: "Audit log", icon: "≡" },
 ];
 
 const initialSchools: School[] = [];
@@ -265,6 +266,30 @@ export default function Home() {
   const [accessAudience, setAccessAudience] = useState<AccessAudienceTab>("school");
   const [accessLoading, setAccessLoading] = useState(false);
   const [policyPending, setPolicyPending] = useState("");
+  const [auditEvents, setAuditEvents] = useState<CompanyAuditEvent[]>([]);
+  const [auditCursor, setAuditCursor] = useState<string | null>(null);
+  const [auditSchoolId, setAuditSchoolId] = useState("");
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState("");
+
+  const loadAudit = useCallback(async (tenantId: string, cursor?: string) => {
+    setAuditLoading(true);
+    setAuditError("");
+    try {
+      const params = new URLSearchParams({ limit: "50" });
+      if (tenantId) params.set("tenantId", tenantId);
+      if (cursor) params.set("cursor", cursor);
+      const response = await authenticatedFetch(`/api/v1/company/audit?${params}`);
+      const data = await response.json() as { events?: CompanyAuditEvent[]; nextCursor?: string | null; error?: string };
+      if (!response.ok || !data.events) throw new Error(data.error || "Audit history could not be loaded");
+      setAuditEvents((current) => cursor ? [...current, ...data.events!] : data.events!);
+      setAuditCursor(data.nextCursor ?? null);
+    } catch (error) {
+      setAuditError(error instanceof Error ? error.message : "Audit history could not be loaded");
+    } finally {
+      setAuditLoading(false);
+    }
+  }, []);
 
   const loadAccessConfiguration = useCallback(async (
     tenantId: string,
@@ -450,6 +475,7 @@ export default function Home() {
     setMenuOpen(false);
     if (section === "Modules") setAccessAudience("school");
     if (section === "Access control" && accessAudience === "school") setAccessAudience("parent");
+    if (section === "Audit log") void loadAudit(auditSchoolId);
   }
 
   const displayTitle = active === "Overview" ? `Good morning, ${actorName.split(/\s+/)[0] || "Administrator"}.` : active;
@@ -457,6 +483,10 @@ export default function Home() {
     ? "Live tenant information and access controls for your school network."
     : active === "Schools"
       ? "Open a persisted tenant to manage its plan, invitation and module access."
+      : active === "Plans & billing"
+        ? "Review live school subscriptions and change plan entitlements. Invoices and collections are not connected."
+        : active === "Audit log"
+          ? "Review recorded actions across your school network."
       : `Manage ${active.toLowerCase()} for the selected tenant.`;
   const todayLabel = new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
@@ -584,11 +614,40 @@ export default function Home() {
             </div>
           </section>}
 
+          {active === "Plans & billing" && <section className="card company-ledger-page" aria-label="School subscription plans">
+            <div className="card-heading"><div><h2>School subscriptions</h2><p>Current plan and renewal status from live school records.</p></div></div>
+            <div className="company-billing-note"><b>Plan controls are live.</b> A plan change updates school entitlements and is audited. This is not an invoice or payment ledger; no charge is created here.</div>
+            <div className="company-subscription-list">
+              {filteredSchools.map((school) => <article key={school.tenantId ?? school.id}>
+                <div><b>{school.name}</b><small>{school.location} · {school.id}</small></div>
+                <span>{school.plan}</span><span>{school.status}</span><span>{school.renewal}</span>
+                <button disabled={drawerLoading} onClick={() => { void openSchool(school); }}>Manage plan →</button>
+              </article>)}
+              {!filteredSchools.length && <div className="company-empty-state">No schools match this search.</div>}
+            </div>
+          </section>}
+
+          {active === "Audit log" && <section className="card company-ledger-page" aria-label="Company audit log">
+            <div className="card-heading"><div><h2>Recorded activity</h2><p>Newest authenticated actions, including school and platform events.</p></div>
+              <label className="company-audit-filter">School <select value={auditSchoolId} onChange={(event) => { setAuditSchoolId(event.target.value); setAuditEvents([]); void loadAudit(event.target.value); }}><option value="">All schools</option>{schools.filter((school) => school.tenantId).map((school) => <option key={school.tenantId} value={school.tenantId}>{school.name}</option>)}</select></label>
+            </div>
+            {auditError && <div className="company-audit-error" role="alert">{auditError} <button onClick={() => { void loadAudit(auditSchoolId); }}>Retry</button></div>}
+            <div className="company-audit-list">
+              {auditEvents.map((event) => <article key={event.id}>
+                <time dateTime={event.occurredAt}>{new Date(event.occurredAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</time>
+                <div><b>{event.action.replaceAll(".", " ")}</b><small>{event.schoolName ?? "Company"} · {event.actorName ?? "System"} · {event.resourceType.replaceAll("_", " ")}</small></div>
+              </article>)}
+              {!auditLoading && !auditEvents.length && !auditError && <div className="company-empty-state">No recorded actions found for this selection.</div>}
+            </div>
+            {auditCursor && <button className="company-load-more" disabled={auditLoading} onClick={() => { void loadAudit(auditSchoolId, auditCursor); }}>{auditLoading ? "Loading…" : "Load older activity"}</button>}
+            {auditLoading && !auditEvents.length && <p className="company-audit-loading">Loading recorded activity…</p>}
+          </section>}
+
           <footer><span>© 2026 HIG Automation India Private Limited</span><span><i className="footer-dot" /> Data protected · India region</span></footer>
         </div>
       </section>
 
-      {selectedSchool && <div className="drawer-backdrop" role="presentation" onMouseDown={() => !schoolActionPending && setSelectedSchool(null)}><aside className="school-drawer" role="dialog" aria-modal="true" aria-labelledby="school-drawer-title" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="eyebrow">TENANT CONTROL</p><h2 id="school-drawer-title">{selectedSchool.name}</h2><span>{selectedSchool.city} · {selectedSchool.status}</span></div><button disabled={schoolActionPending} onClick={() => setSelectedSchool(null)} aria-label="Close school settings">×</button></div><section className="drawer-section"><div className="drawer-section-title"><div><h3>Subscription plan</h3><p>Changes apply immediately to module entitlements.</p></div><span className="audit-chip">AUDITED</span></div><div className="plan-options">{["Starter","Growth","Enterprise"].map((plan) => <button disabled={schoolActionPending} className={selectedSchool.plan === plan ? "selected" : ""} key={plan} onClick={() => manageSchool({ action: "update_plan", plan })}><b>{plan}</b><small>{plan === "Starter" ? "₹1,499" : plan === "Growth" ? "₹3,499" : "₹7,999"}/mo</small></button>)}</div></section><section className="drawer-section"><div className="drawer-section-title"><div><h3>Enabled modules</h3><p>School-specific overrides take precedence over plan defaults.</p></div></div><div className="toggle-list">{(accessConfiguration?.tenantId === selectedSchool.tenantId ? accessConfiguration.modules : selectedSchool.modules).map((moduleDefinition) => <label key={moduleDefinition.key}><span><b>{moduleDefinition.label}</b><small>{moduleDefinition.enabled ? "Available to authorized roles" : "Hidden for this tenant"}</small></span><input type="checkbox" checked={moduleDefinition.enabled} disabled={schoolActionPending} onChange={(event) => { void updateCompanyModule(moduleDefinition.key, event.target.checked); }} /><i /></label>)}</div></section><section className="drawer-section school-role-boundary"><div className="drawer-section-title"><div><h3>School role boundary</h3><p>Company enables the maximum module set. The School administrator manages staff roles only inside these enabled modules.</p></div><span className="audit-chip">SCHOOL CONTROL</span></div><button className="drawer-access-button" onClick={() => { navigateCompany("Access control"); setSelectedSchool(null); }}>Open full app access configuration →</button></section><section className="drawer-section invitation-box"><div><span className={`invitation-state ${selectedSchool.invitationStatus}`}>{selectedSchool.invitationStatus ?? "Not created"}</span><h3>School Admin invitation</h3><p>{selectedSchool.adminEmail ?? "No administrator email"}</p><small>{selectedSchool.invitationExpiresAt ? `Expires ${new Date(selectedSchool.invitationExpiresAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : "No active invitation"}</small></div><div className="invitation-actions"><button disabled={schoolActionPending} onClick={() => manageSchool({ action: "resend_invitation" })}>Rotate & resend</button><button className="danger" disabled={schoolActionPending || selectedSchool.invitationStatus === "revoked"} onClick={() => manageSchool({ action: "revoke_invitation" })}>Revoke</button></div></section><section className="drawer-section"><div className="drawer-section-title"><div><h3>Recent tenant audit</h3><p>Newest security-sensitive changes for this school.</p></div></div><div className="drawer-audit">{selectedSchool.audit.map((event) => <div key={event.id}><span className="activity-icon green">✓</span><p><b>{event.action.replaceAll(".", " ")}</b><small>{new Date(event.occurredAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small></p></div>)}</div></section></aside></div>}
+      {selectedSchool && <div className="drawer-backdrop" role="presentation" onMouseDown={() => !schoolActionPending && setSelectedSchool(null)}><aside className="school-drawer" role="dialog" aria-modal="true" aria-labelledby="school-drawer-title" onMouseDown={(event) => event.stopPropagation()}><div className="drawer-header"><div><p className="eyebrow">TENANT CONTROL</p><h2 id="school-drawer-title">{selectedSchool.name}</h2><span>{selectedSchool.city} · {selectedSchool.status}</span></div><button disabled={schoolActionPending} onClick={() => setSelectedSchool(null)} aria-label="Close school settings">×</button></div><section className="drawer-section"><div className="drawer-section-title"><div><h3>Subscription plan</h3><p>Changes update entitlements; no invoice or charge is created.</p></div><span className="audit-chip">AUDITED</span></div><div className="plan-options">{["Starter","Growth","Enterprise"].map((plan) => <button disabled={schoolActionPending} className={selectedSchool.plan === plan ? "selected" : ""} key={plan} onClick={() => manageSchool({ action: "update_plan", plan })}><b>{plan}</b><small>{selectedSchool.plan === plan ? "Current plan" : "Change plan"}</small></button>)}</div></section><section className="drawer-section"><div className="drawer-section-title"><div><h3>Enabled modules</h3><p>School-specific overrides take precedence over plan defaults.</p></div></div><div className="toggle-list">{(accessConfiguration?.tenantId === selectedSchool.tenantId ? accessConfiguration.modules : selectedSchool.modules).map((moduleDefinition) => <label key={moduleDefinition.key}><span><b>{moduleDefinition.label}</b><small>{moduleDefinition.enabled ? "Available to authorized roles" : "Hidden for this tenant"}</small></span><input type="checkbox" checked={moduleDefinition.enabled} disabled={schoolActionPending} onChange={(event) => { void updateCompanyModule(moduleDefinition.key, event.target.checked); }} /><i /></label>)}</div></section><section className="drawer-section school-role-boundary"><div className="drawer-section-title"><div><h3>School role boundary</h3><p>Company enables the maximum module set. The School administrator manages staff roles only inside these enabled modules.</p></div><span className="audit-chip">SCHOOL CONTROL</span></div><button className="drawer-access-button" onClick={() => { navigateCompany("Access control"); setSelectedSchool(null); }}>Open full app access configuration →</button></section><section className="drawer-section invitation-box"><div><span className={`invitation-state ${selectedSchool.invitationStatus}`}>{selectedSchool.invitationStatus ?? "Not created"}</span><h3>School Admin invitation</h3><p>{selectedSchool.adminEmail ?? "No administrator email"}</p><small>{selectedSchool.invitationExpiresAt ? `Expires ${new Date(selectedSchool.invitationExpiresAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : "No active invitation"}</small></div><div className="invitation-actions"><button disabled={schoolActionPending} onClick={() => manageSchool({ action: "resend_invitation" })}>Rotate & resend</button><button className="danger" disabled={schoolActionPending || selectedSchool.invitationStatus === "revoked"} onClick={() => manageSchool({ action: "revoke_invitation" })}>Revoke</button></div></section><section className="drawer-section"><div className="drawer-section-title"><div><h3>Recent tenant audit</h3><p>Newest security-sensitive changes for this school.</p></div></div><div className="drawer-audit">{selectedSchool.audit.map((event) => <div key={event.id}><span className="activity-icon green">✓</span><p><b>{event.action.replaceAll(".", " ")}</b><small>{new Date(event.occurredAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small></p></div>)}</div></section></aside></div>}
 
       {modalOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => !submitting && setModalOpen(false)}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="add-school-title" onMouseDown={(event) => event.stopPropagation()}><button className="modal-close" disabled={submitting} onClick={() => setModalOpen(false)}>×</button><p className="eyebrow">TENANT ONBOARDING</p><h2 id="add-school-title">Add a new school</h2><p>Create an isolated tenant workspace with a secure trial plan.</p><form onSubmit={addSchool}><label>School name<input name="name" required minLength={3} maxLength={120} placeholder="e.g. Greenfield Academy" /></label><div className="form-row"><label>City<input name="city" required minLength={2} maxLength={80} placeholder="Mumbai" /></label><label>Plan<select name="plan" defaultValue="Growth"><option>Starter</option><option>Growth</option><option>Enterprise</option></select></label></div><label>School Admin email<input name="adminEmail" required type="email" autoComplete="email" placeholder="admin@greenfield.edu" /></label><div className="tenant-preview"><span className="pulse-dot" /><div><b>Tenant isolation enabled</b><small>The campus, plan, module policy, scoped admin membership and immutable audit event are created together.</small></div></div><button className="primary-button" disabled={submitting} type="submit">{submitting ? "Creating secure workspace…" : "Create school & invitation"} {!submitting && <span>→</span>}</button></form></div></div>}
     </main>

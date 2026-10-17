@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("Company portal exposes working sections and marks unavailable actions as disabled", () => {
+test("Company portal exposes working sections and marks only unavailable actions as disabled", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(page, /type CompanySection = "Overview" \| "Schools" \| "Modules" \| "Access control"/);
-  assert.match(page, /disabledReason: "Platform-wide billing/);
-  assert.match(page, /disabledReason: "Platform-wide audit search/);
+  assert.match(page, /type CompanySection = "Overview" \| "Schools" \| "Plans & billing" \| "Modules" \| "Access control" \| "Audit log"/);
+  assert.match(page, /active === "Plans & billing"/);
+  assert.match(page, /active === "Audit log"/);
+  assert.doesNotMatch(page, /disabledReason: "Platform-wide (?:billing|audit)/);
   assert.match(page, /active === "Schools"/);
   assert.match(page, /LIVE TENANT DATA/);
   assert.doesNotMatch(page, /Monthly revenue/);

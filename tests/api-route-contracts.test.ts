@@ -24,6 +24,7 @@ const manifest = JSON.parse(
 };
 
 const productionRouteFiles = [
+  "app/api/v1/company/audit/route.ts",
   "app/api/v1/schools/route.ts",
   "app/api/v1/schools/[schoolId]/route.ts",
   "app/api/v1/schools/[schoolId]/access/route.ts",
