@@ -224,10 +224,9 @@ try {
   await q(`INSERT INTO fee_invoices
     (id,tenant_id,academic_session_id,student_id,fee_type,amount_paise,paid_paise,
      due_date,status,created_by)
-    VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,'Term fee',225000,105000,
-      current_date+14,'partial',$5::uuid)
-    ON CONFLICT (tenant_id,id) DO UPDATE SET due_date=current_date+14,
-      amount_paise=225000,paid_paise=105000,status='partial',updated_at=now()`,
+    VALUES ($1::uuid,$2::uuid,$3::uuid,$4::uuid,'Term fee',225000,0,
+      current_date+14,'due',$5::uuid)
+    ON CONFLICT (tenant_id,id) DO NOTHING`,
     [ids.feeInvoice, ids.tenant, ids.session, ids.student, ids.administrator]);
   await q(`INSERT INTO student_attendance
     (tenant_id,academic_session_id,student_id,attendance_date,status,note,marked_by)
