@@ -3,6 +3,9 @@ import pg from "pg";
 import { validateProductionDatabaseRoles } from "../server/runtime/production-database-roles.ts";
 
 const { Client } = pg;
+const ssl: false | { rejectUnauthorized: true } = process.env.PG_SSL === "disable"
+  ? false
+  : { rejectUnauthorized: true };
 
 try {
   if (process.env.HIG_PRODUCTION_CUTOVER_APPROVED !== "GREENFIELD_POSTGRES_CUTOVER") {
@@ -18,7 +21,7 @@ try {
   const verified = await validateProductionDatabaseRoles(process.env);
   const client = new Client({
     connectionString: verified.databaseUrl.toString(),
-    ssl: { rejectUnauthorized: true },
+    ssl,
   });
   await client.connect();
   try {
@@ -69,7 +72,7 @@ try {
 async function assertGreenfieldTarget(databaseUrl: URL): Promise<void> {
   const client = new Client({
     connectionString: databaseUrl.toString(),
-    ssl: { rejectUnauthorized: true },
+    ssl,
   });
   await client.connect();
   try {

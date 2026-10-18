@@ -47,7 +47,9 @@ export async function validateProductionDatabaseRoles(
   ));
   assertSameDatabase(databaseUrl, migrationDatabaseUrl);
 
-  const ssl: { rejectUnauthorized: true } = { rejectUnauthorized: true };
+  const ssl: false | { rejectUnauthorized: true } = environment.PG_SSL === "disable"
+    ? false
+    : { rejectUnauthorized: true };
   const [runtime, migration] = await Promise.all([
     inspectDatabaseRole(databaseUrl, ssl),
     inspectDatabaseRole(migrationDatabaseUrl, ssl),
@@ -99,7 +101,7 @@ function assertSameDatabase(runtime: URL, migration: URL): void {
 
 async function inspectDatabaseRole(
   url: URL,
-  ssl: { rejectUnauthorized: true },
+  ssl: false | { rejectUnauthorized: true },
 ): Promise<DatabaseRoleIdentity> {
   const client = new Client({ connectionString: url.toString(), ssl });
   await client.connect();
