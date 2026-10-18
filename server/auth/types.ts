@@ -7,6 +7,7 @@ export type AuthenticatedActor = {
   sessionId: string;
   csrfHash: string;
   activeTenantId: string | null;
+  activeTenantName?: string | null;
   identityType: "platform" | "school";
   platformPermissions: ReadonlySet<string>;
   rolePermissions: ReadonlySet<string>;

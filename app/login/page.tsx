@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
 import styles from "./login.module.css";
 import {
   LOGIN_MESSAGES,
@@ -12,7 +11,6 @@ import {
 } from "./error-messages";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -43,8 +41,9 @@ export default function LoginPage() {
         return;
       }
       const result = (await response.json().catch(() => ({}))) as { destination?: string };
-      router.replace(result.destination ?? "/");
-      router.refresh();
+      // A document navigation makes the new session cookie visible to the
+      // destination layout immediately, including across Company/School roots.
+      globalThis.location.replace(result.destination ?? "/");
     } catch {
       // fetch threw: offline, DNS failure or aborted request.
       setError(networkMessage());
