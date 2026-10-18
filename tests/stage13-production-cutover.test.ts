@@ -122,3 +122,28 @@ test("unencrypted production PostgreSQL is allowed only on the private Compose h
     /private Compose database network/,
   );
 });
+
+test("the local integration-only plaintext exception cannot be used in production", () => {
+  const environment = {
+    HIG_REPOSITORY_BACKEND: "postgres",
+    HIG_POSTGRES_SHADOW_READS: "false",
+    DATABASE_URL: "postgresql://hig_school_app:secret@127.0.0.1:55432/hig_school_test",
+    PG_SSL: "disable",
+    NODE_ENV: "test",
+    APP_URL: "https://stage5.integration.higschool.test",
+    SESSION_SECRET: "a".repeat(32),
+    REDIS_URL: "redis://127.0.0.1:56379",
+    HIG_QUEUE_MODE: "redis",
+    HIG_KEY_PROVIDER: "environment",
+    HIG_ENCRYPTION_KEY: "b".repeat(32),
+  };
+  assert.ok(validateProductionEnvironment(environment));
+  assert.throws(
+    () => validateProductionEnvironment({ ...environment, NODE_ENV: "production" }),
+    /private Compose database network/,
+  );
+  assert.throws(
+    () => validateProductionEnvironment({ ...environment, APP_URL: "https://school.higaai.com" }),
+    /private Compose database network/,
+  );
+});
