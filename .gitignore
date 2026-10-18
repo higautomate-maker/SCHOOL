@@ -35,6 +35,7 @@ yarn-error.log*
 !.env.staging.operator.example
 !.env.production.example
 !.env.production.operator.example
+!.env.production.postgres.example
 
 # vercel
 .vercel

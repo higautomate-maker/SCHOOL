@@ -26,7 +26,30 @@ export function validateProductionEnvironment(
     return null;
   }
 
-  readPostgresEnvironment(environment);
+  const postgres = readPostgresEnvironment(environment);
+  if (postgres.PG_SSL === "disable") {
+    const url = new URL(postgres.DATABASE_URL);
+    const localIntegrationTest = environment.NODE_ENV === "test"
+      && environment.APP_URL === "https://stage5.integration.higschool.test"
+      && url.hostname === "127.0.0.1"
+      && url.port === "55432"
+      && url.pathname === "/hig_school_test"
+      && url.username === "hig_school_app";
+    if (
+      !localIntegrationTest && (
+        environment.HIG_PRIVATE_POSTGRES !== "true"
+        || url.hostname !== "postgres"
+        || (url.port !== "" && url.port !== "5432")
+        || url.pathname !== "/hig_school_production"
+        || url.username !== "hig_school_production_app"
+        || !url.password
+        || url.searchParams.size !== 1
+        || url.searchParams.get("sslmode") !== "disable"
+      )
+    ) {
+      throw new Error("Unencrypted production PostgreSQL is permitted only on the private Compose database network");
+    }
+  }
   const parsed = z.object({
     APP_URL: httpsUrl,
     SESSION_SECRET: z.string().min(32),

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { validateProductionEnvironment } from "../server/runtime/production-environment.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const compose = read("deploy/hostinger-production.compose.yml");
@@ -8,6 +9,9 @@ const migration = read("scripts/migrate-production-postgres.ts");
 const roles = read("server/runtime/production-database-roles.ts");
 const runtimeEnvironment = read(".env.production.example");
 const operatorEnvironment = read(".env.production.operator.example");
+const privateCompose = read("deploy/hostinger-production-postgres.compose.yml");
+const postgresInit = read("deploy/postgres/initdb/10-production-roles.sh");
+const postgresEnvironment = read(".env.production.postgres.example");
 
 test("production Compose isolates runtime, worker and operator credentials", () => {
   assert.match(compose, /name: production-school/);
@@ -65,4 +69,81 @@ test("production templates keep migration ownership outside runtime", () => {
   assert.doesNotMatch(runtimeEnvironment, /MIGRATION_DATABASE_URL/);
   assert.match(operatorEnvironment, /MIGRATION_DATABASE_URL=/);
   assert.match(operatorEnvironment, /HIG_PRODUCTION_CUTOVER_APPROVED=GREENFIELD_POSTGRES_CUTOVER/);
+});
+
+test("private PostgreSQL overlay has no published database port and isolates secrets", () => {
+  assert.match(privateCompose, /internal: true/);
+  assert.match(privateCompose, /production_school_postgres:\/var\/lib\/postgresql\/data/);
+  assert.match(privateCompose, /\.env\.production\.postgres/);
+  const databaseService = privateCompose.slice(privateCompose.indexOf("  postgres:"), privateCompose.indexOf("  app:"));
+  assert.doesNotMatch(databaseService, /\n\s+ports:/);
+  assert.match(databaseService, /networks:\s*\n\s*- database/);
+  assert.match(postgresInit, /CREATE ROLE hig_school_production_owner LOGIN NOSUPERUSER NOBYPASSRLS/);
+  assert.match(postgresInit, /CREATE ROLE hig_school_production_app LOGIN NOSUPERUSER NOBYPASSRLS/);
+  assert.match(postgresInit, /ALTER DEFAULT PRIVILEGES FOR ROLE hig_school_production_owner/);
+  assert.match(postgresEnvironment, /HIG_PRODUCTION_APP_PASSWORD=/);
+  assert.match(postgresEnvironment, /HIG_PRODUCTION_OWNER_PASSWORD=/);
+  assert.doesNotMatch(runtimeEnvironment, /POSTGRES_PASSWORD=/);
+});
+
+test("unencrypted production PostgreSQL is allowed only on the private Compose hostname", () => {
+  const environment = {
+    HIG_REPOSITORY_BACKEND: "postgres",
+    HIG_POSTGRES_SHADOW_READS: "false",
+    DATABASE_URL: "postgresql://hig_school_production_app:secret@postgres:5432/hig_school_production?sslmode=disable",
+    PG_SSL: "disable",
+    HIG_PRIVATE_POSTGRES: "true",
+    APP_URL: "https://school.higaai.com",
+    SESSION_SECRET: "a".repeat(32),
+    REDIS_URL: "redis://:secret@redis:6379",
+    HIG_QUEUE_MODE: "redis",
+    HIG_KEY_PROVIDER: "environment",
+    HIG_ENCRYPTION_KEY: "b".repeat(32),
+  };
+  assert.ok(validateProductionEnvironment(environment));
+  assert.throws(
+    () => validateProductionEnvironment({ ...environment, HIG_PRIVATE_POSTGRES: "false" }),
+    /private Compose database network/,
+  );
+  assert.throws(
+    () => validateProductionEnvironment({ ...environment, DATABASE_URL: environment.DATABASE_URL.replace("@postgres:", "@public.example:") }),
+    /private Compose database network/,
+  );
+  assert.throws(
+    () => validateProductionEnvironment({ ...environment, DATABASE_URL: environment.DATABASE_URL.replace("sslmode=disable", "sslmode=require") }),
+    /private Compose database network/,
+  );
+  assert.throws(
+    () => validateProductionEnvironment({ ...environment, DATABASE_URL: environment.DATABASE_URL.replace("hig_school_production_app", "postgres") }),
+    /private Compose database network/,
+  );
+  assert.throws(
+    () => validateProductionEnvironment({ ...environment, DATABASE_URL: `${environment.DATABASE_URL}&host=public.example` }),
+    /private Compose database network/,
+  );
+});
+
+test("the local integration-only plaintext exception cannot be used in production", () => {
+  const environment = {
+    HIG_REPOSITORY_BACKEND: "postgres",
+    HIG_POSTGRES_SHADOW_READS: "false",
+    DATABASE_URL: "postgresql://hig_school_app:secret@127.0.0.1:55432/hig_school_test",
+    PG_SSL: "disable",
+    NODE_ENV: "test",
+    APP_URL: "https://stage5.integration.higschool.test",
+    SESSION_SECRET: "a".repeat(32),
+    REDIS_URL: "redis://127.0.0.1:56379",
+    HIG_QUEUE_MODE: "redis",
+    HIG_KEY_PROVIDER: "environment",
+    HIG_ENCRYPTION_KEY: "b".repeat(32),
+  };
+  assert.ok(validateProductionEnvironment(environment));
+  assert.throws(
+    () => validateProductionEnvironment({ ...environment, NODE_ENV: "production" }),
+    /private Compose database network/,
+  );
+  assert.throws(
+    () => validateProductionEnvironment({ ...environment, APP_URL: "https://school.higaai.com" }),
+    /private Compose database network/,
+  );
 });

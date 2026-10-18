@@ -1,0 +1,55 @@
+name: production-school
+
+# Use together with hostinger-production.compose.yml only after a fresh,
+# reconciled export has been restored and off-host backups are verified.
+services:
+  postgres:
+    image: postgres:16-alpine
+    env_file:
+      - ../.env.production.postgres
+    volumes:
+      - production_school_postgres:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    networks:
+      - database
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d hig_school_production"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 9
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  app:
+    networks:
+      - default
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    networks:
+      - default
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  operator:
+    networks:
+      - default
+      - database
+
+networks:
+  database:
+    internal: true
+
+volumes:
+  production_school_postgres:
+    name: production_school_postgres

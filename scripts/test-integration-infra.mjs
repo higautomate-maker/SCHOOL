@@ -232,6 +232,7 @@ try {
       PG_POOL_MAX: "4",
       PG_IDLE_TIMEOUT_MS: "10000",
       PG_CONNECTION_TIMEOUT_MS: "5000",
+      NODE_ENV: "test",
       HIG_REPOSITORY_BACKEND: "postgres",
       APP_URL: "https://stage5.integration.higschool.test",
       SESSION_SECRET: "stage5-integration-session-secret-32-bytes",
