@@ -106,7 +106,7 @@ async function sessionIdentity(
   client: PoolClient,
   userId: string,
   requestedTenantId: string | null,
-): Promise<{ tenantId: string | null; membershipStatus: string | null; roleKey: string | null; platformRole: string | null }> {
+): Promise<{ tenantId: string | null; tenantName: string | null; membershipStatus: string | null; roleKey: string | null; platformRole: string | null }> {
   await enablePlatformRead(client);
   const platform = await client.query(
     `SELECT role_key FROM platform_role_assignments
@@ -114,18 +114,20 @@ async function sessionIdentity(
     [userId],
   );
   const membership = await client.query(
-    `SELECT tenant_id, status, role_key
-       FROM memberships
-      WHERE user_id = $1::uuid
-        AND ($2::uuid IS NULL OR tenant_id = $2::uuid)
-        AND status = 'active'
-      ORDER BY created_at
+    `SELECT m.tenant_id, t.name AS tenant_name, m.status, m.role_key
+       FROM memberships m
+       JOIN tenants t ON t.id = m.tenant_id
+      WHERE m.user_id = $1::uuid
+        AND ($2::uuid IS NULL OR m.tenant_id = $2::uuid)
+        AND m.status = 'active'
+      ORDER BY m.created_at
       LIMIT 1`,
     [userId, requestedTenantId],
   );
   const row = membership.rows[0];
   return {
     tenantId: row?.tenant_id ?? null,
+    tenantName: row?.tenant_name ?? null,
     membershipStatus: row?.status ?? null,
     roleKey: row?.role_key ?? null,
     platformRole: platform.rows[0]?.role_key ?? null,
@@ -245,6 +247,7 @@ export async function resolveSession(token: string): Promise<AuthenticatedActor 
       sessionId: row.id,
       csrfHash: row.csrf_hash,
       activeTenantId: row.active_tenant_id,
+      activeTenantName: row.active_tenant_id ? identity.tenantName : null,
       identityType: row.active_tenant_id ? "school" : "platform",
       platformPermissions: !row.active_tenant_id && identity.platformRole ? platformPermissions : new Set(),
       rolePermissions: permissions,

@@ -15,7 +15,9 @@ export async function authenticatePassword(emailInput:string,password:string,req
   if(!record||!comparison.valid||record.disabled||record.status!=="active"||!record.eligible){await writeSecurityEvent({actorId:record?.userId,action:"auth.login",outcome:"failure",ipHash:metadata.ipHash,metadata:{emailHash:privacyHash(email),userAgentHash:metadata.userAgentHash}});return null;}
   if(comparison.needsRehash)await replacePassword(record.userId,await hashPassword(password));
   const refreshed=await findLoginRecord(email);const session=await createSession(record.userId,refreshed?.credentialVersion??record.credentialVersion,null,metadata);
-  await writeSecurityEvent({actorId:record.userId,action:"auth.login",outcome:"success",ipHash:metadata.ipHash,metadata:{userAgentHash:metadata.userAgentHash}});return{actorUserId:record.userId,session};
+  const actor=await resolveSession(session.token);
+  if(!actor)throw new Error("New session could not be resolved");
+  await writeSecurityEvent({actorId:record.userId,tenantId:actor.activeTenantId,action:"auth.login",outcome:"success",ipHash:metadata.ipHash,metadata:{userAgentHash:metadata.userAgentHash}});return{actorUserId:record.userId,session};
 }
 export async function authenticatedActor(request:Request):Promise<AuthenticatedActor|null>{const token=sessionTokenFromRequest(request);return token?resolveSession(token):null;}
 export async function logout(request:Request):Promise<void>{const actor=await authenticatedActor(request);if(actor){const metadata=requestMetadata(request);await revokeSession(actor.sessionId,"logout");await writeSecurityEvent({actorId:actor.userId,tenantId:actor.activeTenantId,action:"auth.logout",outcome:"success",ipHash:metadata.ipHash,metadata:{userAgentHash:metadata.userAgentHash}});}}

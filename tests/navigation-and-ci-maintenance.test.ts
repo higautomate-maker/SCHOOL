@@ -6,17 +6,11 @@ function source(path: string): string {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 }
 
-test("authentication navigation uses the Next router instead of a document reload", () => {
-  for (const path of [
-    "app/login/page.tsx",
-    "app/components/logout-button.tsx",
-    "app/components/demo-logout-button.tsx",
-  ]) {
-    const contents = source(path);
-    assert.match(contents, /useRouter/);
-    assert.match(contents, /router\.(replace|push)\(/);
-    assert.doesNotMatch(contents, /location\.assign\(/);
+test("session transitions use a document navigation after cookies change", () => {
+  for (const path of ["app/login/page.tsx", "app/components/logout-button.tsx"]) {
+    assert.match(source(path), /globalThis\.location\.replace\(/);
   }
+  assert.match(source("app/components/demo-logout-button.tsx"), /router\.(replace|push)\(/);
 });
 
 test("GitHub workflows use Node 24 compatible official action majors", () => {
